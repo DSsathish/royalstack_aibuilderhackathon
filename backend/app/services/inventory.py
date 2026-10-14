@@ -14,6 +14,8 @@ def available(store_id: str, product_id: str) -> int:
 
 
 def reserve(store_id: str, product_id: str, qty: int) -> bool:
+    if qty <= 0:
+        return False
     ref = db.inventory(store_id).document(product_id)
 
     @firestore.transactional
@@ -27,10 +29,12 @@ def reserve(store_id: str, product_id: str, qty: int) -> bool:
         tx.update(ref, {"reserved": d.get("reserved", 0) + qty})
         return True
 
-    return run(db.client().transaction())
+    return run(db.client().transaction(max_attempts=10))
 
 
 def release(store_id: str, product_id: str, qty: int) -> None:
+    if qty <= 0:
+        return
     ref = db.inventory(store_id).document(product_id)
 
     @firestore.transactional
@@ -39,10 +43,12 @@ def release(store_id: str, product_id: str, qty: int) -> None:
         if snap.exists:
             tx.update(ref, {"reserved": max(0, snap.to_dict().get("reserved", 0) - qty)})
 
-    run(db.client().transaction())
+    run(db.client().transaction(max_attempts=10))
 
 
 def commit(store_id: str, product_id: str, qty: int) -> None:
+    if qty <= 0:
+        return
     ref = db.inventory(store_id).document(product_id)
 
     @firestore.transactional
@@ -55,4 +61,4 @@ def commit(store_id: str, product_id: str, qty: int) -> None:
                 "reserved": max(0, d.get("reserved", 0) - qty),
             })
 
-    run(db.client().transaction())
+    run(db.client().transaction(max_attempts=10))

@@ -49,3 +49,21 @@ def test_import_writes_audit(owned):
     post_csv(owned, {"X-Test-Uid": "owner-1"})
     entries = [d.to_dict() for d in db.audit(owned).stream()]
     assert any(e["action"] == "import_csv" and e["actor"] == "owner-1" for e in entries)
+
+
+def test_mapping_must_be_object(owned):
+    res = client.post(f"/owner/{owned}/import/csv", headers={"X-Test-Uid": "owner-1"},
+                      files={"file": ("p.csv", CSV, "text/csv")}, data={"mapping": "[1,2]"})
+    assert res.status_code == 400
+
+
+def test_missing_file_is_422(owned):
+    res = client.post(f"/owner/{owned}/import/csv", headers={"X-Test-Uid": "owner-1"}, data={"mapping": MAPPING})
+    assert res.status_code == 422
+
+
+def test_bearer_token_uid_comes_from_sub(owned, monkeypatch):
+    from app.services import auth
+    monkeypatch.setattr(auth.id_token, "verify_firebase_token", lambda *a, **k: {"sub": "owner-1"})
+    res = post_csv(owned, {"Authorization": "Bearer fake"})
+    assert res.status_code == 200, res.text

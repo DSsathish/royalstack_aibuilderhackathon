@@ -80,6 +80,9 @@ def seed_bigquery(store_id: str) -> None:
         bigquery.SchemaField("day", "DATE"), bigquery.SchemaField("channel", "STRING"),
         bigquery.SchemaField("qty", "INT64"), bigquery.SchemaField("unit_price", "NUMERIC"),
     ]
+    if not (HERE / "sales.csv").exists():
+        import make_sales
+        make_sales.main(store_id)
     job = bq.load_table_from_file(
         (HERE / "sales.csv").open("rb"), table,
         job_config=bigquery.LoadJobConfig(schema=schema, skip_leading_rows=1,

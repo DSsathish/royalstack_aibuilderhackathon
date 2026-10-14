@@ -40,4 +40,6 @@ def get_product(store_id: str = STORE_ID, product_id: str = Path(pattern=r"^[a-z
             response_model=list[catalog.ProductView], response_model_exclude=PUBLIC_EXCLUDE)
 def search(store_id: str = STORE_ID, q: str = Query(min_length=1, max_length=200),
            k: int = Query(default=6, ge=1, le=20)):
+    if not db.store_ref(store_id).get().exists:
+        raise HTTPException(404, "store not found")
     return catalog.search(store_id, q, k=k)

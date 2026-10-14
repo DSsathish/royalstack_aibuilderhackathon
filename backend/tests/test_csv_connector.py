@@ -78,3 +78,28 @@ def test_imported_inventory_works_with_reserve(store_id):
     assert inventory.available(store_id, f"{store_id}-a1") == 10
     assert inventory.reserve(store_id, f"{store_id}-a1", 2) is True
     assert inventory.available(store_id, f"{store_id}-a1") == 8
+
+
+def test_reimport_keeps_existing_embedding(store_id):
+    rows, _ = csvc.parse(b"sku,name,price,on_hand\nA1,Salt,20,10\n", CANON)
+    csvc.upsert(store_id, rows, high_value_threshold=500)
+    db.products(store_id).document(f"{store_id}-a1").update({"embedding": [0.1, 0.2]})
+    csvc.upsert(store_id, rows, high_value_threshold=500)
+    assert db.products(store_id).document(f"{store_id}-a1").get().to_dict()["embedding"] == [0.1, 0.2]
+
+
+def test_parse_normalises_side_and_rejects_bad_side():
+    data = b"sku,name,price,on_hand,side\nA1,Salt,20,10,Left\nB2,Sugar,30,5,middle\n"
+    rows, errors = csvc.parse(data, {**CANON, "side": "side"})
+    assert rows[0].side == "left"
+    assert [e.line for e in errors] == [3]
+
+
+def test_parse_rejects_non_utf8_as_import_error():
+    with pytest.raises(csvc.ImportError_):
+        csvc.parse("sku,name,price,on_hand\nA1,Salt é,20,10\n".encode("latin-1"), CANON)
+
+
+def test_parse_infinity_is_row_error():
+    rows, errors = csvc.parse(b"sku,name,price,on_hand\nA1,Salt,Infinity,10\n", CANON)
+    assert rows == [] and errors[0].line == 2

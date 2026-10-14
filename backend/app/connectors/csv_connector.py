@@ -63,7 +63,7 @@ class ImportResult(BaseModel):
 
 def _num(value: str, *, integer: bool) -> float | int:
     d = Decimal(value.strip() or "0")
-    if d < 0:
+    if not d.is_finite() or d < 0:
         raise ValueError("negative")
     return int(d) if integer else float(d)
 
@@ -78,8 +78,11 @@ def parse(data: bytes, mapping: dict[str, str]) -> tuple[list[Row], list[RowErro
     if missing:
         raise ImportError_(f"mapping missing required fields: {missing}")
 
-    reader = csv.DictReader(io.StringIO(data.decode("utf-8-sig")))
-    headers = reader.fieldnames or []
+    try:
+        reader = csv.DictReader(io.StringIO(data.decode("utf-8-sig")))
+        headers = reader.fieldnames or []
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise ImportError_(f"file is not valid UTF-8 CSV: {exc}")
     absent = [h for h in mapping.values() if h not in headers]
     if absent:
         raise ImportError_(f"headers not found in file: {absent}")
@@ -90,7 +93,7 @@ def parse(data: bytes, mapping: dict[str, str]) -> tuple[list[Row], list[RowErro
             raise ImportError_(f"more than {MAX_ROWS} rows")
         try:
             rows.append(_row(i, rec, mapping))
-        except (ValueError, InvalidOperation) as exc:
+        except (ValueError, InvalidOperation, OverflowError) as exc:
             errors.append(RowError(line=i, message=str(exc)))
     return rows, errors
 
@@ -115,6 +118,10 @@ def _row(line: int, rec: dict, mapping: dict[str, str]) -> Row:
             kwargs[f] = _num(v, integer=False)
         elif f in ("bay", "shelf", "reorder_point", "reorder_qty", "lead_time_days"):
             kwargs[f] = _num(v, integer=True)
+        elif f == "side":
+            if v.lower() not in ("left", "right"):
+                raise ValueError("side must be left or right")
+            kwargs[f] = v.lower()
         else:
             kwargs[f] = v
     return Row(**kwargs)
@@ -133,7 +140,7 @@ def upsert(store_id: str, rows: list[Row], *, high_value_threshold: float) -> Im
             description=r.description, mrp=r.mrp or r.price, unit=r.unit, image_url=r.image_url,
             tags=r.tags, substitutes=[f"{store_id}-{slug(s)}" for s in r.substitutes],
         )
-        batch.set(db.products(store_id).document(p.product_id), p.model_dump(), merge=True)
+        batch.set(db.products(store_id).document(p.product_id), p.model_dump(exclude={"embedding"}), merge=True)
         batch.set(db.inventory(store_id).document(p.product_id), Inventory(
             product_id=p.product_id, store_id=store_id, on_hand=r.on_hand,
             reorder_point=r.reorder_point, reorder_qty=r.reorder_qty,

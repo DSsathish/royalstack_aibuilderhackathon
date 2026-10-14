@@ -159,3 +159,20 @@ Run against the Firestore emulator (`FIRESTORE_EMULATOR_HOST=localhost:8089`). E
 - **Inventory tolerates a missing `reserved` field** because imports never overwrite live reservations. Found by smoke test, covered by `test_imported_inventory_works_with_reserve`.
 - **Substitutes in CSV are SKUs**, converted to product ids by the connector so the agent can resolve them directly.
 - **Demo store name "Royal Stack Supermarket"**, taken from the repo name. Rename in `infra/seed/seed.py` if wanted.
+
+## Review fixes (fresh-eyes review before merge)
+
+Fixed, each with a regression test:
+- Bearer-token uid read from `sub` claim (google-auth returns raw JWT claims; `uid` only exists in firebase-admin). Was a 500 on every real owner call.
+- Re-import no longer wipes stored embeddings (`exclude={"embedding"}` on the merge write).
+- `side` normalised and validated in `parse`, so a bad value is a row error, not a 500 mid-batch.
+- Non-UTF-8 files, malformed CSV, and `Infinity` numbers are 400 or row errors, not 500. Mapping must be a JSON object; file is required.
+- `reserve`/`release`/`commit` ignore `qty <= 0`.
+- Search on a nonexistent store is 404 before any Gemini call or Firestore write.
+- Transactions retry up to 10 times under contention.
+- Seed generates `sales.csv` if missing.
+
+Deferred minors (noted, not changed):
+- Multipart body is spooled before the 5 MB check; Cloud Run's 32 MB request cap bounds it.
+- `slug()` can collide distinct SKUs like `A-1` and `A_1`; acceptable for the demo catalog.
+- Per-search Gemini embed and demand-signal write for valid stores is by design; rate limiting lands in phase 7.

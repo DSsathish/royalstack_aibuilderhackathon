@@ -23,7 +23,7 @@ def current_uid(authorization: str | None = Header(default=None),
         return x_test_uid  # test-only shortcut, never active outside ENV=test
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "missing bearer token")
-    return verify_id_token(authorization.removeprefix("Bearer "))["uid"]
+    return verify_id_token(authorization.removeprefix("Bearer "))["sub"]
 
 
 def require_owner(store_id: str, uid: str) -> str:

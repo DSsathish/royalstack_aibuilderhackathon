@@ -60,3 +60,8 @@ def test_search_query_too_long(shop):
 
 def test_store_id_validation():
     assert client.get("/stores/BAD_ID!").status_code == 422
+
+
+def test_search_unknown_store_is_404_and_writes_nothing(store_id):
+    assert client.get(f"/stores/{store_id}/search", params={"q": "milk"}).status_code == 404
+    assert list(db.demand_signals(store_id).stream()) == []

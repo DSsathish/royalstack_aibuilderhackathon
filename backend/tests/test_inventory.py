@@ -57,3 +57,12 @@ def test_concurrent_reserve_of_last_unit_only_one_wins(store_id):
         results = list(pool.map(lambda _: inventory.reserve(store_id, "p1", 1), range(4)))
     assert results.count(True) == 1
     assert inventory.available(store_id, "p1") == 0
+
+
+def test_non_positive_qty_is_rejected(seeded):
+    assert inventory.reserve(seeded, "p1", 0) is False
+    assert inventory.reserve(seeded, "p1", -5) is False
+    inventory.release(seeded, "p1", -5)
+    inventory.commit(seeded, "p1", -5)
+    doc = db.inventory(seeded).document("p1").get().to_dict()
+    assert (doc["on_hand"], doc["reserved"]) == (3, 0)
