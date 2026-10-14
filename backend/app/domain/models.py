@@ -104,7 +104,8 @@ class DemandSignal(BaseModel):
     store_id: str
     query_text: str
     matched_product_id: str | None = None
-    type: Literal["not_carried", "out_of_stock", "found"]
+    type: Literal["not_carried", "out_of_stock"]
+    source: Literal["search", "agent"] = "search"  # search = automatic heuristic, agent = model judgment
     created_at: datetime = Field(default_factory=now)
 
 

@@ -102,6 +102,17 @@ def test_get_low_stock(shop):
     assert f"{shop}-milk" not in ids
 
 
+def test_record_demand_signal_writes_agent_sourced_signal(shop):
+    assert tools.record_demand_signal("oat milk", tool_context=ctx(shop)) == {"ok": True}
+    sigs = [d.to_dict() for d in db.demand_signals(shop).stream()]
+    assert any(s["query_text"] == "oat milk" and s["type"] == "not_carried" and s["source"] == "agent" for s in sigs)
+
+
+def test_search_found_records_no_automatic_signal(shop):
+    tools.search_products("toned milk", tool_context=ctx(shop))
+    assert [d.to_dict() for d in db.demand_signals(shop).stream()] == []
+
+
 def test_mode_gating_table():
     names = {m: {t.__name__ for t in ts} for m, ts in tools.TOOLS_BY_MODE.items()}
     assert "navigate_to" in names["instore"] and "navigate_to" not in names["online"]

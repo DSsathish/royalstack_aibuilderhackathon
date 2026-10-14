@@ -3,8 +3,11 @@
 Every tool reads store_id / mode / cart_id from tool_context.state and returns a small dict.
 """
 
+import uuid
+
 from google.adk.tools import ToolContext
 
+from app.domain.models import DemandSignal
 from app.services import cart as cart_svc
 from app.services import catalog, db
 from app.services.catalog import ProductView
@@ -104,6 +107,16 @@ def start_checkout(tool_context: ToolContext) -> dict:
     return {"ok": True, "cart_id": c.cart_id, "total": cart_svc.totals(c)[2]}
 
 
+def record_demand_signal(requested_item: str, tool_context: ToolContext) -> dict:
+    """Record that a shopper asked for a specific product this store does not carry
+    (e.g. "oat milk"). Call it once per such request, with the item name as the shopper said it."""
+    store_id = tool_context.state["store_id"]
+    sig = DemandSignal(signal_id=uuid.uuid4().hex, store_id=store_id, query_text=requested_item.strip()[:200],
+                       type="not_carried", source="agent")
+    db.demand_signals(store_id).document(sig.signal_id).set(sig.model_dump())
+    return {"ok": True}
+
+
 def get_low_stock(tool_context: ToolContext, limit: int = 20) -> dict:
     """Owner tool: products at or below their reorder point, with supplier."""
     store_id = tool_context.state["store_id"]
@@ -120,9 +133,9 @@ def get_low_stock(tool_context: ToolContext, limit: int = 20) -> dict:
 
 
 TOOLS_BY_MODE = {
-    "instore": [search_products, get_product, suggest_substitutes, navigate_to,
+    "instore": [search_products, get_product, suggest_substitutes, navigate_to, record_demand_signal,
                 add_to_cart, remove_from_cart, view_cart, start_checkout],
-    "online": [search_products, get_product, suggest_substitutes,
+    "online": [search_products, get_product, suggest_substitutes, record_demand_signal,
                add_to_cart, remove_from_cart, view_cart, start_checkout],
     "owner": [search_products, get_product, get_low_stock],
 }

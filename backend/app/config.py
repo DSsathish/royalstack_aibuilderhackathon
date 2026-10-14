@@ -15,8 +15,8 @@ class Settings(BaseSettings):
 
     # Free-tier AI Studio keys (Oct 2026): 2.5 models are gone, Pro has no free quota, 3.5-flash is often
     # at capacity. 3.1-flash-lite answers reliably; override per environment when a better model is available.
-    gemini_flash_model: str = "gemini-3.1-flash-lite"
-    gemini_pro_model: str = "gemini-3.1-flash-lite"
+    gemini_flash_model: str = "gemini-3-flash-preview"   # chat: fastest that answers on the free tier
+    gemini_pro_model: str = "gemini-3.1-flash-lite"      # batch reasoning: latency does not matter
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

@@ -18,6 +18,13 @@ pytestmark = pytest.mark.skipif(os.environ.get("LIVE_GEMINI") != "1", reason="se
 
 
 @pytest.fixture(autouse=True)
+def pace():
+    """Free tier allows ~5 requests/min per model; each turn uses 2 to 4. Space the scenarios out."""
+    import time
+    time.sleep(30)
+
+
+@pytest.fixture(autouse=True)
 def real_gemini(monkeypatch):
     # conftest blanks the key for unit tests; restore it from the real .env for live runs
     from dotenv import dotenv_values
@@ -87,8 +94,9 @@ def test_not_carried_is_honest(shop):
     tools, reply, _ = run(sessions.create(shop, "online"), "Do you sell oat milk?")
     assert "search_products" in tools
     assert "oat" in reply.lower()
+    assert "record_demand_signal" in tools
     sigs = [d.to_dict() for d in db.demand_signals(shop).stream()]
-    assert any(s["type"] in ("not_carried", "out_of_stock") for s in sigs)
+    assert any(s["type"] == "not_carried" and s["source"] == "agent" and "oat" in s["query_text"].lower() for s in sigs)
 
 
 def test_add_to_cart_emits_cart_action(shop):

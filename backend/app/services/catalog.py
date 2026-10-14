@@ -90,12 +90,13 @@ def search(store_id: str, query: str, k: int = 6) -> list[ProductView]:
 
 
 def _record_signal(store_id: str, query: str, hits: list[ProductView]) -> None:
+    """Automatic signals only for clear cases; the agent records judgment calls itself."""
     if not hits:
         kind, matched = "not_carried", None
     elif all(h.available == 0 for h in hits):
         kind, matched = "out_of_stock", hits[0].product_id
     else:
-        kind, matched = "found", hits[0].product_id
+        return
     sig = DemandSignal(signal_id=uuid.uuid4().hex, store_id=store_id, query_text=query,
                        matched_product_id=matched, type=kind)
     db.demand_signals(store_id).document(sig.signal_id).set(sig.model_dump())

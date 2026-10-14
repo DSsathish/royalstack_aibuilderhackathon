@@ -114,3 +114,21 @@ Owner mode sessions require a verified owner (phase 6 wires the token); phase 2 
 - Session and cart services land in phase 2 (the agent needs them); phase 3 extends them.
 - Flash default changed to `gemini-3.5-flash` after listing available models; Pro stays `gemini-2.5-pro` (stable).
 - ADK `InMemorySessionService`: one Cloud Run instance for the demo (`max-instances 1`). Firestore-backed sessions only if time allows.
+
+## Live evaluation findings (15 Oct, free-tier AI Studio key)
+
+First live run: 4 of 8 scenarios passed outright. Tamil reply in Tamil with aisle and stock; out-of-stock
+almond milk led to `suggest_substitutes`; oat milk declined honestly with alternatives; owner low-stock and
+off-topic redirection correct. Fixes from the failures:
+- `navigate_to` is now mandatory in the in-store prompt when the shopper asks where something is; the model
+  had answered the aisle from search results, which would leave the map unhighlighted.
+- `record_demand_signal` reinstated as a tool (reverses the earlier ruling). Keyword search marked "oat milk"
+  as found because "milk" matched other products; only the model can judge "asked for X, we do not carry X".
+  Automatic signals are now only `not_carried` (zero hits) and `out_of_stock`; agent signals carry `source=agent`.
+- Tool status events were emitted twice under streaming (partial + final event); now reported once.
+- Retries on 429/503 and `thinking_level=low` on every model call; free-tier capacity is bursty.
+
+Model availability on this key (free tier): 2.5 models return 404, Pro models have no free quota,
+`gemini-3.5-flash` is usually 503, `gemini-3-flash-preview` works at ~4 s but is capped at 20 requests before a
+long reset, `gemini-3.1-flash-lite` works at ~12 s. Conclusion: the free tier cannot run a tool-calling agent
+for a demo. Needs AI Studio prepaid credits or Vertex AI on a billed project. Defaults are env-overridable.

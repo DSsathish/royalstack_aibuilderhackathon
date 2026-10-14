@@ -16,12 +16,18 @@ def configured() -> bool:
     return settings.google_genai_use_vertexai or bool(settings.gemini_api_key)
 
 
+# Free-tier capacity is bursty: retry 429/503 with backoff before giving up.
+RETRY = types.HttpRetryOptions(attempts=4, initial_delay=2, max_delay=12, http_status_codes=[429, 503])
+FAST = types.GenerateContentConfig(thinking_config=types.ThinkingConfig(thinking_level="low"))
+
+
 @lru_cache(maxsize=1)
 def client() -> genai.Client:
+    http = types.HttpOptions(retry_options=RETRY)
     if settings.google_genai_use_vertexai:
         return genai.Client(vertexai=True, project=settings.google_cloud_project,
-                            location=settings.google_cloud_location)
-    return genai.Client(api_key=settings.gemini_api_key)
+                            location=settings.google_cloud_location, http_options=http)
+    return genai.Client(api_key=settings.gemini_api_key, http_options=http)
 
 
 def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float]]:
@@ -52,6 +58,7 @@ def transcribe(audio: bytes, mime_type: str) -> str:
             model=settings.gemini_flash_model,
             contents=[types.Part.from_bytes(data=audio, mime_type=mime_type),
                       "Transcribe this audio exactly, in the language spoken. Output only the transcript."],
+            config=FAST,
         )
         return (res.text or "").strip()
     except Exception as exc:

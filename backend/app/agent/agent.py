@@ -6,12 +6,14 @@ from typing import AsyncIterator, Iterator
 from google.adk.agents import LlmAgent
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.events import Event
+from google.adk.models.google_llm import Gemini
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from app.agent import prompts
 from app.agent.tools import TOOLS_BY_MODE
+from app.services import gemini
 from app.config import settings
 from app.domain.models import Mode, Session
 
@@ -28,6 +30,7 @@ ACTION_FOR_TOOL = {
     "view_cart": "cart_updated",
     "start_checkout": "checkout_ready",
     "get_low_stock": "show_low_stock",
+    "record_demand_signal": "signal_recorded",
 }
 
 _sessions = InMemorySessionService()
@@ -36,7 +39,8 @@ _sessions = InMemorySessionService()
 def build(mode: Mode) -> LlmAgent:
     return LlmAgent(
         name=f"retail_{mode}",
-        model=settings.gemini_flash_model,
+        model=Gemini(model=settings.gemini_flash_model, retry_options=gemini.RETRY),
+        generate_content_config=gemini.FAST,
         instruction=prompts.for_mode(mode),
         tools=list(TOOLS_BY_MODE[mode]),
     )
@@ -53,6 +57,8 @@ def translate(event: Event) -> Iterator[dict]:
         return
     for part in event.content.parts:
         if part.function_call:
+            if event.partial:
+                continue  # streaming repeats the call in the final event; report it once
             yield {"type": "status", "tool": part.function_call.name}
         elif part.function_response:
             name = part.function_response.name
