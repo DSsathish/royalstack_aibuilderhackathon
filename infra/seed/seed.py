@@ -10,6 +10,7 @@ CSV connector -> optional Gemini embeddings -> sales.csv into BigQuery by load j
 import argparse
 import csv
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -54,17 +55,23 @@ def seed_embeddings(store_id: str) -> None:
     docs = list(db.products(store_id).stream())
     texts = [" | ".join(filter(None, [d.get("name"), d.get("brand"), d.get("category"),
                                        d.get("subcategory"), " ".join(d.get("tags") or [])])) for d in docs]
-    done = 0
-    for i in range(0, len(docs), 50):
-        vecs = gemini.embed_texts(texts[i:i + 50])
+    done, size = 0, 20  # free tier counts each text against the per-minute embed quota
+    for i in range(0, len(docs), size):
+        vecs = []
+        for attempt in range(4):
+            vecs = gemini.embed_texts(texts[i:i + size])
+            if vecs:
+                break
+            time.sleep(20 * (attempt + 1))  # quota window
         if not vecs:
-            print("embeddings skipped (Gemini not configured or failed)")
+            print(f"embeddings stopped at {done} (Gemini not configured or quota exhausted); re-run --embed later")
             return
         batch = db.client().batch()
-        for d, v in zip(docs[i:i + 50], vecs):
+        for d, v in zip(docs[i:i + size], vecs):
             batch.update(d.reference, {"embedding": v})
         batch.commit()
         done += len(vecs)
+        time.sleep(3)
     print(f"embeddings: {done}")
 
 

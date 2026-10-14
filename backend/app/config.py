@@ -13,8 +13,10 @@ class Settings(BaseSettings):
     google_genai_use_vertexai: bool = True
     gemini_api_key: str = ""  # only used when google_genai_use_vertexai is False
 
-    gemini_flash_model: str = "gemini-3.5-flash"
-    gemini_pro_model: str = "gemini-2.5-pro"
+    # Free-tier AI Studio keys (Oct 2026): 2.5 models are gone, Pro has no free quota, 3.5-flash is often
+    # at capacity. 3.1-flash-lite answers reliably; override per environment when a better model is available.
+    gemini_flash_model: str = "gemini-3.1-flash-lite"
+    gemini_pro_model: str = "gemini-3.1-flash-lite"
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
