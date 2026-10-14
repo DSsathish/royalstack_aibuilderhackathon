@@ -1,0 +1,43 @@
+"""Thin wrapper over the google-genai client. All Gemini calls go through here."""
+
+import logging
+from functools import lru_cache
+
+from google import genai
+from google.genai import types
+
+from app.config import settings
+
+log = logging.getLogger(__name__)
+EMBEDDING_MODEL = "gemini-embedding-001"
+
+
+def configured() -> bool:
+    return settings.google_genai_use_vertexai or bool(settings.gemini_api_key)
+
+
+@lru_cache(maxsize=1)
+def client() -> genai.Client:
+    if settings.google_genai_use_vertexai:
+        return genai.Client(vertexai=True, project=settings.google_cloud_project,
+                            location=settings.google_cloud_location)
+    return genai.Client(api_key=settings.gemini_api_key)
+
+
+def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float]]:
+    """Returns one vector per text, or [] when Gemini is not configured or fails."""
+    if not texts or not configured():
+        return []
+    try:
+        res = client().models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=texts,
+            config=types.EmbedContentConfig(
+                task_type="RETRIEVAL_QUERY" if for_query else "RETRIEVAL_DOCUMENT",
+                output_dimensionality=768,
+            ),
+        )
+        return [e.values for e in res.embeddings]
+    except Exception as exc:  # network, quota, bad key: degrade to keyword search
+        log.warning("embed_texts failed: %s", exc)
+        return []

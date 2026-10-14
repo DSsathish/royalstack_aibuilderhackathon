@@ -8,6 +8,8 @@ import pytest
 os.environ.setdefault("FIRESTORE_EMULATOR_HOST", "127.0.0.1:8089")
 os.environ["ENV"] = "test"
 os.environ["GOOGLE_CLOUD_PROJECT"] = "demo-test"
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"   # no Gemini calls in unit tests
+os.environ["GEMINI_API_KEY"] = ""
 
 
 @pytest.fixture
