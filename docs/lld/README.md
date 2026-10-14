@@ -16,4 +16,5 @@ Rules we follow in code:
 
 | Module | LLD | Status |
 |---|---|---|
-| backend/app (API shell) | [api-shell.md](api-shell.md) | phase 0 |
+| backend/app (API shell) | [api-shell.md](api-shell.md) | done |
+| models, db, inventory, catalog, csv connector, auth, routers, seed | [phase-1-data.md](phase-1-data.md) | done |

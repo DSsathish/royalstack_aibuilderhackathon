@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import catalog, owner_import
 from app.config import settings
 
 app = FastAPI(title="Retail Agent API", version="0.1.0")
@@ -13,6 +14,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(catalog.router)
+app.include_router(owner_import.router)
 
 
 @app.get("/healthz")

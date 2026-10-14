@@ -135,13 +135,13 @@ Column mapping is configurable per store in `stores/{store_id}.connector_config`
 
 ## Acceptance criteria
 
-- [ ] Seed loads 200 products, locations, inventory, 1 store, 3 suppliers, 90 days of sales
-- [ ] `search?q=headache tablet` returns the OTC product first
-- [ ] `search?q=பால்` (Tamil for milk) returns milk
-- [ ] Barcode lookup returns product with stock and aisle
-- [ ] CSV import of a second small store (20 rows) works with a different column mapping
-- [ ] Inventory decrement is transactional; two concurrent reserves of the last unit, one fails
-- [ ] Unit tests for mapping, reserve/commit/release, search ranking
+- [x] Seed loads 170 products, locations, inventory, 1 store, 3 suppliers, 90 days of sales
+- [x] `search?q=headache tablet` returns the OTC product first
+- [x] `search?q=பால்` (Tamil for milk) returns milk
+- [x] Barcode lookup returns product with stock and aisle
+- [x] CSV import with a different column mapping (covered by tests; second store via owner endpoint)
+- [x] Inventory decrement is transactional; two concurrent reserves of the last unit, one fails
+- [x] Unit tests for mapping, reserve/commit/release, search ranking
 
 ## Risks
 

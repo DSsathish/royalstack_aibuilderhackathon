@@ -239,3 +239,4 @@ firebase-debug.log
 
 # macOS
 .DS_Store
+infra/seed/sales.csv
