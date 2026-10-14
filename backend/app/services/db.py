@@ -43,3 +43,11 @@ def audit(store_id: str) -> firestore.CollectionReference:
 
 def users() -> firestore.CollectionReference:
     return client().collection("users")
+
+
+def sessions() -> firestore.CollectionReference:
+    return client().collection("sessions")
+
+
+def carts() -> firestore.CollectionReference:
+    return client().collection("carts")

@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     google_genai_use_vertexai: bool = True
     gemini_api_key: str = ""  # only used when google_genai_use_vertexai is False
 
-    gemini_flash_model: str = "gemini-2.5-flash"
+    gemini_flash_model: str = "gemini-3.5-flash"
     gemini_pro_model: str = "gemini-2.5-pro"
 
     cors_origins: list[str] = ["http://localhost:3000"]
