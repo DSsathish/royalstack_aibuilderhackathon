@@ -51,3 +51,7 @@ def sessions() -> firestore.CollectionReference:
 
 def carts() -> firestore.CollectionReference:
     return client().collection("carts")
+
+
+def orders() -> firestore.CollectionReference:
+    return client().collection("orders")

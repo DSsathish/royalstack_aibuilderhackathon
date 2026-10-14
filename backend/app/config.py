@@ -17,5 +17,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    qr_session_signing_key: str = "dev-only-change-me"
+    app_base_url: str = "http://localhost:3000"  # printed in QR codes
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+
 
 settings = Settings()

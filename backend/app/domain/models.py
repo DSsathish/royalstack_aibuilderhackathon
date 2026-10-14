@@ -137,3 +137,22 @@ class Cart(BaseModel):
     store_id: str
     items: list[CartItem] = []
     status: Literal["open", "checked_out"] = "open"
+
+
+class Order(BaseModel):
+    order_id: str
+    store_id: str
+    session_id: str
+    cart_id: str
+    channel: Literal["store", "online", "whatsapp"]
+    items: list[CartItem]
+    subtotal: float
+    savings: float
+    total: float
+    status: Literal["pending", "paid", "verified", "flagged"] = "pending"
+    payment_provider: Literal["mock", "razorpay"] = "mock"
+    payment_ref: str = ""   # provider order id
+    payment_id: str = ""    # provider payment id
+    receipt_token: str = ""
+    created_at: datetime = Field(default_factory=now)
+    paid_at: datetime | None = None
