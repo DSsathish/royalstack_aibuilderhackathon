@@ -113,10 +113,11 @@ aibuildercup-retail/
 
 ## Open items (fill in on day 1)
 
-- Team members and roles: ______
-- Google Cloud project ID: ______
-- Gemini API access: AI Studio key or Vertex AI (choose one, prefer Vertex for the "Google Cloud tools" prize)
-- GitHub org / repo URL: ______
+- Team members and roles: to be filled for the deck
+- Google Cloud project ID: `royastacxk-aibuildercup` (project number 881917398995), region `asia-south1`
+- Gemini API access: Vertex AI
+- GitHub repo: https://github.com/DSsathish/royalstack_aibuilderhackathon
+- Billing: NOT linked as of 14 Oct. Blocks Cloud Run, Vertex AI, Artifact Registry, Secret Manager. Must be fixed before first deploy.
 
 ## Team role split (suggested for 3 people)
 

@@ -218,3 +218,24 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.json.key
+service-account*.json
+
+# Firebase
+.firebase/
+firebase-debug.log
+
+# macOS
+.DS_Store
