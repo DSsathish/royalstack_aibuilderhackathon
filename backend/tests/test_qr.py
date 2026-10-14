@@ -22,3 +22,7 @@ def test_receipt_token_carries_order_and_expires():
     assert p["exp"] > time.time()
     expired = qr.sign({"kind": "receipt"}, ttl_s=-1)
     assert qr.verify(expired) is None
+
+
+def test_non_ascii_token_is_rejected_not_500():
+    assert qr.verify("abc.éé") is None

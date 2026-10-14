@@ -8,7 +8,7 @@ function Enter() {
   const { storeId } = useParams<{ storeId: string }>();
   const search = useSearchParams();
   const router = useRouter();
-  const { session, setSession } = useApp();
+  const { session, setSession, updateSession } = useApp();
   const [error, setError] = useState("");
   const p = useMemo(() => entranceParams("?" + search.toString()), [search]);
 
@@ -17,7 +17,7 @@ function Enter() {
     (async () => {
       try {
         if (session && session.store_id === storeId && session.mode === "instore" && p.aisle) {
-          setSession(await api.setAisle(session, p.aisle));          // aisle QR inside an existing visit
+          updateSession(await api.setAisle(session, p.aisle));       // aisle QR inside an existing visit
         } else {
           setSession(await api.enterStore(storeId, p.token, p.aisle));
         }

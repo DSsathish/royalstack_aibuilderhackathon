@@ -113,3 +113,11 @@ def test_owner_qr_urls(shop):
     assert f"/s/{shop}?t=" in body["entrance_url"]
     assert body["aisles"][0]["aisle"] == "A1" and "&aisle=A1" in body["aisles"][0]["url"]
     assert client.get(f"/owner/{shop}/qr").status_code == 401
+
+
+def test_malformed_ids_are_4xx_not_500(shop):
+    assert client.post("/sessions/instore", json={"store_id": shop, "token": "x.é"}).status_code == 401
+    assert client.get(f"/carts/abc", headers={"X-Session-Id": "a/b"}).status_code == 422
+    assert client.post("/checkout/intent", json={"session_id": "a/b"}).status_code == 422
+    assert client.post("/checkout/confirm", json={"order_id": "a/b", "payment_id": "p", "signature": "mock", "session_id": "0" * 32}).status_code == 422
+    assert client.get("/orders/a%2Fb", headers={"X-Session-Id": "0" * 32}).status_code in (404, 422)

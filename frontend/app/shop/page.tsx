@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import Scanner from "@/components/Scanner";
@@ -19,8 +19,9 @@ export default function Shop() {
 
   useEffect(() => {
     if (!session) { router.replace("/"); return; }
-    api.store(session.store_id).then(setStore).catch(() => setSession(null));
-    api.cart(session).then(setCart).catch(() => setSession(null));
+    const expired = (e: unknown) => { if (e instanceof ApiError && (e.status === 401 || e.status === 404)) setSession(null); };
+    api.store(session.store_id).then(setStore).catch(expired);
+    api.cart(session).then(setCart).catch(expired);
   }, [session, router, setStore, setCart, setSession]);
 
   if (!session) return null;

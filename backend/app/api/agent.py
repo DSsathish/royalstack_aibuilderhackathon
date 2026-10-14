@@ -1,6 +1,7 @@
 """Sessions and the agent chat stream (Server-Sent Events)."""
 
 import json
+import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -11,6 +12,7 @@ from app.config import settings
 from app.domain.models import Mode, Session
 from app.services import db, gemini, sessions
 
+log = logging.getLogger(__name__)
 router = APIRouter(tags=["agent"])
 MAX_UPLOAD = 4 * 1024 * 1024
 
@@ -24,6 +26,8 @@ class SessionIn(BaseModel):
 def create_session(body: SessionIn):
     if not db.store_ref(body.store_id).get().exists:
         raise HTTPException(404, "store not found")
+    if body.mode == "instore":
+        raise HTTPException(403, "in-store sessions start from the entrance QR")
     if body.mode == "owner" and settings.env not in ("dev", "test"):
         raise HTTPException(403, "owner sessions require owner sign-in")  # wired in phase 6
     return sessions.create(body.store_id, body.mode)
@@ -49,8 +53,13 @@ async def _read_upload(upload: UploadFile | None, kind: str) -> tuple[bytes, str
 
 def _sse(events):
     async def gen():
-        async for e in events:
-            yield f"data: {json.dumps(e, ensure_ascii=False)}\n\n"
+        try:
+            async for e in events:
+                yield f"data: {json.dumps(e, ensure_ascii=False)}\n\n"
+        except Exception as exc:  # model/tool failure mid-stream: tell the client, keep the stream well-formed
+            log.warning("agent stream failed: %s", exc)
+            msg = "The assistant is temporarily unavailable (model credits or quota). Scan, cart and checkout still work."
+            yield f"data: {json.dumps({'type': 'error', 'text': msg})}\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
@@ -69,7 +78,7 @@ async def audio(session_id: str = Form(...), audio: UploadFile = File(...)):
     data, mime = await _read_upload(audio, "audio")
     transcript = gemini.transcribe(data, mime)
     if not transcript:
-        raise HTTPException(422, "could not transcribe audio")
+        raise HTTPException(422, "Could not transcribe audio. The assistant may be temporarily unavailable.")
 
     async def with_transcript():
         yield {"type": "transcript", "text": transcript}

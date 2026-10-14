@@ -97,3 +97,18 @@ Voice: `MediaRecorder` → `/agent/audio`; replies read with `speechSynthesis` w
 - **Receipt page reuses the checkout success component.** One source of truth for the exit QR.
 - **Payment provider auto-selects:** mock unless both Razorpay keys are set. Mock is refused when `ENV=prod`.
 - **Smoke test on 15 Oct** ran the full flow against the real demo store; stock was restored by re-running the seed.
+
+## Review fixes (fresh-eyes review before merge)
+
+Fixed, each with a regression test or a build check:
+- The dev `/sessions` endpoint could mint an in-store session without an entrance token, bypassing the QR gate. Now refused; only `/sessions/instore` issues them.
+- Two checkout intents on one cart could both be confirmed and commit stock twice. `confirm` now refuses when the cart is no longer open.
+- Session, cart and order ids are validated as 32-char hex; non-ASCII tokens are rejected instead of raising. No more 500s from malformed ids.
+- The default signing key is refused when `ENV` is not dev or test, so a Cloud Run deploy without the secret fails fast instead of accepting forged entrance codes.
+- Shop page drops the session only on 401 or 404, not on a transient network error.
+- Pay button stays disabled while the Razorpay modal is open.
+- Scanning an aisle QR mid-visit no longer wipes chat history.
+- Model failures mid-stream now arrive as an `error` event with a clear message; the UI shows the real reason.
+
+Deferred minor:
+- `cart.add` is read-modify-write without a transaction; a simultaneous add from chat and scan could drop one line while both reservations stand. Acceptable for a single-shopper demo; fix in phase 7 if time allows.

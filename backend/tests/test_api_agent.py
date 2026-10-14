@@ -35,7 +35,7 @@ def test_chat_unknown_session_is_404():
 
 
 def test_chat_image_too_large_is_413(shop):
-    sid = client.post("/sessions", json={"store_id": shop, "mode": "instore"}).json()["session_id"]
+    sid = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()["session_id"]
     big = b"x" * (4 * 1024 * 1024 + 1)
     res = client.post("/agent/chat", data={"session_id": sid, "message": "what is this"},
                       files={"image": ("a.jpg", big, "image/jpeg")})
@@ -43,12 +43,16 @@ def test_chat_image_too_large_is_413(shop):
 
 
 def test_chat_rejects_non_image_upload(shop):
-    sid = client.post("/sessions", json={"store_id": shop, "mode": "instore"}).json()["session_id"]
+    sid = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()["session_id"]
     res = client.post("/agent/chat", data={"session_id": sid, "message": "x"},
                       files={"image": ("a.txt", b"hello", "text/plain")})
     assert res.status_code == 415
 
 
 def test_chat_message_required(shop):
-    sid = client.post("/sessions", json={"store_id": shop, "mode": "instore"}).json()["session_id"]
+    sid = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()["session_id"]
     assert client.post("/agent/chat", data={"session_id": sid, "message": ""}).status_code == 422
+
+
+def test_dev_sessions_endpoint_cannot_mint_instore(shop):
+    assert client.post("/sessions", json={"store_id": shop, "mode": "instore"}).status_code == 403

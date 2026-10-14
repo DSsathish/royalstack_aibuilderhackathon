@@ -31,9 +31,11 @@ export default function Checkout() {
           handler: async (r: { razorpay_payment_id: string; razorpay_signature: string }) => {
             try { setOrder(await api.checkoutConfirm(session, intent.order_id, r.razorpay_payment_id, r.razorpay_signature)); }
             catch (e) { setError((e as Error).message); }
+            setBusy(false);
           },
           modal: { ondismiss: () => setBusy(false) },
         }).open();
+        return;  // busy stays true until the modal's handler or ondismiss runs
       }
       setCart(await api.cart(session));
     } catch (e) { setError((e as Error).message); }

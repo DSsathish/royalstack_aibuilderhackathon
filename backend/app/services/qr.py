@@ -36,7 +36,7 @@ def verify(token: str) -> dict | None:
         body, mac = token.split(".", 1)
     except ValueError:
         return None
-    if not hmac.compare_digest(mac, _mac(body)):
+    if not (mac.isascii() and body.isascii()) or not hmac.compare_digest(mac, _mac(body)):
         return None
     try:
         data = json.loads(_unb64(body))

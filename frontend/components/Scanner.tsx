@@ -9,7 +9,7 @@ declare global { interface Window { BarcodeDetector?: new (o?: { formats: string
 
 /** Rear-camera scanner: native BarcodeDetector when present, ZXing otherwise. Aisle QR codes update position. */
 export default function Scanner({ onPhoto }: { onPhoto: (f: File) => void }) {
-  const { session, setSession, setCart } = useApp();
+  const { session, updateSession, setCart } = useApp();
   const video = useRef<HTMLVideoElement>(null);
   const [found, setFound] = useState<Product | null>(null);
   const [qty, setQty] = useState(1);
@@ -48,7 +48,7 @@ export default function Scanner({ onPhoto }: { onPhoto: (f: File) => void }) {
     lastCode.current = { code, at: now };
     if (!session) return;
     const aisle = /[?&]aisle=([A-Za-z0-9]+)/.exec(code)?.[1];
-    if (aisle) { setSession(await api.setAisle(session, aisle)); setError(`You are at aisle ${aisle}`); return; }
+    if (aisle) { updateSession(await api.setAisle(session, aisle)); setError(`You are at aisle ${aisle}`); return; }
     if (!/^\d{8,14}$/.test(code)) return;
     try { setFound(await api.byBarcode(session.store_id, code)); setQty(1); setError(""); navigator.vibrate?.(60); }
     catch { setError(`Barcode ${code} is not in this store's catalog.`); }

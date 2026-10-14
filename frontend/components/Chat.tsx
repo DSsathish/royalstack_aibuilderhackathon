@@ -34,11 +34,12 @@ export default function Chat() {
         else if (e.type === "token") { buffer += e.text; patch(id, { text: buffer, status: undefined }); }
         else if (e.type === "done") { buffer = e.text || buffer; patch(id, { text: buffer, status: undefined }); }
         else if (e.type === "action") handleAction(e.name, e.data, id);
+        else if (e.type === "error") { buffer = ""; patch(id, { text: e.text, status: undefined }); }
       }
       if (speak && buffer) { setAvatar("speaking"); sayAloud(buffer, language); setTimeout(() => setAvatar("idle"), 2500); }
       else setAvatar("idle");
-    } catch {
-      patch(id, { text: "Sorry, I lost the connection. Please try again.", status: undefined });
+    } catch (err) {
+      patch(id, { text: `Assistant unavailable: ${(err as Error).message}`, status: undefined });
       setAvatar("idle");
     }
   }

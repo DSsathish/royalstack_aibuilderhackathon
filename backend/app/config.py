@@ -1,5 +1,6 @@
 """Runtime settings, read from environment variables (or a local .env file)."""
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +22,12 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:3000"  # printed in QR codes
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
+
+    @model_validator(mode="after")
+    def _no_default_key_outside_dev(self):
+        if self.env not in ("dev", "test") and self.qr_session_signing_key == "dev-only-change-me":
+            raise ValueError("QR_SESSION_SIGNING_KEY must be set when ENV is not dev/test")
+        return self
 
 
 settings = Settings()

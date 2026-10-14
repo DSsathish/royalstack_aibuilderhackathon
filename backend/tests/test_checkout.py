@@ -101,3 +101,13 @@ def test_razorpay_signature_check():
         assert checkout.razorpay_signature_ok("order_ref", "pay_9", "bad") is False
     finally:
         settings.razorpay_key_secret = ""
+
+
+def test_second_intent_cannot_double_commit(session_with_cart):
+    shop = session_with_cart.store_id
+    first = checkout.intent(session_with_cart)
+    second = checkout.intent(session_with_cart)
+    checkout.confirm(first.order_id, payment_id="p1", signature="mock")
+    with pytest.raises(checkout.CheckoutError, match="cart"):
+        checkout.confirm(second.order_id, payment_id="p2", signature="mock")
+    assert db.inventory(shop).document(f"{shop}-salt").get().to_dict()["on_hand"] == 3

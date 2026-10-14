@@ -72,6 +72,8 @@ def confirm(order_id: str, *, payment_id: str, signature: str) -> Order:
         ok = razorpay_signature_ok(o.payment_ref, payment_id, signature)
     if not ok:
         raise CheckoutError("payment signature invalid")
+    if cart_svc.get(o.store_id, o.cart_id).status != "open":
+        raise CheckoutError("cart already checked out")
 
     for item in o.items:
         inventory.commit(o.store_id, item.product_id, item.qty)
