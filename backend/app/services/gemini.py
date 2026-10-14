@@ -41,3 +41,19 @@ def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float
     except Exception as exc:  # network, quota, bad key: degrade to keyword search
         log.warning("embed_texts failed: %s", exc)
         return []
+
+
+def transcribe(audio: bytes, mime_type: str) -> str:
+    """Speech to text with Gemini Flash. Keeps the spoken language. Returns "" on failure."""
+    if not configured():
+        return ""
+    try:
+        res = client().models.generate_content(
+            model=settings.gemini_flash_model,
+            contents=[types.Part.from_bytes(data=audio, mime_type=mime_type),
+                      "Transcribe this audio exactly, in the language spoken. Output only the transcript."],
+        )
+        return (res.text or "").strip()
+    except Exception as exc:
+        log.warning("transcribe failed: %s", exc)
+        return ""
