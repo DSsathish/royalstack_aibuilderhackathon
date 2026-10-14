@@ -37,7 +37,7 @@ export default function Chat() {
       }
       if (speak && buffer) { setAvatar("speaking"); sayAloud(buffer, language); setTimeout(() => setAvatar("idle"), 2500); }
       else setAvatar("idle");
-    } catch (err) {
+    } catch {
       patch(id, { text: "Sorry, I lost the connection. Please try again.", status: undefined });
       setAvatar("idle");
     }

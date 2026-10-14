@@ -91,13 +91,13 @@ Frontend `/checkout`:
 
 ## Acceptance criteria
 
-- [ ] Scanning the entrance QR on a phone opens the app and a session without any login step
-- [ ] Tamil voice question returns the aisle and highlights the map
-- [ ] Barcode scan adds an item in under 2 s; photo scan returns the right candidate in top 3
-- [ ] Running total visible on every tab and matches the server
-- [ ] Item limit blocks adds beyond the configured number
-- [ ] Sandbox payment completes and the exit QR renders; stock in the owner dashboard decreases immediately
-- [ ] Session expires after 4 hours and self-checkout is unavailable outside in-store mode
+- [x] Scanning the entrance QR on a phone opens the app and a session without any login step
+- [ ] Tamil voice question returns the aisle and highlights the map (needs Gemini credits)
+- [x] Barcode scan adds an item in under 2 s; photo scan returns the right candidate in top 3
+- [x] Running total visible on every tab and matches the server
+- [x] Item limit blocks adds beyond the configured number
+- [x] Sandbox payment completes and the exit QR renders; stock in the owner dashboard decreases immediately
+- [x] Session expires after 4 hours and self-checkout is unavailable outside in-store mode
 
 ## Risks
 

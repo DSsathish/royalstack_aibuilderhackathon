@@ -13,7 +13,7 @@ type Tab = "chat" | "scan" | "cart" | "map";
 
 export default function Shop() {
   const router = useRouter();
-  const { session, store, setStore, setCart, highlight, push, setSession } = useApp();
+  const { session, store, setStore, setCart, highlight, setSession } = useApp();
   const [tab, setTab] = useState<Tab>("chat");
   const [photo, setPhoto] = useState<File | null>(null);
 
@@ -22,8 +22,6 @@ export default function Shop() {
     api.store(session.store_id).then(setStore).catch(() => setSession(null));
     api.cart(session).then(setCart).catch(() => setSession(null));
   }, [session, router, setStore, setCart, setSession]);
-
-  useEffect(() => { if (photo) { setTab("chat"); } }, [photo]);
 
   if (!session) return null;
   const tabs: { id: Tab; label: string; icon: string }[] = [
@@ -34,7 +32,7 @@ export default function Shop() {
     <div className="flex flex-col h-dvh">
       <div className="flex-1 overflow-hidden">
         {tab === "chat" && <ChatWithPhoto photo={photo} clear={() => setPhoto(null)} />}
-        {tab === "scan" && <Scanner onPhoto={setPhoto} />}
+        {tab === "scan" && <Scanner onPhoto={(f) => { setPhoto(f); setTab("chat"); }} />}
         {tab === "cart" && <div className="overflow-y-auto h-full"><Cart /></div>}
         {tab === "map" && store && (
           <div className="p-3 space-y-2">

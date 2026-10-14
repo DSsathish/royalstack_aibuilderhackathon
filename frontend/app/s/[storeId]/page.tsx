@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, entranceParams } from "@/lib/api";
 import { useApp } from "@/lib/store";
@@ -10,10 +10,10 @@ function Enter() {
   const router = useRouter();
   const { session, setSession } = useApp();
   const [error, setError] = useState("");
+  const p = useMemo(() => entranceParams("?" + search.toString()), [search]);
 
   useEffect(() => {
-    const p = entranceParams("?" + search.toString());
-    if (!p) { setError("Scan the QR code at the store entrance to start."); return; }
+    if (!p) return;
     (async () => {
       try {
         if (session && session.store_id === storeId && session.mode === "instore" && p.aisle) {
@@ -27,7 +27,8 @@ function Enter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId]);
 
-  return <main className="flex-1 flex items-center justify-center p-6 text-center text-zinc-600">{error || "Opening your store session…"}</main>;
+  const msg = !p ? "Scan the QR code at the store entrance to start." : error || "Opening your store session…";
+  return <main className="flex-1 flex items-center justify-center p-6 text-center text-zinc-600">{msg}</main>;
 }
 
 export default function Page() { return <Suspense><Enter /></Suspense>; }

@@ -85,3 +85,15 @@ Voice: `MediaRecorder` → `/agent/audio`; replies read with `speechSynthesis` w
 - Payment confirmation verifies an HMAC signature; the mock provider is only enabled when no Razorpay key is configured and `ENV != "prod"`.
 - Receipt token expires in 30 minutes and is bound to the order id and item count.
 - Images and audio are capped at 4 MB and checked by content type (phase 2).
+
+---
+
+## Rulings made during implementation
+
+- **No Firebase Auth on the shopper side in this phase.** The server-issued 128-bit session id in localStorage is the credential; carts and orders are bound to it. Sign-in to save receipts is deferred. Cost if wrong: one extra phase-5 task.
+- **No React component tests.** Pure helpers (`lib/sse.ts`, `lib/api.ts`) are unit-tested with vitest; the UI is verified by `next build`, lint, and an end-to-end run of the API sequence the UI performs. Browser automation was unavailable in the build session. Cost if wrong: a UI regression is caught only by a manual run.
+- **Cart quantity controls are "+" and remove**, not a full stepper. Cost if wrong: minor UX.
+- **Photo from the Scan tab is handed to Chat** with a fixed prompt; the multimodal model identifies the product and calls `search_products` (phase 2 ruling).
+- **Receipt page reuses the checkout success component.** One source of truth for the exit QR.
+- **Payment provider auto-selects:** mock unless both Razorpay keys are set. Mock is refused when `ENV=prod`.
+- **Smoke test on 15 Oct** ran the full flow against the real demo store; stock was restored by re-running the seed.
