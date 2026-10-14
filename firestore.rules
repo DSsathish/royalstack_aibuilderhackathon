@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // All reads and writes go through the API (service account).
+    // Client SDK access is denied by default; shopper-owned documents
+    // are opened per phase when a client needs direct reads.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
