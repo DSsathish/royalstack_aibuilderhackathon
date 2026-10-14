@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 
 from pydantic import BaseModel
 
-from app.domain.models import Inventory, Location, Product
+from app.domain.models import Inventory, Location, Product, slug
 from app.services import db
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -131,7 +131,7 @@ def upsert(store_id: str, rows: list[Row], *, high_value_threshold: float) -> Im
             store_id=store_id, sku=r.sku, name=r.name, price=r.price, threshold=high_value_threshold,
             barcode=r.barcode, brand=r.brand, category=r.category, subcategory=r.subcategory,
             description=r.description, mrp=r.mrp or r.price, unit=r.unit, image_url=r.image_url,
-            tags=r.tags, substitutes=r.substitutes,
+            tags=r.tags, substitutes=[f"{store_id}-{slug(s)}" for s in r.substitutes],
         )
         batch.set(db.products(store_id).document(p.product_id), p.model_dump(), merge=True)
         batch.set(db.inventory(store_id).document(p.product_id), Inventory(

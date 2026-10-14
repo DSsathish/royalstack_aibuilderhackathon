@@ -147,3 +147,15 @@ Run against the Firestore emulator (`FIRESTORE_EMULATOR_HOST=localhost:8089`). E
 | `test_csv_connector.py` | parse with mapping, row errors, caps, upsert idempotent |
 | `test_api_catalog.py` | endpoints and validation |
 | `test_api_owner_import.py` | 401 without token, 403 wrong store, 200 import |
+
+---
+
+## Rulings made during implementation
+
+- **Google Sheets connector deferred to phase 6** (owner connectors page), CSV covers the demo. Cost if wrong: one extra file later.
+- **BigQuery streaming inserts are not available in the sandbox (no billing)**, so sales load by load job. Checkout (phase 3) will write orders to Firestore; a job copies them to BigQuery. Cost if wrong: dashboard lags by one job run.
+- **170 products instead of ~200.** Enough for every demo path. Cost if wrong: none.
+- **No composite indexes yet.** Phase 1 has no filtered queries. Added when a query needs one.
+- **Inventory tolerates a missing `reserved` field** because imports never overwrite live reservations. Found by smoke test, covered by `test_imported_inventory_works_with_reserve`.
+- **Substitutes in CSV are SKUs**, converted to product ids by the connector so the agent can resolve them directly.
+- **Demo store name "Royal Stack Supermarket"**, taken from the repo name. Rename in `infra/seed/seed.py` if wanted.

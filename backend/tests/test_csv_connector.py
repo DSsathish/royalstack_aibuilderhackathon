@@ -62,3 +62,19 @@ def test_upsert_marks_high_value(store_id):
     rows, _ = csvc.parse(b"sku,name,price,on_hand\nG1,Ghee,650,2\n", CANON)
     csvc.upsert(store_id, rows, high_value_threshold=500)
     assert db.products(store_id).document(f"{store_id}-g1").get().to_dict()["is_high_value"] is True
+
+
+def test_upsert_converts_substitute_skus_to_product_ids(store_id):
+    rows, _ = csvc.parse(b"sku,name,price,on_hand,substitutes\nA1,Salt,20,10,\nB2,Rock Salt,30,5,A1|ZZ9\n",
+                         {**CANON, "substitutes": "substitutes"})
+    csvc.upsert(store_id, rows, high_value_threshold=500)
+    assert db.products(store_id).document(f"{store_id}-b2").get().to_dict()["substitutes"] == [f"{store_id}-a1", f"{store_id}-zz9"]
+
+
+def test_imported_inventory_works_with_reserve(store_id):
+    from app.services import inventory
+    rows, _ = csvc.parse(b"sku,name,price,on_hand\nA1,Salt,20,10\n", CANON)
+    csvc.upsert(store_id, rows, high_value_threshold=500)
+    assert inventory.available(store_id, f"{store_id}-a1") == 10
+    assert inventory.reserve(store_id, f"{store_id}-a1", 2) is True
+    assert inventory.available(store_id, f"{store_id}-a1") == 8
