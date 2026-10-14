@@ -1,0 +1,128 @@
+"""Agent tools. Plain functions; docstrings are what the model reads.
+
+Every tool reads store_id / mode / cart_id from tool_context.state and returns a small dict.
+"""
+
+from google.adk.tools import ToolContext
+
+from app.services import cart as cart_svc
+from app.services import catalog, db
+from app.services.catalog import ProductView
+
+
+def _row(v: ProductView) -> dict:
+    loc = v.location
+    return {"product_id": v.product_id, "name": v.name, "brand": v.brand, "price": v.price, "mrp": v.mrp,
+            "unit": v.unit, "available": v.available,
+            "aisle": loc.aisle if loc else "", "bay": loc.bay if loc else 0}
+
+
+def _cart_summary(c) -> dict:
+    subtotal, savings, total = cart_svc.totals(c)
+    return {"items": [{"product_id": i.product_id, "name": i.name, "qty": i.qty, "unit_price": i.unit_price}
+                      for i in c.items],
+            "count": sum(i.qty for i in c.items), "subtotal": subtotal, "savings": savings, "total": total}
+
+
+def search_products(query: str, tool_context: ToolContext, max_results: int = 6) -> dict:
+    """Search the store catalog by product name, brand, category or a need (e.g. "headache", "breakfast").
+    Works in English, Tamil and Hindi. Returns products with price, available stock and aisle.
+    signal is "found", "out_of_stock" (all matches have no stock) or "not_carried" (no match)."""
+    hits = catalog.search(tool_context.state["store_id"], query, k=max(1, min(max_results, 10)))
+    if not hits:
+        signal = "not_carried"
+    elif all(h.available == 0 for h in hits):
+        signal = "out_of_stock"
+    else:
+        signal = "found"
+    return {"products": [_row(h) for h in hits], "signal": signal}
+
+
+def get_product(product_id: str, tool_context: ToolContext) -> dict:
+    """Full details for one product: description, tags, substitutes, stock, and shelf location."""
+    v = catalog.get_product(tool_context.state["store_id"], product_id)
+    if not v:
+        return {"error": "unknown_product"}
+    return {**_row(v), "category": v.category, "subcategory": v.subcategory, "description": v.description,
+            "tags": v.tags, "substitutes": v.substitutes, "is_high_value": v.is_high_value,
+            "location": v.location.model_dump() if v.location else None}
+
+
+def suggest_substitutes(product_id: str, tool_context: ToolContext) -> dict:
+    """Alternatives for a product that is out of stock or not wanted: its listed substitutes first,
+    then in-stock products from the same subcategory."""
+    store_id = tool_context.state["store_id"]
+    v = catalog.get_product(store_id, product_id)
+    if not v:
+        return {"error": "unknown_product"}
+    found = [catalog.get_product(store_id, s) for s in v.substitutes]
+    found = [s for s in found if s and s.available > 0]
+    if len(found) < 3 and v.subcategory:
+        for alt in catalog.search(store_id, v.subcategory, k=10):
+            if alt.product_id != product_id and alt.available > 0 and alt.product_id not in {f.product_id for f in found}:
+                found.append(alt)
+    return {"products": [_row(f) for f in found[:4]]}
+
+
+def navigate_to(product_id: str, tool_context: ToolContext) -> dict:
+    """Where a product is on the shop floor: aisle, bay, shelf, side, map coordinates and spoken directions."""
+    v = catalog.get_product(tool_context.state["store_id"], product_id)
+    if not v or not v.location:
+        return {"error": "no_location"}
+    loc = v.location
+    return {**loc.model_dump(), "product_id": product_id, "name": v.name,
+            "directions": f"Aisle {loc.aisle}, bay {loc.bay}, shelf {loc.shelf}, {loc.side} side"}
+
+
+def add_to_cart(product_id: str, qty: int, tool_context: ToolContext) -> dict:
+    """Add qty units of a product to the shopper's cart. Fails with out_of_stock, item_limit or unknown_product."""
+    s = tool_context.state
+    res = cart_svc.add(s["store_id"], s["cart_id"], product_id, qty, via="chat", mode=s.get("mode", "online"))
+    if isinstance(res, str):
+        return {"ok": False, "error": res}
+    return {"ok": True, "cart": _cart_summary(res)}
+
+
+def remove_from_cart(product_id: str, tool_context: ToolContext) -> dict:
+    """Remove a product line from the cart."""
+    s = tool_context.state
+    return {"ok": True, "cart": _cart_summary(cart_svc.remove(s["store_id"], s["cart_id"], product_id))}
+
+
+def view_cart(tool_context: ToolContext) -> dict:
+    """Current cart lines, item count, subtotal, savings and total."""
+    s = tool_context.state
+    return {"ok": True, "cart": _cart_summary(cart_svc.get(s["store_id"], s["cart_id"]))}
+
+
+def start_checkout(tool_context: ToolContext) -> dict:
+    """Begin checkout for the current cart. Returns the total the shopper will pay."""
+    s = tool_context.state
+    c = cart_svc.get(s["store_id"], s["cart_id"])
+    if not c.items:
+        return {"ok": False, "error": "empty_cart"}
+    return {"ok": True, "cart_id": c.cart_id, "total": cart_svc.totals(c)[2]}
+
+
+def get_low_stock(tool_context: ToolContext, limit: int = 20) -> dict:
+    """Owner tool: products at or below their reorder point, with supplier."""
+    store_id = tool_context.state["store_id"]
+    items = []
+    for d in db.inventory(store_id).stream():
+        inv = d.to_dict()
+        available = inv["on_hand"] - inv.get("reserved", 0)
+        if available <= inv.get("reorder_point", 0):
+            v = catalog.get_product(store_id, d.id)
+            items.append({"product_id": d.id, "name": v.name if v else d.id, "available": available,
+                          "reorder_point": inv.get("reorder_point", 0), "supplier_id": inv.get("supplier_id", "")})
+    items.sort(key=lambda i: i["available"])
+    return {"items": items[:limit]}
+
+
+TOOLS_BY_MODE = {
+    "instore": [search_products, get_product, suggest_substitutes, navigate_to,
+                add_to_cart, remove_from_cart, view_cart, start_checkout],
+    "online": [search_products, get_product, suggest_substitutes,
+               add_to_cart, remove_from_cart, view_cart, start_checkout],
+    "owner": [search_products, get_product, get_low_stock],
+}

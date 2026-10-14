@@ -18,3 +18,4 @@ Rules we follow in code:
 |---|---|---|
 | backend/app (API shell) | [api-shell.md](api-shell.md) | done |
 | models, db, inventory, catalog, csv connector, auth, routers, seed | [phase-1-data.md](phase-1-data.md) | done |
+| sessions, cart, agent tools, prompts, agent runtime, chat/audio API | [phase-2-agent.md](phase-2-agent.md) | built, live eval pending Gemini credits |

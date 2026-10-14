@@ -106,3 +106,34 @@ class DemandSignal(BaseModel):
     matched_product_id: str | None = None
     type: Literal["not_carried", "out_of_stock", "found"]
     created_at: datetime = Field(default_factory=now)
+
+
+Mode = Literal["instore", "online", "owner"]
+
+
+class Session(BaseModel):
+    session_id: str
+    store_id: str
+    mode: Mode
+    cart_id: str
+    user_id: str | None = None
+    language: str = "auto"
+    aisle_hint: str | None = None
+    created_at: datetime = Field(default_factory=now)
+    expires_at: datetime
+
+
+class CartItem(BaseModel):
+    product_id: str
+    name: str
+    qty: int
+    unit_price: float
+    mrp: float
+    via: Literal["scan", "vision", "chat"] = "chat"
+
+
+class Cart(BaseModel):
+    cart_id: str
+    store_id: str
+    items: list[CartItem] = []
+    status: Literal["open", "checked_out"] = "open"
