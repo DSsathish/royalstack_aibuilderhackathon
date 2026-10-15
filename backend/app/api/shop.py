@@ -4,6 +4,8 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path
+
+from app.api.agent import limit_sessions
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -24,7 +26,7 @@ class EnterIn(BaseModel):
     aisle: str | None = Field(default=None, max_length=8)
 
 
-@router.post("/sessions/instore", response_model=Session)
+@router.post("/sessions/instore", response_model=Session, dependencies=[Depends(limit_sessions)])
 def enter_store(body: EnterIn):
     payload = qr.verify(body.token)
     if not payload or payload.get("kind") != "entrance" or payload.get("store_id") != body.store_id:
