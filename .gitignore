@@ -240,3 +240,6 @@ firebase-debug.log
 # macOS
 .DS_Store
 infra/seed/sales.csv
+
+# frontend/lib is application code, not a Python build dir
+!frontend/lib/
