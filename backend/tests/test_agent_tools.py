@@ -119,3 +119,17 @@ def test_mode_gating_table():
     assert "add_to_cart" not in names["owner"] and "get_low_stock" in names["owner"]
     assert "get_low_stock" not in names["instore"]
     assert "search_products" in names["instore"] & names["online"] & names["owner"]
+
+
+def test_owner_tools_forecast_and_drafts(shop, monkeypatch):
+    from app.services import forecast, reorder
+    monkeypatch.setattr(reorder, "explain", lambda *a, **k: ("s", {}))
+    forecast.put(shop, f"{shop}-milk", daily=[5] * 14, avg_daily=5, std_daily=1)
+    out = tools.forecast_demand(tool_context=ctx(shop, mode="owner"), product_id=f"{shop}-milk", horizon_days=3)
+    assert out["avg_daily"] == 5 and len(out["daily"]) == 3
+    assert tools.forecast_demand(tool_context=ctx(shop, mode="owner"))["top"][0]["product_id"] == f"{shop}-milk"
+    drafts = tools.draft_purchase_order(tool_context=ctx(shop, mode="owner"))["drafts"]
+    assert drafts and all("po_id" in d for d in drafts)
+    assert "exits" in tools.get_anomalies(tool_context=ctx(shop, mode="owner"))
+    names = {t.__name__ for t in tools.TOOLS_BY_MODE["owner"]}
+    assert {"forecast_demand", "draft_purchase_order", "get_anomalies"} <= names

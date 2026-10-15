@@ -3,11 +3,11 @@
 import json
 import logging
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, WebSocket
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.agent import agent
+from app.agent import agent, live
 from app.config import settings
 from app.domain.models import Mode, Session
 from app.services import db, gemini, sessions
@@ -86,3 +86,27 @@ async def audio(session_id: str = Form(...), audio: UploadFile = File(...)):
             yield e
 
     return _sse(with_transcript())
+
+
+@router.websocket("/agent/live")
+async def live_voice(ws: WebSocket, session_id: str = Query(pattern=r"^[a-f0-9]{32}$")):
+    s = sessions.get(session_id)
+    if not s or (s.mode == "owner" and settings.env not in ("dev", "test")):
+        await ws.close(code=4404)
+        return
+    await ws.accept()
+    try:
+        await live.run(ws, s)
+    except live.SessionBusy:
+        await ws.send_text(json.dumps({"type": "error", "text": "Live voice is already open in another tab for this visit."}))
+    except Exception as exc:  # model or network failure: tell the client, then close
+        log.warning("live session ended with error: %s", exc)
+        try:
+            await ws.send_text(json.dumps({"type": "error", "text": "Live voice is unavailable right now. Use the microphone button instead."}))
+        except Exception:
+            pass
+    finally:
+        try:
+            await ws.close()
+        except Exception:
+            pass

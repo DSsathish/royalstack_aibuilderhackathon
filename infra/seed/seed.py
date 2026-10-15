@@ -32,9 +32,12 @@ SUPPLIERS = [
 ]
 
 
-def seed_store(store_id: str) -> Store:
-    store = Store(store_id=store_id, name="Royal Stack Supermarket", floor_map=FLOOR_MAP)
-    db.store_ref(store_id).set(store.model_dump(), merge=True)
+def seed_store(store_id: str, owner_emails: list[str]) -> Store:
+    store = Store(store_id=store_id, name="Royal Stack Supermarket", floor_map=FLOOR_MAP, owner_emails=[e.lower() for e in owner_emails])
+    data = store.model_dump()
+    if not owner_emails:
+        data.pop("owner_emails")   # keep whatever is already registered
+    db.store_ref(store_id).set(data, merge=True)
     for sid, name, email, lead in SUPPLIERS:
         db.suppliers(store_id).document(sid).set(
             Supplier(supplier_id=sid, store_id=store_id, name=name, email=email, lead_time_days=lead).model_dump())
@@ -109,9 +112,10 @@ if __name__ == "__main__":
     ap.add_argument("--store", default="demo-grocery")
     ap.add_argument("--embed", action="store_true", help="compute Gemini embeddings")
     ap.add_argument("--skip-bq", action="store_true")
+    ap.add_argument("--owner-email", action="append", default=[], help="Google account allowed into the owner dashboard (repeatable)")
     a = ap.parse_args()
 
-    store = seed_store(a.store)
+    store = seed_store(a.store, a.owner_email)
     seed_products(store)
     if a.embed:
         seed_embeddings(a.store)

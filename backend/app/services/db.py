@@ -59,3 +59,15 @@ def orders() -> firestore.CollectionReference:
 
 def verifications() -> firestore.CollectionReference:
     return client().collection("verifications")
+
+
+def forecasts(store_id: str) -> firestore.CollectionReference:
+    return store_ref(store_id).collection("forecasts")
+
+
+def po_drafts(store_id: str) -> firestore.CollectionReference:
+    return store_ref(store_id).collection("po_drafts")
+
+
+def counts(store_id: str) -> firestore.CollectionReference:
+    return store_ref(store_id).collection("counts")

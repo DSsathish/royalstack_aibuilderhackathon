@@ -10,6 +10,7 @@ os.environ["ENV"] = "test"
 os.environ["GOOGLE_CLOUD_PROJECT"] = "demo-test"
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"   # no Gemini calls in unit tests
 os.environ["GEMINI_API_KEY"] = ""
+os.environ["JOB_KEY"] = "test-job-key"
 
 
 @pytest.fixture

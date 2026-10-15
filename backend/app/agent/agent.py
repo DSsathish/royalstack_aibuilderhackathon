@@ -31,6 +31,9 @@ ACTION_FOR_TOOL = {
     "start_checkout": "checkout_ready",
     "get_low_stock": "show_low_stock",
     "record_demand_signal": "signal_recorded",
+    "forecast_demand": "show_forecast",
+    "draft_purchase_order": "drafts_created",
+    "get_anomalies": "show_anomalies",
 }
 
 _sessions = InMemorySessionService()

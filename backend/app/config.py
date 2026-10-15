@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # are no longer served. On a free-tier AI Studio key use gemini-3-flash-preview / gemini-3.1-flash-lite.
     gemini_flash_model: str = "gemini-3.5-flash"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
+    gemini_live_model: str = "gemini-live-2.5-flash"   # speech-to-speech, verified on Vertex global
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:3000"  # printed in QR codes
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
+    job_key: str = ""   # shared secret for /jobs/* (Cloud Scheduler sends it as X-Job-Key)
 
     @model_validator(mode="after")
     def _no_default_key_outside_dev(self):
