@@ -48,34 +48,48 @@ def candidates(store_id: str) -> dict[str, list[dict]]:
     return groups
 
 
+class _Reason(BaseModel):
+    product_id: str
+    reason: str
+
+
 class _Rationale(BaseModel):
     summary: str
-    reasons: dict[str, str]
+    reasons: list[_Reason]
+
+
+EXPLAIN_LINES = 8   # the most urgent lines get a model-written reason; the rest use the template
 
 
 def explain(store_id: str, supplier_name: str, lines: list[dict]) -> tuple[str, dict[str, str]]:
-    """Gemini Pro writes one short reason per line plus a summary. Template fallback on failure."""
-    fallback = {l["product_id"]: f"{l['available']} left, below reorder point {l['reorder_point']}." for l in lines}
+    """One Gemini call per supplier: a reason for the most urgent lines plus a summary. Template fallback on failure."""
+    reasons = {l["product_id"]: f"{l['available']} left, below reorder point {l['reorder_point']}." for l in lines}
     if not gemini.configured():
-        return "Items at or below reorder point.", fallback
+        return "Items at or below reorder point.", reasons
     upcoming = [f"{n} on {d.isoformat()}" for n, d in FESTIVALS if 0 <= (d - date.today()).days <= 45]
-    prompt = (f"You advise a grocery store owner on a purchase order to supplier {supplier_name}. Today is {date.today().isoformat()}. "
-              f"Upcoming festivals: {', '.join(upcoming) or 'none within 45 days'}. For each line give ONE short reason (max 18 words) "
-              f"using available stock, reorder point, average daily sales and lead time. Then a one-sentence summary for the whole order. "
-              f"Return JSON with 'summary' and 'reasons' keyed by product_id.\nLines: {json.dumps(lines)}")
+    urgent = sorted(lines, key=lambda l: l["available"] / (l["reorder_point"] or 1))[:EXPLAIN_LINES]
+    chunk = [{k: l[k] for k in ("product_id", "name", "qty", "available", "reorder_point", "avg_daily", "lead_time_days")} for l in urgent]
+    prompt = (f"You advise a grocery store owner on a purchase order to supplier {supplier_name} with {len(lines)} lines. "
+              f"Today is {date.today().isoformat()}. Upcoming festivals: {', '.join(upcoming) or 'none within 45 days'}. "
+              f"For each line below give ONE short reason (max 18 words) using available stock, reorder point, average daily sales "
+              f"and lead time, then a one-sentence summary for the whole order. Return JSON with keys 'summary' (string) "
+              f"and 'reasons' (array of objects with 'product_id' and 'reason').\nLines: {json.dumps(chunk)}")
+    by_name = {l["name"]: l["product_id"] for l in lines}
     try:
-        # Vertex occasionally answers 504 after ~17 s: keep calls short and retry once
         res = gemini.client().models.generate_content(
             model=settings.gemini_flash_model, contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=_Rationale,
+            # JSON mode without a strict schema: measured 5-8 s consistently; schema-constrained output hit 30 s+ 504s
+            config=types.GenerateContentConfig(response_mime_type="application/json",
                                                thinking_config=types.ThinkingConfig(thinking_level="low"),
-                                               http_options=types.HttpOptions(timeout=12000, retry_options=types.HttpRetryOptions(
+                                               http_options=types.HttpOptions(timeout=15000, retry_options=types.HttpRetryOptions(
                                                    attempts=2, initial_delay=1, http_status_codes=[429, 503, 504]))))
         r = _Rationale.model_validate_json(res.text)
-        return r.summary, {**fallback, **r.reasons}
+        for item in r.reasons:
+            reasons[by_name.get(item.product_id, item.product_id)] = item.reason
+        return r.summary, reasons
     except Exception as exc:
         log.warning("explain failed: %s", exc)
-        return "Items at or below reorder point.", fallback
+        return "Items at or below reorder point.", reasons
 
 
 def draft(store_id: str, *, created_by: str) -> list[PurchaseOrderDraft]:
@@ -85,7 +99,7 @@ def draft(store_id: str, *, created_by: str) -> list[PurchaseOrderDraft]:
     names = {sid: suppliers.get(sid, {}).get("name", sid) for sid in groups}
     if gemini.configured():
         gemini.client()   # build the cached client once, before the threads race to create it
-    with ThreadPoolExecutor(max_workers=4) as pool:   # one rationale call per supplier, in parallel
+    with ThreadPoolExecutor(max_workers=2) as pool:   # one rationale call per supplier; Vertex 504s under heavier fan-out
         rationales = dict(zip(groups, pool.map(lambda sid: explain(store_id, names[sid], groups[sid]), groups)))
     out = []
     for sid, lines in groups.items():
