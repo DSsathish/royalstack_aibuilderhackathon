@@ -17,7 +17,7 @@ def configured() -> bool:
 
 
 # Free-tier capacity is bursty: retry 429/503 with backoff before giving up.
-RETRY = types.HttpRetryOptions(attempts=4, initial_delay=2, max_delay=12, http_status_codes=[429, 503])
+RETRY = types.HttpRetryOptions(attempts=4, initial_delay=2, max_delay=12, http_status_codes=[429, 503, 504])
 FAST = types.GenerateContentConfig(thinking_config=types.ThinkingConfig(thinking_level="low"))
 
 

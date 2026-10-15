@@ -27,7 +27,7 @@ def current_uid(authorization: str | None = Header(default=None),
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "missing bearer token")
     claims = verify_id_token(authorization.removeprefix("Bearer "))
-    if claims.get("email"):
+    if claims.get("email") and claims.get("email_verified"):
         _EMAILS[claims["sub"]] = claims["email"].lower()
     return claims["sub"]
 

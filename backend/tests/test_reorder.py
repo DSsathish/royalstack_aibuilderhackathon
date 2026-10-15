@@ -69,3 +69,20 @@ def test_approve_twice_is_rejected(shop):
     reorder.approve(shop, a.po_id, by="o")
     with pytest.raises(ValueError):
         reorder.approve(shop, a.po_id, by="o")
+
+
+def test_manual_reorder_point_is_a_floor_and_zero_qty_disables(shop):
+    db.inventory(shop).document(f"{shop}-atta").update({"reorder_point": 50})     # owner wants 50 on hand: 40 < 50 -> candidate
+    db.inventory(shop).document(f"{shop}-milk").update({"reorder_qty": 0})        # discontinued: never ordered
+    ids = {l["product_id"]: l for g in reorder.candidates(shop).values() for l in g}
+    assert f"{shop}-atta" in ids and ids[f"{shop}-atta"]["reorder_point"] == 50
+    assert f"{shop}-milk" not in ids
+
+
+def test_draft_skips_suppliers_with_an_open_draft(shop):
+    first = reorder.draft(shop, created_by="agent")
+    again = reorder.draft(shop, created_by="agent")
+    assert len(first) == 2 and again == []
+    reorder.approve(shop, first[0].po_id, by="o")
+    third = reorder.draft(shop, created_by="agent")
+    assert [d.supplier_id for d in third] == [first[0].supplier_id]

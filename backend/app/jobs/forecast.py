@@ -7,7 +7,7 @@ import argparse
 import json
 import logging
 import statistics
-from datetime import date, timedelta
+from datetime import date, timedelta, timezone
 
 from google.cloud import bigquery
 from google.cloud.firestore_v1 import FieldFilter
@@ -17,19 +17,28 @@ from app.services import db, forecast
 
 log = logging.getLogger(__name__)
 HORIZON = forecast.HORIZON
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _param(store_id: str) -> bigquery.QueryJobConfig:
+    return bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("store", "STRING", store_id)])
+
+
+def _model(store_id: str) -> str:
+    return "demand_arima_" + "".join(c if c.isalnum() else "_" for c in store_id)
 
 
 def sync_sales(bq: bigquery.Client, store_id: str) -> int:
     """Append paid orders that are not yet in retail.sales (idempotent on order_id)."""
     ds = f"{settings.google_cloud_project}.retail"
     bq.query(f"ALTER TABLE `{ds}.sales` ADD COLUMN IF NOT EXISTS order_id STRING").result()   # seed table predates order ids
-    known = {r.order_id for r in bq.query(f"SELECT DISTINCT order_id FROM `{ds}.sales` WHERE store_id = '{store_id}' AND order_id IS NOT NULL").result()}
+    known = {r.order_id for r in bq.query(f"SELECT DISTINCT order_id FROM `{ds}.sales` WHERE store_id = @store AND order_id IS NOT NULL", job_config=_param(store_id)).result()}
     rows = []
     for o in db.orders().where(filter=FieldFilter("store_id", "==", store_id)).stream():
         d = o.to_dict()
         if d.get("status") not in ("paid", "verified", "flagged") or d["order_id"] in known:
             continue
-        day = d["paid_at"].date().isoformat() if d.get("paid_at") else d["created_at"].date().isoformat()
+        day = (d.get("paid_at") or d["created_at"]).astimezone(IST).date().isoformat()
         for item in d["items"]:
             rows.append({"store_id": store_id, "product_id": item["product_id"], "day": day, "channel": d["channel"],
                          "qty": item["qty"], "unit_price": item["unit_price"], "order_id": d["order_id"]})
@@ -47,14 +56,14 @@ def sync_sales(bq: bigquery.Client, store_id: str) -> int:
 def train_and_forecast(bq: bigquery.Client, store_id: str) -> dict[str, dict]:
     ds = f"{settings.google_cloud_project}.retail"
     bq.query(f"""
-        CREATE OR REPLACE MODEL `{ds}.demand_arima`
+        CREATE OR REPLACE MODEL `{ds}.{_model(store_id)}`
         OPTIONS(model_type='ARIMA_PLUS', time_series_timestamp_col='day', time_series_data_col='qty',
                 time_series_id_col='product_id', auto_arima=TRUE, data_frequency='DAILY', holiday_region='IN') AS
-        SELECT product_id, day, qty FROM `{ds}.daily_product_sales` WHERE store_id = '{store_id}'""").result()
+        SELECT product_id, day, qty FROM `{ds}.daily_product_sales` WHERE store_id = @store""", job_config=_param(store_id)).result()
     out: dict[str, dict] = {}
     for r in bq.query(f"""
         SELECT product_id, forecast_timestamp, forecast_value, standard_error
-        FROM ML.FORECAST(MODEL `{ds}.demand_arima`, STRUCT({HORIZON} AS horizon, 0.8 AS confidence_level))
+        FROM ML.FORECAST(MODEL `{ds}.{_model(store_id)}`, STRUCT({HORIZON} AS horizon, 0.8 AS confidence_level))
         ORDER BY product_id, forecast_timestamp""").result():
         f = out.setdefault(r.product_id, {"daily": [], "errs": []})
         f["daily"].append(max(0.0, float(r.forecast_value)))
@@ -69,7 +78,7 @@ def history(bq: bigquery.Client, store_id: str, days: int = 30) -> dict[str, lis
     ds = f"{settings.google_cloud_project}.retail"
     out: dict[str, list[float]] = {}
     for r in bq.query(f"""SELECT product_id, day, qty FROM `{ds}.daily_product_sales`
-                          WHERE store_id = '{store_id}' AND day >= DATE_SUB(CURRENT_DATE(), INTERVAL {days} DAY)""").result():
+                          WHERE store_id = @store AND day >= DATE_SUB(CURRENT_DATE('Asia/Kolkata'), INTERVAL {int(days)} DAY)""", job_config=_param(store_id)).result():
         out.setdefault(r.product_id, []).append(float(r.qty))
     return out
 
@@ -83,7 +92,7 @@ def run(store_id: str) -> dict:
     except Exception as exc:
         log.warning("ARIMA training failed, using 30-day means: %s", exc)
         forecasts, method = {}, "mean_fallback"
-    fallback = forecast.from_history(history(bq, store_id))
+    fallback = forecast.from_history(history(bq, store_id), days=30)
     for pid in db.products(store_id).select([]).stream():
         f = forecasts.get(pid.id) or fallback.get(pid.id) or {"daily": [0.0] * HORIZON, "avg_daily": 0.0, "std_daily": 0.0}
         forecast.put(store_id, pid.id, daily=f["daily"], avg_daily=f["avg_daily"], std_daily=f["std_daily"])

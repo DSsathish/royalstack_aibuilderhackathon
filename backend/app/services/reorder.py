@@ -33,12 +33,15 @@ def candidates(store_id: str) -> dict[str, list[dict]]:
             continue
         f = fc.get(d.id)
         available = max(0, inv["on_hand"] - inv.get("reserved", 0))
+        manual_point, manual_qty = inv.get("reorder_point", 0), inv.get("reorder_qty", 0)
+        if manual_qty <= 0:
+            continue   # reorder_qty 0 means "do not reorder" (discontinued)
         if f:
-            point = reorder_point(avg_daily=f["avg_daily"], lead_time_days=inv.get("lead_time_days", 3), std_daily=f["std_daily"])
-            qty = max(inv.get("reorder_qty", 0), math.ceil(f["avg_daily"] * 14))
+            point = max(manual_point, reorder_point(avg_daily=f["avg_daily"], lead_time_days=inv.get("lead_time_days", 3), std_daily=f["std_daily"]))
+            qty = max(manual_qty, math.ceil(f["avg_daily"] * 14))
         else:
-            point, qty = inv.get("reorder_point", 0), inv.get("reorder_qty", 0)
-        if available <= point and qty > 0:
+            point, qty = manual_point, manual_qty
+        if available <= point:
             groups.setdefault(inv.get("supplier_id") or "unknown", []).append({
                 "product_id": d.id, "name": p.name, "qty": qty, "available": available, "reorder_point": point,
                 "avg_daily": f["avg_daily"] if f else None, "lead_time_days": inv.get("lead_time_days", 3), "reason": ""})
@@ -61,11 +64,13 @@ def explain(store_id: str, supplier_name: str, lines: list[dict]) -> tuple[str, 
               f"using available stock, reorder point, average daily sales and lead time. Then a one-sentence summary for the whole order. "
               f"Return JSON with 'summary' and 'reasons' keyed by product_id.\nLines: {json.dumps(lines)}")
     try:
+        # Vertex occasionally answers 504 after ~17 s: keep calls short and retry once
         res = gemini.client().models.generate_content(
-            model=settings.gemini_pro_model, contents=prompt,
+            model=settings.gemini_flash_model, contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=_Rationale,
                                                thinking_config=types.ThinkingConfig(thinking_level="low"),
-                                               http_options=types.HttpOptions(timeout=20000, retry_options=types.HttpRetryOptions(attempts=1))))
+                                               http_options=types.HttpOptions(timeout=12000, retry_options=types.HttpRetryOptions(
+                                                   attempts=2, initial_delay=1, http_status_codes=[429, 503, 504]))))
         r = _Rationale.model_validate_json(res.text)
         return r.summary, {**fallback, **r.reasons}
     except Exception as exc:
@@ -75,7 +80,8 @@ def explain(store_id: str, supplier_name: str, lines: list[dict]) -> tuple[str, 
 
 def draft(store_id: str, *, created_by: str) -> list[PurchaseOrderDraft]:
     suppliers = {d.id: d.to_dict() for d in db.suppliers(store_id).stream()}
-    groups = candidates(store_id)
+    open_for = {d.supplier_id for d in list_drafts(store_id) if d.status == "draft"}
+    groups = {sid: lines for sid, lines in candidates(store_id).items() if sid not in open_for}
     names = {sid: suppliers.get(sid, {}).get("name", sid) for sid in groups}
     with ThreadPoolExecutor(max_workers=4) as pool:   # one rationale call per supplier, in parallel
         rationales = dict(zip(groups, pool.map(lambda sid: explain(store_id, names[sid], groups[sid]), groups)))

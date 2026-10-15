@@ -23,11 +23,13 @@ def all(store_id: str) -> dict[str, dict]:
     return {d.id: d.to_dict() for d in db.forecasts(store_id).stream()}
 
 
-def from_history(history: dict[str, list[float]]) -> dict[str, dict]:
-    """Fallback for products with too little history for ARIMA: flat forecast at the mean."""
+def from_history(history: dict[str, list[float]], days: int | None = None) -> dict[str, dict]:
+    """Fallback for products with too little history for ARIMA: flat forecast at the mean over `days` (zero-filled)."""
     out = {}
     for pid, series in history.items():
-        avg = statistics.fmean(series) if series else 0.0
-        std = statistics.pstdev(series) if len(series) > 1 else 0.0
+        n = days or len(series)
+        filled = list(series) + [0.0] * max(0, n - len(series))
+        avg = statistics.fmean(filled) if filled else 0.0
+        std = statistics.pstdev(filled) if len(filled) > 1 else 0.0
         out[pid] = {"daily": [avg] * HORIZON, "avg_daily": avg, "std_daily": std}
     return out

@@ -22,4 +22,4 @@ Rules we follow in code:
 | qr tokens, checkout, shop API, shopper PWA | [phase-3-instore.md](phase-3-instore.md) | done |
 | verification layers, vision bag check, exit API, kiosk | [phase-4-exit.md](phase-4-exit.md) | done |
 | live speech-to-speech bridge, PCM worklet, live client | [live-voice.md](live-voice.md) | done |
-| forecasts, reorder drafts, insights, owner API, forecast job, owner dashboard | [phase-6-owner.md](phase-6-owner.md) | done, review pending |
+| forecasts, reorder drafts, insights, owner API, forecast job, owner dashboard | [phase-6-owner.md](phase-6-owner.md) | done |

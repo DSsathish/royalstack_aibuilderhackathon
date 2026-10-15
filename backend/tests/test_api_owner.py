@@ -38,7 +38,7 @@ def test_me_lists_stores(shop):
 
 def test_owner_by_email_is_bootstrapped(shop, monkeypatch):
     from app.services import auth
-    monkeypatch.setattr(auth.id_token, "verify_firebase_token", lambda *a, **k: {"sub": "new-uid", "email": "boss@example.com"})
+    monkeypatch.setattr(auth.id_token, "verify_firebase_token", lambda *a, **k: {"sub": "new-uid", "email": "boss@example.com", "email_verified": True})
     res = client.get(f"/owner/{shop}/overview", headers={"Authorization": "Bearer t"})
     assert res.status_code == 200
     assert shop in db.users().document("new-uid").get().to_dict()["stores"]
@@ -93,3 +93,9 @@ def test_owner_session_endpoint(shop):
     res = client.post(f"/owner/{shop}/session", headers=H)
     assert res.status_code == 200 and res.json()["mode"] == "owner" and res.json()["user_id"] == "owner-1"
     assert client.post(f"/owner/{shop}/session").status_code == 401
+
+
+def test_unverified_email_does_not_bootstrap(shop, monkeypatch):
+    from app.services import auth
+    monkeypatch.setattr(auth.id_token, "verify_firebase_token", lambda *a, **k: {"sub": "evil-uid", "email": "boss@example.com", "email_verified": False})
+    assert client.get(f"/owner/{shop}/overview", headers={"Authorization": "Bearer t"}).status_code == 403

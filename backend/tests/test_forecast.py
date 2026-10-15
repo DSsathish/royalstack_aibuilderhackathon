@@ -19,3 +19,8 @@ def test_from_history_fallback_for_sparse_series():
     out = forecast.from_history({"a": [3, 5], "b": [4]})
     assert out["a"]["avg_daily"] == 4 and out["a"]["std_daily"] == 1.0 and len(out["a"]["daily"]) == 14
     assert out["b"]["avg_daily"] == 4 and out["b"]["std_daily"] == 0
+
+
+def test_from_history_zero_fills_missing_days():
+    out = forecast.from_history({"a": [10.0]}, days=30)
+    assert abs(out["a"]["avg_daily"] - 10 / 30) < 1e-9

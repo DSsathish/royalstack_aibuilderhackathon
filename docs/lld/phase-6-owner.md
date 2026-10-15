@@ -86,3 +86,15 @@ Single page with tabs: Overview, Inventory, Reorders, Signals, Loss, Connectors,
 - Cloud Scheduler job `forecast-demo-grocery` runs daily at 20:30 IST with the `X-Job-Key` secret.
 - Owner bootstrap by email: the first Google sign-in with an email listed in `owner_emails` creates the `users/{uid}` membership.
 - Drafting with one Gemini Pro call per supplier in sequence took 84 s and one call timed out; rationales now run in parallel with low thinking and a 20 s cap, falling back to a template sentence.
+- Rationale uses the Flash model with a fresh client per supplier thread: the shared client raised "client has been closed" under parallel use, and Pro exceeded 20 s on a 23-line order. Pro stays configured for future batch reasoning.
+
+## Review fixes (fresh-eyes review)
+
+- Owner bootstrap by email requires `email_verified` on the token; an unverified email never gains membership (test added).
+- The owner's manual reorder point is a floor under the forecast-derived point; `reorder_qty = 0` means "do not reorder" (discontinued). Test added.
+- Drafting skips suppliers that already have an open draft, so repeated "prepare orders" cannot duplicate drafts or model calls. Test added.
+- Forecast job: order day computed in Asia/Kolkata, sparse-history fallback zero-fills missing days, SQL parameterised, ARIMA model named per store.
+- Rationale calls: shared client (the "client has been closed" error came from a temporary client being garbage-collected), 12 s timeout, one retry on 504.
+- Firestore client rules (deny all) deployed; API key referrer restriction and authorized domains are console settings for the owner.
+
+Deferred minors: dashboard effects do not guard stale responses when switching stores quickly (single store in the demo); membership is not revoked when an email is removed from `owner_emails`.
