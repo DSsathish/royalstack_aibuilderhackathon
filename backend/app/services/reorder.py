@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from google.cloud.firestore_v1 import FieldFilter
@@ -63,7 +64,8 @@ def explain(store_id: str, supplier_name: str, lines: list[dict]) -> tuple[str, 
         res = gemini.client().models.generate_content(
             model=settings.gemini_pro_model, contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=_Rationale,
-                                               http_options=types.HttpOptions(timeout=30000)))
+                                               thinking_config=types.ThinkingConfig(thinking_level="low"),
+                                               http_options=types.HttpOptions(timeout=20000, retry_options=types.HttpRetryOptions(attempts=1))))
         r = _Rationale.model_validate_json(res.text)
         return r.summary, {**fallback, **r.reasons}
     except Exception as exc:
@@ -73,10 +75,14 @@ def explain(store_id: str, supplier_name: str, lines: list[dict]) -> tuple[str, 
 
 def draft(store_id: str, *, created_by: str) -> list[PurchaseOrderDraft]:
     suppliers = {d.id: d.to_dict() for d in db.suppliers(store_id).stream()}
+    groups = candidates(store_id)
+    names = {sid: suppliers.get(sid, {}).get("name", sid) for sid in groups}
+    with ThreadPoolExecutor(max_workers=4) as pool:   # one rationale call per supplier, in parallel
+        rationales = dict(zip(groups, pool.map(lambda sid: explain(store_id, names[sid], groups[sid]), groups)))
     out = []
-    for sid, lines in candidates(store_id).items():
-        name = suppliers.get(sid, {}).get("name", sid)
-        summary, reasons = explain(store_id, name, lines)
+    for sid, lines in groups.items():
+        name = names[sid]
+        summary, reasons = rationales[sid]
         for l in lines:
             l["reason"] = reasons.get(l["product_id"], "")
         po = PurchaseOrderDraft(po_id=uuid.uuid4().hex, store_id=store_id, supplier_id=sid, supplier_name=name,

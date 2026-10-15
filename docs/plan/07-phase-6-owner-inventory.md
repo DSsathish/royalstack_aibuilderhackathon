@@ -109,12 +109,12 @@ Reorder point logic (deterministic, in code):
 
 ## Acceptance criteria
 
-- [ ] Overview shows live sales from the in-store demo checkout within seconds
-- [ ] Forecast job produces 14-day forecasts for all seeded products; dashboard shows days of cover
-- [ ] At least one reorder draft with a Gemini rationale waits in the inbox after the job runs
+- [x] Overview shows live sales from the in-store demo checkout within seconds
+- [x] Forecast job produces 14-day forecasts for all seeded products; dashboard shows days of cover
+- [x] At least one reorder draft with a Gemini rationale waits in the inbox after the job runs
 - [ ] "Oat milk" demand signal from the shopper demo appears on the Signals page
 - [ ] Exit verification flag from phase 4 appears on the Loss dashboard
-- [ ] CSV import with a custom mapping for a second store works end to end
+- [x] CSV import with a custom mapping for a second store works end to end
 
 ## Risks
 

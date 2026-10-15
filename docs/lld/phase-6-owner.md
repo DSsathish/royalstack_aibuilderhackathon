@@ -76,3 +76,13 @@ Single page with tabs: Overview, Inventory, Reorders, Signals, Loss, Connectors,
 - No email provider: approved drafts store the generated supplier email; sending is a one-line addition later.
 - No separate alerts collection: alerts are derived from inventory status and shown on Overview.
 - Google sign-in requires the owner to enable the provider once in the Firebase console; the dashboard shows a clear message until then.
+
+## Findings during implementation
+
+- BigQuery ML `ARIMA_PLUS` on 170 series × 90 days trains and forecasts in about 70 s (29 s via the deployed endpoint on a warm dataset). Milk forecasts ~8.4/day, dead-stock items near zero; 35 reorder lines across four suppliers on the first run.
+- The seed's `sales` table predated order ids; the sync step adds the column if missing, so live demo sales flow into the next forecast.
+- The `retail` dataset lives in the US multi-region (created with the default); queries work cross-region, so it was left as is.
+- Owner chat sessions come only from `POST /owner/{id}/session` with a verified owner; the dev `/sessions` path refuses owner mode outside dev/test.
+- Cloud Scheduler job `forecast-demo-grocery` runs daily at 20:30 IST with the `X-Job-Key` secret.
+- Owner bootstrap by email: the first Google sign-in with an email listed in `owner_emails` creates the `users/{uid}` membership.
+- Drafting with one Gemini Pro call per supplier in sequence took 84 s and one call timed out; rationales now run in parallel with low thinking and a 20 s cap, falling back to a template sentence.
