@@ -25,7 +25,7 @@ def shop(store_id, monkeypatch):
     put(store_id, "ghee", 650, 1, avg_daily=2)                                # point = ceil(6.75) = 7 -> low
     put(store_id, "salt", 20, 0)                                              # no forecast: falls back to reorder_qty
     catalog.invalidate(store_id)
-    monkeypatch.setattr(reorder, "explain", lambda *a, **k: ("Seasonal demand ahead.", {"milk": "Daily seller, 1-day lead.", "ghee": "Festival demand."}))
+    monkeypatch.setattr(reorder, "explain", lambda *a, **k: ("Seasonal demand ahead.", {f"{store_id}-milk": "Daily seller, 1-day lead.", f"{store_id}-ghee": "Festival demand."}))
     return store_id
 
 

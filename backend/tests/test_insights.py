@@ -44,7 +44,7 @@ def test_overview_counts_today(shop, monkeypatch):
     checkout.confirm(checkout.intent(s).order_id, payment_id="p", signature="mock")
     out = insights.overview(shop)
     assert out["today"]["orders"] == 1 and out["today"]["revenue"] == 56 and out["today"]["by_channel"] == {"store": 56.0}
-    assert out["low_stock"] == 2 and out["out_of_stock"] == 1       # milk (3 left) and oat (0) are <= reorder point 6
+    assert out["low_stock"] == 1 and out["out_of_stock"] == 1       # milk (3 left) is low; oat (0) is out
     assert out["series"][-1]["revenue"] == 56 and out["series"][0]["day"] == "2026-10-01"
 
 

@@ -5,11 +5,13 @@ Every tool reads store_id / mode / cart_id from tool_context.state and returns a
 
 import uuid
 
+from types import SimpleNamespace
+
 from google.adk.tools import ToolContext
 
 from app.domain.models import DemandSignal
 from app.services import cart as cart_svc
-from app.services import catalog, db
+from app.services import catalog, db, forecast as forecast_svc, insights, reorder, verification
 from app.services.catalog import ProductView
 
 
@@ -132,10 +134,41 @@ def get_low_stock(tool_context: ToolContext, limit: int = 20) -> dict:
     return {"items": items[:limit]}
 
 
+def forecast_demand(tool_context: ToolContext, product_id: str = "", horizon_days: int = 14) -> dict:
+    """Owner tool: expected daily demand for the next days from the store's forecast model.
+    With a product_id returns that product's daily forecast; without it, the products with the highest expected demand."""
+    store_id = tool_context.state["store_id"]
+    if product_id:
+        f = forecast_svc.get(store_id, product_id)
+        if not f:
+            return {"error": "no_forecast"}
+        p = catalog.get_product(store_id, product_id)
+        return {"product_id": product_id, "name": p.name if p else product_id, "avg_daily": f["avg_daily"],
+                "daily": f["daily"][:max(1, min(horizon_days, 14))], "available": p.available if p else None}
+    top = sorted(forecast_svc.all(store_id).items(), key=lambda kv: -kv[1]["avg_daily"])[:10]
+    return {"top": [{"product_id": pid, "name": (catalog.get_product(store_id, pid) or SimpleNamespace(name=pid)).name,
+                     "avg_daily": f["avg_daily"]} for pid, f in top]}
+
+
+def draft_purchase_order(tool_context: ToolContext) -> dict:
+    """Owner tool: create purchase-order drafts for everything at or below its reorder point, one per supplier.
+    Drafts wait for the owner's approval in the dashboard; nothing is sent."""
+    drafts = reorder.draft(tool_context.state["store_id"], created_by="agent")
+    return {"drafts": [{"po_id": d.po_id, "supplier": d.supplier_name, "lines": len(d.lines), "summary": d.summary,
+                        "items": [f"{l['name']} x{l['qty']}" for l in d.lines]} for d in drafts]}
+
+
+def get_anomalies(tool_context: ToolContext, days: int = 7) -> dict:
+    """Owner tool: exit-verification flags and stock-count discrepancies (possible shrink) for the last days."""
+    store_id = tool_context.state["store_id"]
+    return {"exits": verification.summary(store_id, days), "shrink": insights.shrink(store_id)[:10],
+            "asked_but_not_carried": insights.signals(store_id, days)["not_carried"][:10]}
+
+
 TOOLS_BY_MODE = {
     "instore": [search_products, get_product, suggest_substitutes, navigate_to, record_demand_signal,
                 add_to_cart, remove_from_cart, view_cart, start_checkout],
     "online": [search_products, get_product, suggest_substitutes, record_demand_signal,
                add_to_cart, remove_from_cart, view_cart, start_checkout],
-    "owner": [search_products, get_product, get_low_stock],
+    "owner": [search_products, get_product, get_low_stock, forecast_demand, draft_purchase_order, get_anomalies],
 }

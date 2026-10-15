@@ -32,6 +32,7 @@ class Store(BaseModel):
     high_value_threshold: float = 500.0
     audit_rate: float = 0.10      # share of clear exits sent to a random spot check
     kiosk_pin: str = "1234"       # exit kiosk access; owner rotates it
+    owner_emails: list[str] = []  # Google accounts allowed into the owner dashboard
     floor_map: list[Aisle] = []
 
 
@@ -192,4 +193,20 @@ class Verification(BaseModel):
     reviewed_by: str = ""
     review_note: str = ""
     review_outcome: Literal["cleared", "issue_confirmed"] | None = None
+    created_at: datetime = Field(default_factory=now)
+
+
+class PurchaseOrderDraft(BaseModel):
+    po_id: str
+    store_id: str
+    supplier_id: str
+    supplier_name: str
+    lines: list[dict]            # {product_id, name, qty, available, reorder_point, avg_daily, reason}
+    summary: str = ""
+    status: Literal["draft", "approved", "rejected"] = "draft"
+    email_text: str = ""
+    reason: str = ""             # rejection reason
+    created_by: str = "agent"
+    decided_by: str = ""
+    decided_at: datetime | None = None
     created_at: datetime = Field(default_factory=now)

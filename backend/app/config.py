@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:3000"  # printed in QR codes
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
+    job_key: str = ""   # shared secret for /jobs/* (Cloud Scheduler sends it as X-Job-Key)
 
     @model_validator(mode="after")
     def _no_default_key_outside_dev(self):

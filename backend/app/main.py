@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agent, catalog, exit, owner_import, shop
+from app.api import agent, catalog, exit, owner, owner_import, shop
 from app.config import settings
 
 app = FastAPI(title="Retail Agent API", version="0.1.0")
@@ -20,6 +20,7 @@ app.include_router(owner_import.router)
 app.include_router(agent.router)
 app.include_router(shop.router)
 app.include_router(exit.router)
+app.include_router(owner.router)
 
 
 @app.on_event("startup")
