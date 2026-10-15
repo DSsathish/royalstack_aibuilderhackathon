@@ -1,10 +1,75 @@
 @import "tailwindcss";
 
-:root { --background: #ffffff; --foreground: #171717; }
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans), var(--font-tamil), var(--font-hindi), system-ui, sans-serif;
+/* Layout concept: receipt-and-chalkboard. One warm accent (turmeric) on cool sage neutrals; every amount in a mono till face. */
+:root {
+  --bg: #eef2ec;          /* mist: pale sage-white */
+  --surface: #ffffff;
+  --surface-2: #e3e9e2;
+  --ink: #11261d;         /* pine */
+  --muted: #5e6f65;       /* moss */
+  --line: #cdd6cf;
+  --accent: #e39a0c;      /* turmeric */
+  --accent-ink: #1a1200;
+  --accent-soft: #fbefcf;
+  --good: #2e7d5b;        /* leaf */
+  --warn: #b96a00;
+  --bad: #c8413b;         /* chilli */
+  --bad-soft: #fde4e2;
+  --good-soft: #dcefe4;
+  --warn-soft: #fbe9cf;
+  --orb: 227 154 12;      /* turmeric as rgb triplet for glows */
 }
-@media (prefers-color-scheme: dark) { :root { --background: #0a0a0a; --foreground: #ededed; } }
-body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1614; --surface: #16221e; --surface-2: #1e2d27; --ink: #ecf2ee; --muted: #93a59b; --line: #2b3b34;
+    --accent: #f0b23a; --accent-ink: #1a1200; --accent-soft: #3a2c0d; --good: #5fbf92; --warn: #e3a44a; --bad: #ef6f69;
+    --bad-soft: #3b1d1b; --good-soft: #163428; --warn-soft: #3a2a10; --orb: 240 178 58; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1614; --surface: #16221e; --surface-2: #1e2d27; --ink: #ecf2ee; --muted: #93a59b; --line: #2b3b34;
+  --accent: #f0b23a; --accent-ink: #1a1200; --accent-soft: #3a2c0d; --good: #5fbf92; --warn: #e3a44a; --bad: #ef6f69;
+  --bad-soft: #3b1d1b; --good-soft: #163428; --warn-soft: #3a2a10; --orb: 240 178 58; color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg); --color-surface: var(--surface); --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink); --color-muted: var(--muted); --color-line: var(--line);
+  --color-accent: var(--accent); --color-accent-ink: var(--accent-ink); --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good); --color-warn: var(--warn); --color-bad: var(--bad);
+  --color-good-soft: var(--good-soft); --color-warn-soft: var(--warn-soft); --color-bad-soft: var(--bad-soft);
+  --font-display: var(--font-display), var(--font-tamil), var(--font-hindi), system-ui, sans-serif;
+  --font-sans: var(--font-body), var(--font-tamil), var(--font-hindi), system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-card: 14px;
+}
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em; text-wrap: balance; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+/* components */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: 10px 18px; font-weight: 600; font-size: 14px; line-height: 1; transition: transform .08s ease, background-color .15s ease; }
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-primary:disabled { background: var(--surface-2); color: var(--muted); }
+.btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn-ink { background: var(--ink); color: var(--bg); }
+.btn-danger { background: var(--bad); color: #fff; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 600; letter-spacing: .02em; }
+.chip-good { background: var(--good-soft); color: var(--good); }
+.chip-warn { background: var(--warn-soft); color: var(--warn); }
+.chip-bad { background: var(--bad-soft); color: var(--bad); }
+.chip-muted { background: var(--surface-2); color: var(--muted); }
+.chip-accent { background: var(--accent-soft); color: var(--accent-ink); }
+.dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.field { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 15px; color: var(--ink); }
+.field:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.receipt-edge { border-top: 1px dashed var(--line); }
+.bubble-user { background: var(--ink); color: var(--bg); border-radius: 18px 18px 4px 18px; }
+.bubble-ai { background: var(--surface); border: 1px solid var(--line); border-radius: 18px 18px 18px 4px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

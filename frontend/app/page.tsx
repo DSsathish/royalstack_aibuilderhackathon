@@ -1,12 +1,16 @@
 import Link from "next/link";
+import { IconStore } from "@/components/Icons";
 
 export default function Home() {
   return (
-    <main className="flex-1 flex flex-col items-center justify-center gap-6 p-6 text-center">
-      <img src="/icon.svg" alt="" className="w-20 h-20" />
-      <h1 className="text-2xl font-bold">Royal Stack Store Assistant</h1>
-      <p className="text-zinc-500 max-w-sm">Scan the QR code at the store entrance to start shopping with the assistant. No app install needed.</p>
-      <Link href="/shop" className="rounded-lg border px-4 py-2 text-sm">Continue a store session</Link>
+    <main className="flex-1 flex flex-col items-center justify-center gap-6 px-6 py-10 text-center">
+      <div className="w-16 h-16 rounded-full bg-accent-soft text-accent-ink flex items-center justify-center"><IconStore /></div>
+      <div className="space-y-2 max-w-sm">
+        <div className="eyebrow">Royal Stack</div>
+        <h1 className="text-3xl font-semibold">Scan the code at the entrance to start</h1>
+        <p className="text-muted">Your assistant knows every shelf. Ask by voice, scan as you go, pay without the queue.</p>
+      </div>
+      <Link href="/shop" className="btn btn-ghost">Continue a store visit</Link>
     </main>
   );
 }

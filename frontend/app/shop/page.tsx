@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, api } from "@/lib/api";
 import { useApp } from "@/lib/store";
@@ -8,6 +8,7 @@ import Scanner from "@/components/Scanner";
 import Cart from "@/components/Cart";
 import StoreMap from "@/components/StoreMap";
 import TotalBar from "@/components/TotalBar";
+import { IconCart, IconChat, IconMap, IconScan } from "@/components/Icons";
 
 type Tab = "chat" | "scan" | "cart" | "map";
 
@@ -25,9 +26,9 @@ export default function Shop() {
   }, [session, router, setStore, setCart, setSession]);
 
   if (!session) return null;
-  const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: "chat", label: "Assistant", icon: "💬" }, { id: "scan", label: "Scan", icon: "📷" },
-    { id: "cart", label: "Cart", icon: "🛒" }, ...(session.mode === "instore" ? [{ id: "map" as Tab, label: "Map", icon: "🗺️" }] : []),
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "chat", label: "Assistant", icon: <IconChat /> }, { id: "scan", label: "Scan", icon: <IconScan /> },
+    { id: "cart", label: "Cart", icon: <IconCart /> }, ...(session.mode === "instore" ? [{ id: "map" as Tab, label: "Map", icon: <IconMap /> }] : []),
   ];
   return (
     <div className="flex flex-col h-dvh">
@@ -37,16 +38,17 @@ export default function Shop() {
         {tab === "cart" && <div className="overflow-y-auto h-full"><Cart /></div>}
         {tab === "map" && store && (
           <div className="p-3 space-y-2">
+            <div className="eyebrow px-1">Store map</div>
             <StoreMap aisles={store.floor_map} target={highlight} youAreHere={session.aisle_hint} />
-            <p className="text-xs text-zinc-500 text-center">{highlight ? `Highlighted: aisle ${highlight.aisle}, bay ${highlight.bay}, ${highlight.side} side` : "Ask the assistant where a product is, or scan an aisle QR to update your position."}</p>
+            <p className="text-xs text-muted text-center">{highlight ? `Highlighted: aisle ${highlight.aisle}, bay ${highlight.bay}, ${highlight.side} side` : "Ask the assistant where a product is, or scan an aisle QR to update your position."}</p>
           </div>
         )}
       </div>
       {session.mode !== "owner" && <TotalBar />}
-      <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr border-t border-zinc-200 dark:border-zinc-800 bg-background pb-[env(safe-area-inset-bottom)]">
+      <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
         {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`py-2 text-xs flex flex-col items-center ${tab === t.id ? "text-emerald-600 font-semibold" : "text-zinc-500"}`}>
-            <span className="text-lg">{t.icon}</span>{t.label}
+          <button key={t.id} onClick={() => setTab(t.id)} className={`py-2 text-[11px] font-semibold flex flex-col items-center gap-0.5 ${tab === t.id ? "text-ink" : "text-muted"}`}>
+            <span className={`rounded-full px-3 py-0.5 ${tab === t.id ? "bg-accent-soft text-accent-ink" : ""}`}>{t.icon}</span>{t.label}
           </button>
         ))}
       </nav>

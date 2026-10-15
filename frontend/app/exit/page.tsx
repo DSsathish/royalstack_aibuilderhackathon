@@ -10,9 +10,10 @@ function ExitCode() {
   const url = `${typeof window !== "undefined" ? window.location.origin : ""}/exit/?r=${token}`;
   return (
     <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-xl font-bold">Show this at the exit</h1>
-      <div className="bg-white p-3 rounded-xl"><QRCodeSVG value={url} size={240} /></div>
-      <p className="text-sm text-zinc-500">The exit kiosk scans this code. It expires 30 minutes after payment.</p>
+      <div className="eyebrow">Exit pass</div>
+      <h1 className="text-2xl font-semibold">Show this at the exit</h1>
+      <div className="bg-white p-3 rounded-[14px]"><QRCodeSVG value={url} size={240} /></div>
+      <p className="text-sm text-muted">The exit kiosk scans this code. It expires 30 minutes after payment.</p>
     </main>
   );
 }

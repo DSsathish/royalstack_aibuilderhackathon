@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { Order, api, money } from "@/lib/api";
 import { useApp } from "@/lib/store";
+import { IconCheck } from "@/components/Icons";
 
 declare global { interface Window { Razorpay?: new (o: Record<string, unknown>) => { open(): void } } }
 
@@ -46,18 +47,20 @@ export default function Checkout() {
   if (order) return <Receipt order={order} />;
   return (
     <main className="flex-1 p-4 space-y-4 max-w-md mx-auto w-full">
-      <h1 className="text-xl font-bold">Self-checkout</h1>
-      {cart?.items.map((i) => (
-        <div key={i.product_id} className="flex justify-between text-sm"><span>{i.name} × {i.qty}</span><span>{money(i.unit_price * i.qty)}</span></div>
-      ))}
-      <div className="border-t pt-2 space-y-1 text-sm">
-        {cart && cart.savings > 0 && <div className="flex justify-between text-emerald-600"><span>You save</span><span>{money(cart.savings)}</span></div>}
-        <div className="flex justify-between text-lg font-bold"><span>Total</span><span>{money(cart?.total ?? 0)}</span></div>
+      <div><div className="eyebrow">Self-checkout</div><h1 className="text-2xl font-semibold">Review and pay</h1></div>
+      <div className="card divide-y divide-line">
+        {cart?.items.map((i) => (
+          <div key={i.product_id} className="flex justify-between p-3 text-sm"><span>{i.name} <span className="text-muted">× {i.qty}</span></span><span className="mono">{money(i.unit_price * i.qty)}</span></div>
+        ))}
+        <div className="p-3 receipt-edge space-y-1 text-sm">
+          {cart && cart.savings > 0 && <div className="flex justify-between text-good"><span>You save</span><span className="mono">{money(cart.savings)}</span></div>}
+          <div className="flex justify-between text-lg font-semibold"><span>Total</span><span className="mono">{money(cart?.total ?? 0)}</span></div>
+        </div>
       </div>
-      {error && <div className="text-sm text-red-600">{error}</div>}
-      <button onClick={pay} disabled={busy || !cart?.count} className="w-full rounded-xl bg-emerald-600 disabled:bg-zinc-300 text-white py-3 font-semibold">{busy ? "Processing…" : "Pay now (sandbox)"}</button>
-      <p className="text-xs text-zinc-500 text-center">Test payments only. No real money is charged.</p>
-      <button onClick={() => router.back()} className="w-full text-sm text-zinc-500">Back</button>
+      {error && <div className="chip chip-bad">{error}</div>}
+      <button onClick={pay} disabled={busy || !cart?.count} className="btn btn-primary w-full py-3.5 text-base">{busy ? "Processing" : "Pay now"}</button>
+      <p className="text-xs text-muted text-center">Sandbox payment. No real money is charged.</p>
+      <button onClick={() => router.back()} className="btn btn-ghost w-full">Back</button>
     </main>
   );
 }
@@ -66,16 +69,16 @@ export function Receipt({ order }: { order: Order }) {
   const exitUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/exit/?r=${order.receipt_token}`;
   return (
     <main className="flex-1 p-4 space-y-4 max-w-md mx-auto w-full text-center">
-      <div className="text-emerald-600 text-5xl">✓</div>
-      <h1 className="text-xl font-bold">Paid {money(order.total)}</h1>
-      <p className="text-sm text-zinc-500">Show this code at the exit.</p>
-      <div className="flex justify-center"><div className="bg-white p-3 rounded-xl"><QRCodeSVG value={exitUrl} size={220} /></div></div>
-      <div className="text-left text-sm space-y-1 border rounded-xl p-3">
-        {order.items.map((i) => <div key={i.product_id} className="flex justify-between"><span>{i.name} × {i.qty}</span><span>{money(i.unit_price * i.qty)}</span></div>)}
-        <div className="flex justify-between font-bold border-t pt-1"><span>Total</span><span>{money(order.total)}</span></div>
+      <div className="w-14 h-14 mx-auto rounded-full bg-good-soft text-good flex items-center justify-center"><IconCheck /></div>
+      <div><div className="eyebrow">Paid</div><h1 className="text-3xl font-semibold mono">{money(order.total)}</h1></div>
+      <p className="text-sm text-muted">Show this code at the exit.</p>
+      <div className="flex justify-center"><div className="bg-white p-3 rounded-[14px]"><QRCodeSVG value={exitUrl} size={220} /></div></div>
+      <div className="card text-left text-sm divide-y divide-line">
+        {order.items.map((i) => <div key={i.product_id} className="flex justify-between p-3"><span>{i.name} <span className="text-muted">× {i.qty}</span></span><span className="mono">{money(i.unit_price * i.qty)}</span></div>)}
+        <div className="flex justify-between p-3 font-semibold receipt-edge"><span>Total</span><span className="mono">{money(order.total)}</span></div>
       </div>
-      <p className="text-xs text-zinc-400">Order {order.order_id.slice(0, 8)} · {order.paid_at ? new Date(order.paid_at).toLocaleString() : ""}</p>
-      <a href="/shop" className="inline-block rounded-lg border px-4 py-2 text-sm">Continue shopping</a>
+      <p className="text-xs text-muted mono">Order {order.order_id.slice(0, 8)} · {order.paid_at ? new Date(order.paid_at).toLocaleString() : ""}</p>
+      <a href="/shop" className="btn btn-ghost">Continue shopping</a>
     </main>
   );
 }
