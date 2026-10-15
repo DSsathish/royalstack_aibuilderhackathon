@@ -83,6 +83,8 @@ def draft(store_id: str, *, created_by: str) -> list[PurchaseOrderDraft]:
     open_for = {d.supplier_id for d in list_drafts(store_id) if d.status == "draft"}
     groups = {sid: lines for sid, lines in candidates(store_id).items() if sid not in open_for}
     names = {sid: suppliers.get(sid, {}).get("name", sid) for sid in groups}
+    if gemini.configured():
+        gemini.client()   # build the cached client once, before the threads race to create it
     with ThreadPoolExecutor(max_workers=4) as pool:   # one rationale call per supplier, in parallel
         rationales = dict(zip(groups, pool.map(lambda sid: explain(store_id, names[sid], groups[sid]), groups)))
     out = []
