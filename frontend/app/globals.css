@@ -1,35 +1,37 @@
 @import "tailwindcss";
 
-/* Layout concept: receipt-and-chalkboard. One warm accent (turmeric) on cool sage neutrals; every amount in a mono till face. */
+/* Layout concept: fresh greenery. Airy near-white base, one leaf-green accent for actions and the voice orb (mint glow),
+   warm amber only for warnings and savings, deep forest ink for text. Analogous green harmony; contrast checked for both themes. */
 :root {
-  --bg: #eef2ec;          /* mist: pale sage-white */
+  --bg: #f6f8f3;          /* airy near-white with a hint of green */
   --surface: #ffffff;
-  --surface-2: #e3e9e2;
-  --ink: #11261d;         /* pine */
-  --muted: #5e6f65;       /* moss */
-  --line: #cdd6cf;
-  --accent: #e39a0c;      /* turmeric */
-  --accent-ink: #1a1200;
-  --accent-soft: #fbefcf;
-  --good: #2e7d5b;        /* leaf */
-  --warn: #b96a00;
-  --bad: #c8413b;         /* chilli */
-  --bad-soft: #fde4e2;
-  --good-soft: #dcefe4;
-  --warn-soft: #fbe9cf;
-  --orb: 227 154 12;      /* turmeric as rgb triplet for glows */
+  --surface-2: #e9f1ea;
+  --ink: #15302a;         /* forest */
+  --muted: #5f7268;
+  --line: #d7e2da;
+  --accent: #27a36e;      /* leaf */
+  --accent-ink: #ffffff;
+  --accent-soft: #dff3e8;
+  --good: #1e8e5a;
+  --warn: #d98e04;        /* amber: warnings and savings only */
+  --bad: #d9534f;
+  --bad-soft: #fde6e4;
+  --good-soft: #dff3e8;
+  --warn-soft: #fff1d6;
+  --orb: 39 163 110;      /* leaf rgb for the orb */
+  --orb-glow: 143 224 184;/* mint rgb for the halo */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1614; --surface: #16221e; --surface-2: #1e2d27; --ink: #ecf2ee; --muted: #93a59b; --line: #2b3b34;
-    --accent: #f0b23a; --accent-ink: #1a1200; --accent-soft: #3a2c0d; --good: #5fbf92; --warn: #e3a44a; --bad: #ef6f69;
-    --bad-soft: #3b1d1b; --good-soft: #163428; --warn-soft: #3a2a10; --orb: 240 178 58; color-scheme: dark;
+    --bg: #0c1a14; --surface: #122820; --surface-2: #19352a; --ink: #eaf4ee; --muted: #9db3a7; --line: #24433a;
+    --accent: #3dbf86; --accent-ink: #06160f; --accent-soft: #163e2e; --good: #4fcf96; --warn: #f0b24a; --bad: #f07b76;
+    --bad-soft: #3e1f1d; --good-soft: #163e2e; --warn-soft: #3d2d10; --orb: 61 191 134; --orb-glow: 120 220 170; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e1614; --surface: #16221e; --surface-2: #1e2d27; --ink: #ecf2ee; --muted: #93a59b; --line: #2b3b34;
-  --accent: #f0b23a; --accent-ink: #1a1200; --accent-soft: #3a2c0d; --good: #5fbf92; --warn: #e3a44a; --bad: #ef6f69;
-  --bad-soft: #3b1d1b; --good-soft: #163428; --warn-soft: #3a2a10; --orb: 240 178 58; color-scheme: dark;
+  --bg: #0c1a14; --surface: #122820; --surface-2: #19352a; --ink: #eaf4ee; --muted: #9db3a7; --line: #24433a;
+  --accent: #3dbf86; --accent-ink: #06160f; --accent-soft: #163e2e; --good: #4fcf96; --warn: #f0b24a; --bad: #f07b76;
+  --bad-soft: #3e1f1d; --good-soft: #163e2e; --warn-soft: #3d2d10; --orb: 61 191 134; --orb-glow: 120 220 170; color-scheme: dark;
 }
 
 @theme inline {
@@ -55,6 +57,7 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em
 .btn:active { transform: scale(.98); }
 .btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:disabled { background: var(--surface-2); color: var(--muted); }
+.btn-primary:hover { filter: brightness(1.05); }
 .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
 .btn-ink { background: var(--ink); color: var(--bg); }
 .btn-danger { background: var(--bad); color: #fff; }
@@ -64,7 +67,7 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em
 .chip-warn { background: var(--warn-soft); color: var(--warn); }
 .chip-bad { background: var(--bad-soft); color: var(--bad); }
 .chip-muted { background: var(--surface-2); color: var(--muted); }
-.chip-accent { background: var(--accent-soft); color: var(--accent-ink); }
+.chip-accent { background: var(--accent-soft); color: var(--good); }
 .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
 .field { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 15px; color: var(--ink); }
 .field:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }

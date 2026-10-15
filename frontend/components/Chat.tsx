@@ -169,9 +169,9 @@ export default function Chat() {
       </header>
 
       {/* voice stage: the orb is the centrepiece while talking, a compact tap target otherwise */}
-      <div className={`flex flex-col items-center transition-all ${talking ? "py-4" : "py-1"}`}>
+      <div className={`flex flex-col items-center transition-all ${talking ? "py-2" : "py-0.5"}`}>
         <button onClick={talking ? undefined : toggleTalk} className="rounded-full" aria-label="Start voice conversation" disabled={talking}>
-          <VoiceOrb state={orb} level={level} size={talking ? 200 : 96} label={talking ? orbCaption : "Tap to talk"} />
+          <VoiceOrb state={orb} level={level} size={talking ? 150 : 72} label={talking ? orbCaption : "Tap to talk"} />
         </button>
         {talking && <button onClick={endTalk} className="btn btn-ink mt-3"><IconStop className="w-4 h-4" /> End conversation</button>}
       </div>

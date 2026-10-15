@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: { capable: true, title: "Royal Stack", statusBarStyle: "default" },
 };
-export const viewport: Viewport = { themeColor: "#e39a0c", width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = { themeColor: "#27a36e", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

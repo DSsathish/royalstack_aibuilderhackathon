@@ -20,7 +20,8 @@ export default function VoiceOrb({ state, level, size = 220, label }: { state: O
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     c.width = size * dpr; c.height = size * dpr;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const rgb = getComputedStyle(document.documentElement).getPropertyValue("--orb").trim() || "227 154 12";
+    const rgb = getComputedStyle(document.documentElement).getPropertyValue("--orb").trim() || "39 163 110";
+    const glow = getComputedStyle(document.documentElement).getPropertyValue("--orb-glow").trim() || "143 224 184";
     const ink = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "#11261d";
     let raf = 0, t = 0, smooth = 0;
     const draw = () => {
@@ -34,8 +35,8 @@ export default function VoiceOrb({ state, level, size = 220, label }: { state: O
       const r = R * (0.62 + breathe + smooth * 0.30);
       // halo
       const halo = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, R * 1.05);
-      halo.addColorStop(0, `rgba(${rgb.replace(/ /g, ",")},${0.35 + smooth * 0.4})`);
-      halo.addColorStop(1, `rgba(${rgb.replace(/ /g, ",")},0)`);
+      halo.addColorStop(0, `rgba(${glow.replace(/ /g, ",")},${0.45 + smooth * 0.4})`);
+      halo.addColorStop(1, `rgba(${glow.replace(/ /g, ",")},0)`);
       ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, R * 1.05, 0, Math.PI * 2); ctx.fill();
       // level rings: three concentric strokes, outer ones only when loud
       for (let i = 0; i < 3; i++) {
@@ -47,7 +48,10 @@ export default function VoiceOrb({ state, level, size = 220, label }: { state: O
       }
       // core disc
       ctx.beginPath(); ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${rgb.replace(/ /g, ",")},${s === "speaking" ? 0.9 : 0.7})`; ctx.fill();
+      const core = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.3, r * 0.1, cx, cy, r * 0.82);
+      core.addColorStop(0, `rgba(${glow.replace(/ /g, ",")},0.95)`);
+      core.addColorStop(1, `rgba(${rgb.replace(/ /g, ",")},${s === "speaking" ? 1 : 0.85})`);
+      ctx.fillStyle = core; ctx.fill();
       // thinking / connecting: a rotating arc
       if (s === "thinking" || s === "connecting") {
         const a0 = (reduced ? 0 : t * 3) % (Math.PI * 2);
