@@ -61,8 +61,18 @@ class ImportResult(BaseModel):
     errors: list[RowError] = []
 
 
+_NUM = re.compile(r"-?\d+(?:\.\d+)?")
+
+
 def _num(value: str, *, integer: bool) -> float | int:
-    d = Decimal(value.strip() or "0")
+    """Tolerant of currency symbols, thousands separators and unit suffixes: '₹ 1,250.00' -> 1250, '12 pcs' -> 12."""
+    text = value.strip().replace(",", "")
+    if not text:
+        return 0
+    m = _NUM.search(text)
+    if not m or not re.fullmatch(r"[^\d-]*" + re.escape(m.group()) + r"[^\d]*", text):
+        raise ValueError(f"not a number: {value!r}")
+    d = Decimal(m.group())
     if not d.is_finite() or d < 0:
         raise ValueError("negative")
     return int(d) if integer else float(d)
