@@ -117,7 +117,7 @@ aibuildercup-retail/
 - Google Cloud project ID: `royastacxk-aibuildercup` (project number 881917398995), region `asia-south1`
 - Gemini API access: Vertex AI
 - GitHub repo: https://github.com/DSsathish/royalstack_aibuilderhackathon
-- Billing: NOT linked as of 14 Oct. Blocks Cloud Run, Vertex AI, Artifact Registry, Secret Manager. Must be fixed before first deploy.
+- Billing: linked 15 Oct. $20 budget with alerts at 50% and 90%. Vertex AI on the `global` endpoint: `gemini-3.5-flash` (chat), `gemini-3.1-pro-preview` (reasoning), `gemini-embedding-001`.
 
 ## Team role split (suggested for 3 people)
 

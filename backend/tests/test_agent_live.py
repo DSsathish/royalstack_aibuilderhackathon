@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(os.environ.get("LIVE_GEMINI") != "1", reason="se
 def pace():
     """Free tier allows ~5 requests/min per model; each turn uses 2 to 4. Space the scenarios out."""
     import time
-    time.sleep(30)
+    time.sleep(2)
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +33,10 @@ def real_gemini(monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", env.get("GEMINI_API_KEY", ""))
     monkeypatch.setattr(settings, "google_genai_use_vertexai", env.get("GOOGLE_GENAI_USE_VERTEXAI", "false") == "true")
     monkeypatch.setattr(settings, "gemini_flash_model", env.get("GEMINI_FLASH_MODEL", settings.gemini_flash_model))
-    monkeypatch.setenv("GOOGLE_API_KEY", settings.gemini_api_key)
+    monkeypatch.setattr(settings, "google_cloud_project", env.get("GOOGLE_CLOUD_PROJECT", settings.google_cloud_project))
+    monkeypatch.setattr(settings, "gemini_location", env.get("GEMINI_LOCATION", settings.gemini_location))
+    from app.services import gemini as gemini_svc
+    gemini_svc.client.cache_clear()
     agent.runner.cache_clear()
 
 

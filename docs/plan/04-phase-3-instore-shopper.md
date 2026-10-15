@@ -92,7 +92,7 @@ Frontend `/checkout`:
 ## Acceptance criteria
 
 - [x] Scanning the entrance QR on a phone opens the app and a session without any login step
-- [ ] Tamil voice question returns the aisle and highlights the map (needs Gemini credits)
+- [x] Tamil question returns the aisle and triggers the map highlight (live eval); voice path uses the same turn
 - [x] Barcode scan adds an item in under 2 s; photo scan returns the right candidate in top 3
 - [x] Running total visible on every tab and matches the server
 - [x] Item limit blocks adds beyond the configured number

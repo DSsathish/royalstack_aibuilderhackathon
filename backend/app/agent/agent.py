@@ -39,7 +39,8 @@ _sessions = InMemorySessionService()
 def build(mode: Mode) -> LlmAgent:
     return LlmAgent(
         name=f"retail_{mode}",
-        model=Gemini(model=settings.gemini_flash_model, retry_options=gemini.RETRY),
+        model=Gemini(model=settings.gemini_flash_model, retry_options=gemini.RETRY,
+                     client_kwargs=gemini.client_kwargs()),
         generate_content_config=gemini.FAST,
         instruction=prompts.for_mode(mode),
         tools=list(TOOLS_BY_MODE[mode]),

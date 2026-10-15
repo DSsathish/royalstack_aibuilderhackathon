@@ -11,12 +11,13 @@ class Settings(BaseSettings):
     google_cloud_project: str = "royastacxk-aibuildercup"
     google_cloud_location: str = "asia-south1"
     google_genai_use_vertexai: bool = True
+    gemini_location: str = "global"  # Vertex endpoint for Gemini; Firestore/BigQuery stay in google_cloud_location
     gemini_api_key: str = ""  # only used when google_genai_use_vertexai is False
 
-    # Free-tier AI Studio keys (Oct 2026): 2.5 models are gone, Pro has no free quota, 3.5-flash is often
-    # at capacity. 3.1-flash-lite answers reliably; override per environment when a better model is available.
-    gemini_flash_model: str = "gemini-3-flash-preview"   # chat: fastest that answers on the free tier
-    gemini_pro_model: str = "gemini-3.1-flash-lite"      # batch reasoning: latency does not matter
+    # Verified on Vertex AI (global) 15 Oct 2026: 3.5-flash ~1.4 s, 3.1-pro-preview ~3 s. The 2.5 models
+    # are no longer served. On a free-tier AI Studio key use gemini-3-flash-preview / gemini-3.1-flash-lite.
+    gemini_flash_model: str = "gemini-3.5-flash"
+    gemini_pro_model: str = "gemini-3.1-pro-preview"
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

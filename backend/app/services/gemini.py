@@ -21,13 +21,16 @@ RETRY = types.HttpRetryOptions(attempts=4, initial_delay=2, max_delay=12, http_s
 FAST = types.GenerateContentConfig(thinking_config=types.ThinkingConfig(thinking_level="low"))
 
 
+def client_kwargs() -> dict:
+    """How to build a genai.Client from settings. Shared with the ADK agent so both use the same endpoint."""
+    if settings.google_genai_use_vertexai:
+        return {"vertexai": True, "project": settings.google_cloud_project, "location": settings.gemini_location}
+    return {"api_key": settings.gemini_api_key}
+
+
 @lru_cache(maxsize=1)
 def client() -> genai.Client:
-    http = types.HttpOptions(retry_options=RETRY)
-    if settings.google_genai_use_vertexai:
-        return genai.Client(vertexai=True, project=settings.google_cloud_project,
-                            location=settings.google_cloud_location, http_options=http)
-    return genai.Client(api_key=settings.gemini_api_key, http_options=http)
+    return genai.Client(**client_kwargs(), http_options=types.HttpOptions(retry_options=RETRY))
 
 
 def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float]]:
