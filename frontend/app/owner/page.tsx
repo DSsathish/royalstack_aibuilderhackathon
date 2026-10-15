@@ -227,29 +227,56 @@ function LossTab({ store }: { store: string }) {
 
 function ConnectorsTab({ store }: { store: string }) {
   const [file, setFile] = useState<File | null>(null);
-  const [mapping, setMapping] = useState({ sku: "sku", name: "name", price: "price", on_hand: "on_hand", barcode: "barcode", category: "category", aisle: "aisle" });
+  const [mapping, setMapping] = useState<Record<string, string>>({ sku: "sku", name: "name", price: "price", on_hand: "on_hand", barcode: "barcode", category: "category", aisle: "aisle" });
+  const [analysis, setAnalysis] = useState<{ notes: string[]; questions: string[]; confidence: number; source: string; header: string[] } | null>(null);
+  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string>("");
   const [qr, setQr] = useState<{ entrance_url: string; aisles: { aisle: string; url: string }[] } | null>(null);
+  async function analyse() {
+    if (!file) return;
+    setBusy(true); setResult("");
+    try {
+      const r = await owner.propose(store, file);
+      setMapping(r.proposal.mapping);
+      setAnalysis({ ...r.proposal, header: r.header });
+    } catch (e) { setResult(`Analysis failed: ${(e as Error).message}`); }
+    setBusy(false);
+  }
   async function run() {
     if (!file) return;
-    try { const r = await owner.importCsv(store, file, mapping); setResult(`Created ${r.created}, updated ${r.updated}, ${r.errors.length} row errors${r.errors[0] ? ` (line ${r.errors[0].line}: ${r.errors[0].message})` : ""}.`); }
+    const clean = Object.fromEntries(Object.entries(mapping).filter(([, v]) => v));
+    try { const r = await owner.importCsv(store, file, clean); setResult(`Created ${r.created}, updated ${r.updated}, ${r.errors.length} row errors${r.errors[0] ? ` (line ${r.errors[0].line}: ${r.errors[0].message})` : ""}.`); }
     catch (e) { setResult(`Import failed: ${(e as Error).message}`); }
   }
+  const fields = ["sku", "name", "price", "on_hand", "barcode", "brand", "category", "subcategory", "mrp", "unit", "aisle", "supplier_id", "reorder_point", "reorder_qty", "lead_time_days", "tags"];
   return (
     <div className="p-4 space-y-4 max-w-3xl">
       <section className="space-y-2">
-        <h2 className="font-semibold">Import products from CSV or a spreadsheet export</h2>
-        <p className="text-xs text-zinc-500">Map your column names to ours. Works with any POS or Excel export.</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-          {Object.entries(mapping).map(([k, v]) => <label key={k} className="text-xs">{k}<input value={v} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="w-full rounded border px-2 py-1 bg-transparent text-sm" /></label>)}
+        <h2 className="font-semibold">Import products from any file</h2>
+        <p className="text-xs text-zinc-500">Export from your POS, Excel, Google Sheets or Shopify as CSV. The assistant reads the header and a few rows, proposes how the columns map to ours, and you confirm. Your data is converted by the connector, not by the model.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="file" accept=".csv,text/csv" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setAnalysis(null); }} className="text-sm" />
+          <button onClick={analyse} disabled={!file || busy} className="rounded-lg bg-emerald-600 disabled:bg-zinc-300 text-white px-4 py-1.5 text-sm">{busy ? "Analysing…" : "Analyse with AI"}</button>
         </div>
-        <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm" />
-        <button onClick={run} disabled={!file} className="rounded-lg bg-emerald-600 disabled:bg-zinc-300 text-white px-4 py-1.5 text-sm">Import</button>
+        {analysis && (
+          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 p-3 text-sm space-y-1">
+            <div className="flex items-center gap-2"><b>Proposed mapping</b><span className="text-xs rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5">{analysis.source === "model" ? `AI · ${Math.round(analysis.confidence * 100)}% confident` : "heuristic"}</span></div>
+            {analysis.notes.map((n) => <div key={n} className="text-zinc-600 dark:text-zinc-300">· {n}</div>)}
+            {analysis.questions.map((q) => <div key={q} className="text-amber-700 dark:text-amber-400">? {q}</div>)}
+            <div className="text-xs text-zinc-500">Columns in your file: {analysis.header.join(", ")}</div>
+          </div>
+        )}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+          {fields.map((k) => <label key={k} className="text-xs">{k}{["sku", "name", "price", "on_hand"].includes(k) && <span className="text-red-600">*</span>}
+            {analysis ? (
+              <select value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="w-full rounded border px-2 py-1 bg-transparent text-sm">
+                <option value="">— not in file —</option>{analysis.header.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+            ) : <input value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="w-full rounded border px-2 py-1 bg-transparent text-sm" />}
+          </label>)}
+        </div>
+        <button onClick={run} disabled={!file} className="rounded-lg bg-emerald-600 disabled:bg-zinc-300 text-white px-4 py-1.5 text-sm">Import with this mapping</button>
         {result && <p className="text-sm">{result}</p>}
-      </section>
-      <section className="space-y-2">
-        <h2 className="font-semibold">Google Sheets, Shopify</h2>
-        <p className="text-sm text-zinc-500">Export your sheet or Shopify products as CSV and import above. Direct sync connectors are on the roadmap.</p>
       </section>
       <section className="space-y-2">
         <h2 className="font-semibold">Printable QR codes</h2>

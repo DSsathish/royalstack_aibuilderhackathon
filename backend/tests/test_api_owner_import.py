@@ -67,3 +67,15 @@ def test_bearer_token_uid_comes_from_sub(owned, monkeypatch):
     monkeypatch.setattr(auth.id_token, "verify_firebase_token", lambda *a, **k: {"sub": "owner-1"})
     res = post_csv(owned, {"Authorization": "Bearer fake"})
     assert res.status_code == 200, res.text
+
+
+def test_propose_endpoint(owned, monkeypatch):
+    from app.connectors import normalizer
+    monkeypatch.setattr(normalizer, "_ask_model", lambda header, samples: {"mapping": {"sku": "sku", "name": "name", "price": "price", "on_hand": "on_hand"}, "notes": ["ok"], "questions": [], "confidence": 0.8})
+    assert client.post(f"/owner/{owned}/import/propose", files={"file": ("p.csv", CSV, "text/csv")}).status_code == 401
+    res = client.post(f"/owner/{owned}/import/propose", headers={"X-Test-Uid": "owner-1"}, files={"file": ("p.csv", CSV, "text/csv")})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["proposal"]["mapping"]["sku"] == "sku" and body["header"] == ["sku", "name", "price", "on_hand"]
+    assert body["samples"][0]["name"] == "Salt 1kg"
+    assert any(e.to_dict()["action"] == "import_proposed" for e in db.audit(owned).stream())

@@ -17,7 +17,7 @@ REQUIRED = ("sku", "name", "price", "on_hand")
 OPTIONAL = ("barcode", "brand", "category", "subcategory", "description", "mrp", "unit",
             "image_url", "tags", "substitutes", "aisle", "bay", "shelf", "side",
             "reorder_point", "reorder_qty", "lead_time_days", "supplier_id")
-HEADER_RE = re.compile(r"^[A-Za-z0-9 _./-]{1,64}$")
+HEADER_RE = re.compile(r"^[^\x00-\x1f]{1,64}$")   # any printable header text, e.g. "Rate (Rs)" or "M.R.P."
 
 
 class ImportError_(ValueError):
@@ -61,8 +61,18 @@ class ImportResult(BaseModel):
     errors: list[RowError] = []
 
 
+_NUM = re.compile(r"-?\d+(?:\.\d+)?")
+
+
 def _num(value: str, *, integer: bool) -> float | int:
-    d = Decimal(value.strip() or "0")
+    """Tolerant of currency symbols, thousands separators and unit suffixes: '₹ 1,250.00' -> 1250, '12 pcs' -> 12."""
+    text = value.strip().replace(",", "")
+    if not text:
+        return 0
+    m = _NUM.search(text)
+    if not m or not re.fullmatch(r"[^\d-]*" + re.escape(m.group()) + r"[^\d]*", text):
+        raise ValueError(f"not a number: {value!r}")
+    d = Decimal(m.group())
     if not d.is_finite() or d < 0:
         raise ValueError("negative")
     return int(d) if integer else float(d)

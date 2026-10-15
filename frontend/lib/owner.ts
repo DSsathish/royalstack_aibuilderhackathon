@@ -38,6 +38,13 @@ export const owner = {
   settings: (s: string, body: Partial<Loss["settings"]>) => call(`/owner/${s}/settings`, { method: "PATCH", body: JSON.stringify(body) }),
   session: (s: string) => call<Session>(`/owner/${s}/session`, { method: "POST" }),
   qr: (s: string) => call<{ entrance_url: string; aisles: { aisle: string; url: string }[] }>(`/owner/${s}/qr`),
+  propose: async (s: string, file: File) => {
+    const token = await idToken();
+    const form = new FormData(); form.set("file", file);
+    const res = await fetch(`${API}/owner/${s}/import/propose`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form });
+    if (!res.ok) { let d = res.statusText; try { d = (await res.json()).detail ?? d; } catch {} throw new ApiError(res.status, String(d)); }
+    return res.json() as Promise<{ proposal: { mapping: Record<string, string>; notes: string[]; questions: string[]; confidence: number; source: string }; header: string[]; samples: Record<string, string>[] }>;
+  },
   importCsv: async (s: string, file: File, mapping: Record<string, string>) => {
     const token = await idToken();
     const form = new FormData(); form.set("file", file); form.set("mapping", JSON.stringify(mapping));

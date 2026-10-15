@@ -5,7 +5,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
+import csv
+import io
+
 from app.connectors import csv_connector as csvc
+from app.connectors import normalizer
 from app.domain.models import now
 from app.services import catalog, db
 from app.services.auth import STORE_ID, current_uid, require_owner
@@ -36,3 +40,25 @@ async def import_csv(store_id: str = STORE_ID, file: UploadFile = File(...), map
         "payload": {"created": result.created, "updated": result.updated, "errors": len(errors)},
     })
     return result
+
+
+@router.post("/{store_id}/import/propose")
+async def propose_mapping(store_id: str = STORE_ID, file: UploadFile = File(...), uid: str = Depends(current_uid)):
+    """Read the header and a few rows, ask the normalizer for a mapping the owner can confirm or edit."""
+    require_owner(store_id, uid)
+    data = await file.read(csvc.MAX_BYTES + 1)
+    if len(data) > csvc.MAX_BYTES:
+        raise HTTPException(413, "file larger than 5 MB")
+    try:
+        reader = csv.DictReader(io.StringIO(data.decode("utf-8-sig")))
+        header = reader.fieldnames or []
+        samples = [row for _, row in zip(range(5), reader)]
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise HTTPException(400, f"file is not valid UTF-8 CSV: {exc}")
+    if not header:
+        raise HTTPException(400, "empty file")
+    proposal = normalizer.propose(header, samples)
+    db.audit(store_id).document(uuid.uuid4().hex).set({
+        "actor": uid, "action": "import_proposed", "created_at": now(),
+        "payload": {"source": proposal.source, "confidence": proposal.confidence, "mapped": len(proposal.mapping)}})
+    return {"proposal": proposal.model_dump(), "header": header, "samples": samples}

@@ -78,6 +78,30 @@ def seed_embeddings(store_id: str) -> None:
     print(f"embeddings: {done}")
 
 
+def seed_bigquery_rows(store_id: str, rows: list[dict]) -> None:
+    """Load sales rows ({store_id, product_id, day, channel, qty, unit_price}) for one store and rebuild the daily table."""
+    from google.cloud import bigquery
+
+    bq = bigquery.Client(project=settings.google_cloud_project)
+    ds = f"{settings.google_cloud_project}.retail"
+    bq.create_dataset(bigquery.Dataset(ds), exists_ok=True)
+    table = f"{ds}.sales"
+    schema = [
+        bigquery.SchemaField("store_id", "STRING"), bigquery.SchemaField("product_id", "STRING"),
+        bigquery.SchemaField("day", "DATE"), bigquery.SchemaField("channel", "STRING"),
+        bigquery.SchemaField("qty", "INT64"), bigquery.SchemaField("unit_price", "NUMERIC"),
+        bigquery.SchemaField("order_id", "STRING"),
+    ]
+    try:
+        bq.query(f"DELETE FROM `{table}` WHERE store_id = @store", job_config=bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("store", "STRING", store_id)])).result()
+    except Exception:
+        pass  # table may not exist yet
+    bq.load_table_from_json(rows, table, job_config=bigquery.LoadJobConfig(schema=schema, write_disposition="WRITE_APPEND")).result()
+    bq.query(f"CREATE OR REPLACE TABLE `{ds}.daily_product_sales` AS SELECT store_id, product_id, day, SUM(qty) AS qty FROM `{table}` GROUP BY 1, 2, 3").result()
+    print(f"bigquery: {len(rows)} sales rows loaded for {store_id}")
+
+
 def seed_bigquery(store_id: str) -> None:
     from google.cloud import bigquery
 
