@@ -18,6 +18,13 @@ from app.services import gemini
 
 log = logging.getLogger(__name__)
 _TYPES = {str: "STRING", int: "INTEGER", float: "NUMBER", bool: "BOOLEAN"}
+MAX_SESSION_S = 900          # a store conversation; the client can reconnect
+MAX_AUDIO_FRAME = 32_000     # 1 s of PCM16 at 16 kHz; the worklet sends 3.2 KB chunks
+_active: set[str] = set()    # session ids with an open live socket (one Vertex session each)
+
+
+class SessionBusy(Exception):
+    pass
 
 VOICE_BLOCK = """
 You are speaking aloud. Keep each reply to one or two short sentences. Say prices and aisles
@@ -64,6 +71,16 @@ def _config(mode: Mode) -> types.LiveConnectConfig:
 
 
 async def run(ws: WebSocket, s: Session) -> None:
+    if s.session_id in _active:
+        raise SessionBusy()
+    _active.add(s.session_id)
+    try:
+        await _run(ws, s)
+    finally:
+        _active.discard(s.session_id)
+
+
+async def _run(ws: WebSocket, s: Session) -> None:
     state = {"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "language": s.language}
     client = gemini.client()
     async with client.aio.live.connect(model=settings.gemini_live_model, config=_config(s.mode)) as live:
@@ -75,9 +92,16 @@ async def run(ws: WebSocket, s: Session) -> None:
                 if msg.get("type") == "websocket.disconnect":
                     return
                 if msg.get("bytes"):
+                    if len(msg["bytes"]) > MAX_AUDIO_FRAME:
+                        continue
                     await live.send_realtime_input(audio=types.Blob(data=msg["bytes"], mime_type="audio/pcm;rate=16000"))
                 elif msg.get("text"):
-                    frame = json.loads(msg["text"])
+                    try:
+                        frame = json.loads(msg["text"])
+                    except ValueError:
+                        continue
+                    if not isinstance(frame, dict):
+                        continue
                     if frame.get("type") == "text" and frame.get("text"):
                         await live.send_client_content(
                             turns=types.Content(role="user", parts=[types.Part(text=str(frame["text"])[:2000])]), turn_complete=True)
@@ -113,10 +137,11 @@ async def run(ws: WebSocket, s: Session) -> None:
         up = asyncio.create_task(uplink())
         down = asyncio.create_task(downlink())
         try:
-            done, pending = await asyncio.wait({up, down}, return_when=asyncio.FIRST_COMPLETED)
+            done, _ = await asyncio.wait({up, down}, return_when=asyncio.FIRST_COMPLETED, timeout=MAX_SESSION_S)
             for t in done:
-                if t.exception() and not isinstance(t.exception(), WebSocketDisconnect):
-                    log.warning("live task failed: %s", t.exception())
+                exc = t.exception()
+                if exc and not isinstance(exc, WebSocketDisconnect):
+                    raise exc   # the endpoint tells the client and closes
         finally:
             for t in (up, down):
                 t.cancel()

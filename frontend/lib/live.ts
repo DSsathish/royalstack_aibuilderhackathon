@@ -16,14 +16,16 @@ export function liveSupported(): boolean {
 
 export async function startLive(sessionId: string, h: LiveHandlers): Promise<() => void> {
   h.onState("connecting");
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  // Create both contexts synchronously, inside the user's tap, so iOS Safari does not leave them suspended.
   const capture = new AudioContext();
+  const playback = new AudioContext({ sampleRate: 24000 });
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   await capture.audioWorklet.addModule("/pcm-worklet.js");
+  await Promise.all([capture.resume(), playback.resume()]);
   const source = capture.createMediaStreamSource(stream);
   const node = new AudioWorkletNode(capture, "pcm-worklet");
   source.connect(node);
 
-  const playback = new AudioContext({ sampleRate: 24000 });
   let playHead = 0;
   let scheduled: AudioBufferSourceNode[] = [];
   let speakingTimer: ReturnType<typeof setTimeout> | undefined;
@@ -50,11 +52,12 @@ export async function startLive(sessionId: string, h: LiveHandlers): Promise<() 
     scheduled = []; playHead = 0; clearTimeout(speakingTimer); h.onState("listening");
   }
 
-  ws.onopen = () => { node.port.onmessage = (e) => { if (ws.readyState === WebSocket.OPEN) ws.send(e.data as ArrayBuffer); }; };
+  let ready = false;
+  node.port.onmessage = (e) => { if (ready && ws.readyState === WebSocket.OPEN) ws.send(e.data as ArrayBuffer); };   // drop audio captured before the model is ready
   ws.onmessage = (e) => {
     if (e.data instanceof ArrayBuffer) { playChunk(e.data); return; }
     const f = JSON.parse(e.data) as LiveFrame;
-    if (f.type === "ready") h.onState("listening");
+    if (f.type === "ready") { ready = true; h.onState("listening"); }
     if (f.type === "interrupted") flush();
     h.onFrame(f);
   };

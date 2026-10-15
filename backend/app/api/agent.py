@@ -97,6 +97,8 @@ async def live_voice(ws: WebSocket, session_id: str = Query(pattern=r"^[a-f0-9]{
     await ws.accept()
     try:
         await live.run(ws, s)
+    except live.SessionBusy:
+        await ws.send_text(json.dumps({"type": "error", "text": "Live voice is already open in another tab for this visit."}))
     except Exception as exc:  # model or network failure: tell the client, then close
         log.warning("live session ended with error: %s", exc)
         try:

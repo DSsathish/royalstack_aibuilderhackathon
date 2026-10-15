@@ -24,7 +24,10 @@ export default function Chat() {
   const voiceRef = useRef(false);
   const media = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
   const [live, setLive] = useState<LiveState>("closed");
+  const [canLive, setCanLive] = useState(false);
+  useEffect(() => { setTimeout(() => setCanLive(liveSupported()), 0); }, []);
   const liveStop = useRef<(() => void) | null>(null);
+  const liveConnecting = useRef(false);
   const liveMsg = useRef<{ user: number | null; assistant: number | null }>({ user: null, assistant: null });
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -101,11 +104,13 @@ export default function Chat() {
   /** Real-time speech-to-speech on the Gemini Live API. Transcripts and tool actions flow into the same chat. */
   async function toggleLive() {
     if (liveStop.current) { liveStop.current(); return; }
+    if (liveConnecting.current || !session) return;
     if (voiceRef.current) stopVoice();
-    if (!session) return;
+    liveConnecting.current = true;
+    let closedEarly = false;
     try {
-      liveStop.current = await startLive(session.session_id, {
-        onState: (st) => { setLive(st); setAvatar(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" ? "thinking" : "idle"); if (st === "closed") { liveStop.current = null; liveMsg.current = { user: null, assistant: null }; } },
+      const stop = await startLive(session.session_id, {
+        onState: (st) => { setLive(st); setAvatar(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" ? "thinking" : "idle"); if (st === "closed") { closedEarly = true; liveStop.current = null; liveMsg.current = { user: null, assistant: null }; } },
         onFrame: (f: LiveFrame) => {
           if (f.type === "transcript") {
             const slot = f.role;
@@ -123,7 +128,9 @@ export default function Chat() {
           }
         },
       });
+      if (closedEarly) stop(); else liveStop.current = stop;   // socket refused during connect: do not keep a dead stop
     } catch (e) { push({ role: "assistant", text: `Live voice could not start: ${(e as Error).message}` }); liveStop.current = null; setLive("closed"); }
+    liveConnecting.current = false;
   }
 
   function stopVoice() {
@@ -149,7 +156,7 @@ export default function Chat() {
           <option value="auto">Auto</option><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option>
         </select>
         <button onClick={() => setSpeak(!speak)} title="Read aloud" className="text-lg">{speak ? "🔊" : "🔇"}</button>
-        {liveSupported() && (
+        {canLive && (
           <button onClick={toggleLive} className={`text-xs rounded-full px-3 py-1.5 font-semibold ${live !== "closed" ? "bg-red-500 text-white" : "bg-emerald-600 text-white"}`}>
             {live === "closed" ? "Talk live" : live === "connecting" ? "Connecting…" : "End"}
           </button>

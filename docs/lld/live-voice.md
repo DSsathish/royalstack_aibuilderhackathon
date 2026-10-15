@@ -23,7 +23,7 @@ Verified 16 Oct: `gemini-live-2.5-flash` on Vertex AI `global` answers with stre
 
 ## `app/api/agent.py`
 
-`WS /agent/live?session_id=<hex>` — validates the session (404 → close code 4404), then `live.run`. Owner mode allowed in dev/test only, as for `/sessions`.
+`WS /agent/live?session_id=<hex>` — validates the session (an unknown session is refused before accept, which the browser sees as a failed handshake), then `live.run`. One live socket per session; 15 minute maximum; audio frames over 32 KB are dropped. Owner mode allowed in dev/test only, as for `/sessions`.
 
 Cloud Run: websockets are supported; request timeout raised to 3600 s for the service.
 
@@ -52,3 +52,11 @@ Cloud Run: websockets are supported; request timeout raised to 3600 s for the se
 - Tool latency is on the critical path: the first query embedding took 12 s cold (client and auth), and retries on 429/503 could add 12 s more. Query embeddings now time out at 2.5 s with no retry and fall back to keyword search; the API warms the client at startup.
 - Production round trip through Cloud Run (16 Oct): connected 0.2 s, ready 1.8 s, spoken answer with `show_products` action at 6.7 s.
 - Cloud Run request timeout raised to 3600 s for websocket sessions.
+
+## Review fixes (fresh-eyes review)
+
+- Audio contexts are created synchronously inside the tap and resumed after the permission prompt, so iOS Safari does not leave them suspended.
+- "Talk live" cannot be double-tapped into two sessions; a socket refused during connect does not leave a dead stop handle.
+- Server limits: one live socket per session, 15 minute maximum, audio frames over 32 KB dropped, malformed text frames ignored.
+- Real failures in the bridge now reach the client as an error frame instead of a silent close.
+- Audio captured before the model is ready is dropped. The live button renders only after hydration.
