@@ -28,7 +28,7 @@ def check_bag(image: bytes, mime: str, lines: list[str]) -> VisionResult:
             config=types.GenerateContentConfig(
                 response_mime_type="application/json", response_schema=VisionResult,
                 thinking_config=types.ThinkingConfig(thinking_level="low"),
-                http_options=types.HttpOptions(timeout=8000),
+                http_options=types.HttpOptions(timeout=12000),
             ),
         )
         out = VisionResult.model_validate_json(res.text)

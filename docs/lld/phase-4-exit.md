@@ -68,3 +68,10 @@ Receipt tokens come either as the raw token or as the full exit URL `…/exit/?r
 - Kiosk PIN instead of staff Google sign-in. Cost if wrong: swap the dependency for owner auth later.
 - Vision failure never blocks an exit (`skipped=True`); deterministic layers always run.
 - No image storage anywhere; only a SHA-256 of the bytes.
+
+## Rulings and findings during implementation
+
+- Live bag check on Vertex `gemini-3.5-flash`: ~4 s typical, correctly listed an unpaid whisky bottle as unexpected on a synthetic photo. One call hit a server-side 504; the layer was skipped and the exit still produced a verdict. Timeout set to 12 s so the kiosk never hangs.
+- Receipt token accepted either raw or as the full `/exit/?r=` URL, so the kiosk can scan the QR directly.
+- Composite index `verifications(store_id, created_at)` added in `firestore.indexes.json` for the owner listing.
+- Kiosk settings (store, PIN, name) live in the tablet's localStorage; "Settings" clears them.
