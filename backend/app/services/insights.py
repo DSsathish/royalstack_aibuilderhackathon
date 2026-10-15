@@ -1,6 +1,7 @@
 """Owner-facing reads: overview tiles, inventory rows, demand signals, shrink candidates."""
 
 import re
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -87,8 +88,22 @@ def inventory(store_id: str) -> list[dict]:
     return sorted(rows, key=lambda r: ({"out": 0, "low": 1, "dead": 2, "overstock": 3, "ok": 4}[r["status"]], r["name"]))
 
 
+_history_cache: dict[tuple[str, int], tuple[float, list[dict]]] = {}
+HISTORY_TTL_S = 300
+
+
 def daily_revenue_history(store_id: str, days: int) -> list[dict]:
-    """Past days from BigQuery daily sales. Empty when BigQuery is unavailable."""
+    """Past days from BigQuery daily sales, cached 5 minutes (history only changes nightly). Empty when BigQuery is unavailable."""
+    hit = _history_cache.get((store_id, days))
+    if hit and time.time() - hit[0] < HISTORY_TTL_S:
+        return hit[1]
+    rows = _query_history(store_id, days)
+    if rows:
+        _history_cache[(store_id, days)] = (time.time(), rows)
+    return rows
+
+
+def _query_history(store_id: str, days: int) -> list[dict]:
     try:
         from google.cloud import bigquery
 
