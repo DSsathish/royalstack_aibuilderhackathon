@@ -21,6 +21,6 @@ app.include_router(agent.router)
 app.include_router(shop.router)
 
 
-@app.get("/healthz")
+@app.get("/health")  # /healthz is intercepted by Google front ends on Cloud Run
 def healthz() -> dict:
     return {"ok": True, "env": settings.env}
