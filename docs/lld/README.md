@@ -20,3 +20,4 @@ Rules we follow in code:
 | models, db, inventory, catalog, csv connector, auth, routers, seed | [phase-1-data.md](phase-1-data.md) | done |
 | sessions, cart, agent tools, prompts, agent runtime, chat/audio API | [phase-2-agent.md](phase-2-agent.md) | done, live eval 8/8 on Vertex AI |
 | qr tokens, checkout, shop API, shopper PWA | [phase-3-instore.md](phase-3-instore.md) | done |
+| verification layers, vision bag check, exit API, kiosk | [phase-4-exit.md](phase-4-exit.md) | done |

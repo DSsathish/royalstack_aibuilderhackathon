@@ -30,6 +30,8 @@ class Store(BaseModel):
     languages: list[str] = ["en", "ta", "hi"]
     self_checkout_item_limit: int = 15
     high_value_threshold: float = 500.0
+    audit_rate: float = 0.10      # share of clear exits sent to a random spot check
+    kiosk_pin: str = "1234"       # exit kiosk access; owner rotates it
     floor_map: list[Aisle] = []
 
 
@@ -157,3 +159,37 @@ class Order(BaseModel):
     receipt_token: str = ""
     created_at: datetime = Field(default_factory=now)
     paid_at: datetime | None = None
+    exited_at: datetime | None = None
+
+
+class Layers(BaseModel):
+    receipt_ok: bool = False
+    order_ok: bool = False
+    count_ok: bool | None = None     # None when no count was supplied
+    limit_ok: bool = True
+    high_value: list[str] = []       # product ids that need a spot check
+    random_audit: bool = False
+
+
+class VisionResult(BaseModel):
+    confidence: float = 1.0
+    visible_items: list[str] = []
+    unexpected_items: list[str] = []
+    notes: str = ""
+    skipped: bool = False
+
+
+class Verification(BaseModel):
+    verification_id: str
+    store_id: str
+    order_id: str = ""
+    kiosk_id: str = ""
+    layers: Layers = Layers()
+    verdict: Literal["clear", "spot_check", "flag"]
+    reasons: list[str] = []
+    vision: VisionResult | None = None
+    image_hash: str = ""
+    reviewed_by: str = ""
+    review_note: str = ""
+    review_outcome: Literal["cleared", "issue_confirmed"] | None = None
+    created_at: datetime = Field(default_factory=now)

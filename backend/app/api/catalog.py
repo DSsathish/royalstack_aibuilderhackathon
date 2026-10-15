@@ -10,7 +10,7 @@ router = APIRouter(tags=["catalog"])
 PUBLIC_EXCLUDE = {"embedding"}
 
 
-@router.get("/stores/{store_id}", response_model=Store)
+@router.get("/stores/{store_id}", response_model=Store, response_model_exclude={"kiosk_pin", "audit_rate"})
 def get_store(store_id: str = STORE_ID):
     doc = db.store_ref(store_id).get()
     if not doc.exists:

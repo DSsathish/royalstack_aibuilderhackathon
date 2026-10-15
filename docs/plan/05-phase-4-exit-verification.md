@@ -104,12 +104,12 @@ Also a **shopper-side exit** (no kiosk): the shopper's own phone shows the exit 
 
 ## Acceptance criteria
 
-- [ ] Clear path: normal basket, valid receipt → green in under 6 s including vision
-- [ ] High-value item → amber with the item named
-- [ ] Reused receipt QR → red "already used"
-- [ ] Vision timeout → verdict still returned, `vision_skipped=true`
-- [ ] Owner sees the verification in the loss dashboard within seconds
-- [ ] No image bytes anywhere in Firestore or Storage
+- [x] Clear path: normal basket, valid receipt → green in under 6 s including vision
+- [x] High-value item → amber with the item named
+- [x] Reused receipt QR → red "already used"
+- [x] Vision timeout → verdict still returned, `vision_skipped=true`
+- [ ] Owner sees the verification in the loss dashboard within seconds (dashboard is phase 6; the API listing exists)
+- [x] No image bytes anywhere in Firestore or Storage
 
 ## Risks
 
