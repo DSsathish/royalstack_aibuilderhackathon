@@ -91,7 +91,8 @@ async def audio(session_id: str = Form(...), audio: UploadFile = File(...)):
 @router.websocket("/agent/live")
 async def live_voice(ws: WebSocket, session_id: str = Query(pattern=r"^[a-f0-9]{32}$")):
     s = sessions.get(session_id)
-    if not s or (s.mode == "owner" and settings.env not in ("dev", "test")):
+    # owner sessions are valid when minted by the authenticated owner endpoint (user_id set); the dev path only in dev/test
+    if not s or (s.mode == "owner" and not s.user_id and settings.env not in ("dev", "test")):
         await ws.close(code=4404)
         return
     await ws.accept()

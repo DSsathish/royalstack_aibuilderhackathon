@@ -51,3 +51,30 @@ def test_text_turn_returns_audio_actions_and_transcript(store_id):
     print(f"\naudio_bytes={audio} actions={actions} transcript={transcript[:120]}")
     assert audio > 10000
     assert "show_products" in actions and "highlight_map" in actions
+
+
+def test_owner_voice_turn_uses_owner_tools(store_id):
+    db.store_ref(store_id).set(Store(store_id=store_id, name="Royal Stack").model_dump())
+    p = Product.from_row(store_id=store_id, sku="ghee", name="Amul Ghee 1L", price=650, mrp=690, threshold=500)
+    db.products(store_id).document(p.product_id).set(p.model_dump())
+    db.inventory(store_id).document(p.product_id).set(Inventory(product_id=p.product_id, store_id=store_id, on_hand=1, reorder_point=5, supplier_id="sup-x").model_dump())
+    catalog.invalidate(store_id)
+    s = sessions.create(store_id, "owner", user_id="owner-live")
+
+    client = TestClient(app)
+    audio, actions, transcript = 0, [], ""
+    with client.websocket_connect(f"/agent/live?session_id={s.session_id}") as ws:
+        ws.send_text(json.dumps({"type": "text", "text": "What is running low in the store?"}))
+        for _ in range(400):
+            msg = ws.receive()
+            if msg.get("bytes"):
+                audio += len(msg["bytes"])
+            elif msg.get("text"):
+                e = json.loads(msg["text"])
+                if e["type"] == "action": actions.append(e["name"])
+                if e["type"] == "transcript" and e["role"] == "assistant": transcript += e["text"]
+                if e["type"] == "turn_complete" and audio > 0: break
+        ws.send_text(json.dumps({"type": "end"}))
+    print(f"\nowner audio_bytes={audio} actions={actions} transcript={transcript[:120]}")
+    assert audio > 10000 and "show_low_stock" in actions
+    assert "ghee" in transcript.lower()

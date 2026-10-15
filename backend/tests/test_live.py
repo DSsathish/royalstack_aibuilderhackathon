@@ -49,3 +49,25 @@ def test_websocket_rejects_bad_session():
     with pytest.raises(Exception):
         with client.websocket_connect("/agent/live?session_id=nope") as ws:
             ws.receive_text()
+
+
+def test_websocket_accepts_owner_session_from_owner_endpoint_outside_dev(store_id, monkeypatch):
+    import json
+    from app.api import agent as agent_api
+    from app.config import settings
+    from app.domain.models import Store
+    from app.services import sessions
+    db.store_ref(store_id).set(Store(store_id=store_id, name="S").model_dump())
+    owner_s = sessions.create(store_id, "owner", user_id="owner-1")       # as /owner/{id}/session does
+    dev_s = sessions.create(store_id, "owner")                            # as the dev /sessions path does
+    monkeypatch.setattr(settings, "env", "demo")
+
+    async def fake_run(ws, s):
+        await ws.send_text(json.dumps({"type": "ready", "mode": s.mode}))
+    monkeypatch.setattr(agent_api.live, "run", fake_run)
+    client = TestClient(app)
+    with client.websocket_connect(f"/agent/live?session_id={owner_s.session_id}") as ws:
+        assert json.loads(ws.receive_text())["mode"] == "owner"
+    with pytest.raises(Exception):
+        with client.websocket_connect(f"/agent/live?session_id={dev_s.session_id}") as ws:
+            ws.receive_text()
