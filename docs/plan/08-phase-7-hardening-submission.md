@@ -11,23 +11,23 @@ Owner: whole team. Estimated time: full day.
 
 ## 7.2 Security and reliability checklist
 
-- [ ] All `/owner/*` endpoints verify Firebase ID tokens and store membership.
+- [x] All `/owner/*` endpoints verify Firebase ID tokens and store membership.
 - [ ] `/jobs/*` endpoints accept only Cloud Scheduler OIDC tokens (`--oidc-service-account-email`).
-- [ ] Twilio webhook signature validated. Razorpay signature validated.
-- [ ] QR session tokens signed; receipt tokens single-use; sessions expire.
-- [ ] No secrets in the repo. `git log -p | grep -i key` sanity check. Secrets in Secret Manager and GitHub secrets only.
-- [ ] CORS limited to the Firebase Hosting origin and localhost.
-- [ ] Rate limit on `/agent/chat` per session (simple in-memory token bucket) to protect the Gemini budget.
-- [ ] Firestore security rules: clients read only their own session, cart, orders; everything else through the API. Owner reads via API only.
-- [ ] Cloud Run: `--min-instances 1` for the demo week to avoid cold starts on camera; `--max-instances 3`; `--session-affinity` if sessions are in memory.
-- [ ] Structured JSON logging with `session_id` and `store_id`; errors visible in Cloud Logging.
-- [ ] Uptime check on `/healthz` in Cloud Monitoring with an email alert.
+- [x] Razorpay signature validated (Twilio not built).
+- [x] QR session tokens signed; receipt tokens single-use; sessions expire.
+- [x] No secrets in the repo. `git log -p | grep -i key` sanity check. Secrets in Secret Manager and GitHub secrets only.
+- [x] CORS limited to the Firebase Hosting origin and localhost.
+- [x] Rate limit on `/agent/chat` per session (simple in-memory token bucket) to protect the Gemini budget.
+- [x] Firestore security rules: clients read only their own session, cart, orders; everything else through the API. Owner reads via API only.
+- [x] Cloud Run: `--min-instances 1` for the evaluation window; `--max-instances 2`; one instance also keeps the in-memory limiter and live-session registry consistent.
+- [x] Structured JSON logging with `session_id` and `store_id`; errors visible in Cloud Logging.
+- [x] Uptime check on `/healthz` in Cloud Monitoring with an email alert.
 
 ## 7.3 Testing pass
 
 - Run unit tests, the agent eval harness, and a manual script on two real phones (one Android, one iPhone) plus one laptop.
 - Manual script = the demo script below, run three times end to end. Fix anything that fails twice.
-- Reset script `infra/scripts/reset_demo.py`: restores seed stock, clears carts, orders, verifications, signals, drafts, so the video can be recorded cleanly and judges get a fresh state. Document how judges can reset (a hidden owner button "Reset demo data" is acceptable).
+- Reset script `infra/scripts/reset_demo.py` (done): restores seed stock, clears sessions, carts, orders, verifications, counts, signals and optionally drafts.
 
 ## 7.4 Demo script (also `docs/demo-script.md`)
 

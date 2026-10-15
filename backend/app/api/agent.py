@@ -3,7 +3,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, WebSocket
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, WebSocket
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -11,10 +11,26 @@ from app.agent import agent, live
 from app.config import settings
 from app.domain.models import Mode, Session
 from app.services import db, gemini, sessions
+from app.services.ratelimit import Limiter
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["agent"])
 MAX_UPLOAD = 4 * 1024 * 1024
+limiter = Limiter()
+
+
+def client_key(request: Request) -> str:
+    return (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "?")).split(",")[0].strip()
+
+
+def limit_sessions(request: Request) -> None:
+    if not limiter.allow("sess:" + client_key(request), limit=limiter.sessions_per_minute):
+        raise HTTPException(429, "too many sessions, slow down")
+
+
+def limit_chat(session_id: str) -> None:
+    if not limiter.allow("chat:" + session_id, limit=limiter.chat_per_minute):
+        raise HTTPException(429, "too many requests for this session, please wait a moment")
 
 
 class SessionIn(BaseModel):
@@ -22,7 +38,7 @@ class SessionIn(BaseModel):
     mode: Mode
 
 
-@router.post("/sessions", response_model=Session)
+@router.post("/sessions", response_model=Session, dependencies=[Depends(limit_sessions)])
 def create_session(body: SessionIn):
     if not db.store_ref(body.store_id).get().exists:
         raise HTTPException(404, "store not found")
@@ -68,6 +84,7 @@ def _sse(events):
 async def chat(session_id: str = Form(...), message: str = Form(min_length=1, max_length=2000),
                image: UploadFile | None = File(default=None)):
     s = _session(session_id)
+    limit_chat(s.session_id)
     img = await _read_upload(image, "image")
     return _sse(agent.chat(s, message, img))
 
@@ -75,6 +92,7 @@ async def chat(session_id: str = Form(...), message: str = Form(min_length=1, ma
 @router.post("/agent/audio")
 async def audio(session_id: str = Form(...), audio: UploadFile = File(...)):
     s = _session(session_id)
+    limit_chat(s.session_id)
     data, mime = await _read_upload(audio, "audio")
     transcript = gemini.transcribe(data, mime)
     if not transcript:

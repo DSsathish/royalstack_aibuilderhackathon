@@ -48,6 +48,7 @@ Companion to `hld.md` section 3. Every row is implemented in the code path named
 | Uploads: content type must be `image/*` or `audio/*`, ≤ 4 MB | `api/agent.py::_read_upload` | `test_api_agent.py::test_chat_image_too_large_is_413`, `::test_chat_rejects_non_image_upload` |
 | CSV import ≤ 5 MB and ≤ 10 000 rows, printable headers only, numeric fields parsed as `Decimal` after stripping currency and unit text (no negatives, no infinities), bad encoding → 400 | `connectors/csv_connector.py::parse`, `_num` | `test_csv_connector.py`, `test_normalizer.py::test_num_cleaning` |
 | Normalizer sees only the header and up to 5 sample rows, never the bulk file; its mapping is validated against the real header and unknown fields are dropped; owner-only endpoint, audited | `connectors/normalizer.py::propose`, `api/owner_import.py::propose_mapping` | `test_normalizer.py::test_model_proposal_is_validated`, `test_api_owner_import.py::test_propose_endpoint` |
+| Rate limits: 20 agent turns per session per minute (`/agent/chat`, `/agent/audio`), 30 session creations per client address per minute (`/sessions`, `/sessions/instore`); 429 beyond | `services/ratelimit.py`, `api/agent.py::limit_chat`, `limit_sessions` | `test_ratelimit.py`, `test_api_agent.py::test_chat_is_rate_limited_per_session`, `::test_session_creation_is_rate_limited_per_client` |
 | Agent: max 8 model calls per turn; tools are the only source of truth for stock, price, location (prompt + UI renders only from tool results) | `agent/agent.py::MAX_LLM_CALLS`, `agent/prompts.py::CORE`, `frontend/components/Chat.tsx` | `test_agent_live.py` (grounding scenarios) |
 | Live voice: one socket per session, 15 min maximum, audio frames > 32 KB dropped, malformed JSON ignored, errors surfaced then closed | `agent/live.py` (`MAX_SESSION_S`, `MAX_AUDIO_FRAME`, `_active`) | `test_live.py` |
 | Default QR signing key refused outside dev/test (deploy without the secret fails fast) | `config.py::_no_default_key_outside_dev` | `test_config.py` |
@@ -66,7 +67,6 @@ Companion to `hld.md` section 3. Every row is implemented in the code path named
 
 ## Known gaps (deliberate for the hackathon)
 
-- No rate limit on `/agent/chat` beyond the per-turn call cap. Add a per-session token bucket before any public pilot.
 - Cart `add` is read-modify-write outside a transaction; a simultaneous add from chat and scan could drop a line.
 - Owner membership is not revoked when an email is removed from `owner_emails`.
 - Firebase web API key should be restricted by HTTP referrer in the Google Cloud console, and only the Google provider should be enabled in Firebase Auth (*console*).

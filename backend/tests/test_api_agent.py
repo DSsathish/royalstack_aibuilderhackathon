@@ -56,3 +56,27 @@ def test_chat_message_required(shop):
 
 def test_dev_sessions_endpoint_cannot_mint_instore(shop):
     assert client.post("/sessions", json={"store_id": shop, "mode": "instore"}).status_code == 403
+
+
+def test_chat_is_rate_limited_per_session(shop, monkeypatch):
+    from app.api import agent as agent_api
+    agent_api.limiter.clear()
+    monkeypatch.setattr(agent_api.limiter, "chat_per_minute", 3)
+    sid = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()["session_id"]
+    async def fake_chat(s, text, image=None):
+        yield {"type": "done", "text": "ok"}
+    monkeypatch.setattr(agent_api.agent, "chat", fake_chat)
+    codes = [client.post("/agent/chat", data={"session_id": sid, "message": "hi"}).status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]
+    other = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()["session_id"]
+    assert client.post("/agent/chat", data={"session_id": other, "message": "hi"}).status_code == 200
+    agent_api.limiter.clear()
+
+
+def test_session_creation_is_rate_limited_per_client(shop, monkeypatch):
+    from app.api import agent as agent_api
+    agent_api.limiter.clear()
+    monkeypatch.setattr(agent_api.limiter, "sessions_per_minute", 2)
+    codes = [client.post("/sessions", json={"store_id": shop, "mode": "online"}).status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+    agent_api.limiter.clear()
