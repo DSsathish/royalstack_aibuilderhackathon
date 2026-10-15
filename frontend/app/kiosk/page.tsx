@@ -7,13 +7,19 @@ type Detector = { detect(src: ImageBitmapSource): Promise<{ rawValue: string }[]
 
 /** Exit kiosk for a tablet: PIN -> scan receipt QR -> bag photo -> verdict. Staff clear amber/red results. */
 export default function Kiosk() {
-  const saved = useState(() => { try { return JSON.parse(localStorage.getItem("rs.kiosk") ?? "null") as { store: string; pin: string; kioskId: string } | null; } catch { return null; } })[0];
-  const [store, setStore] = useState(saved?.store ?? ""); const [pin, setPin] = useState(saved?.pin ?? ""); const [kioskId, setKioskId] = useState(saved?.kioskId ?? "exit-1");
-  const [step, setStep] = useState<Step>(saved ? "scan" : "setup");
+  const [store, setStore] = useState(""); const [pin, setPin] = useState(""); const [kioskId, setKioskId] = useState("exit-1");
+  const [step, setStep] = useState<Step>("setup");
+  useEffect(() => {
+    const t = setTimeout(() => {   // after hydration: restore the tablet's saved settings
+      try { const c = JSON.parse(localStorage.getItem("rs.kiosk") ?? "null"); if (c) { setStore(c.store); setPin(c.pin); setKioskId(c.kioskId); setStep("scan"); } } catch {}
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
   const [token, setToken] = useState(""); const [result, setResult] = useState<Verification | null>(null);
   const [error, setError] = useState("");
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
+  const zxing = useRef<{ stop(): void } | null>(null);
   const lastCode = useRef("");
 
   // camera runs during scan and bag steps
@@ -31,18 +37,21 @@ export default function Kiosk() {
             timer = setInterval(async () => { try { const c = await det.detect(video.current!); if (c[0]) onScan(c[0].rawValue); } catch {} }, 400);
           } else {
             const { BrowserQRCodeReader } = await import("@zxing/browser");
-            new BrowserQRCodeReader().decodeFromVideoElement(video.current!, (r) => { if (r) onScan(r.getText()); });
+            zxing.current = await new BrowserQRCodeReader().decodeFromVideoElement(video.current!, (r) => { if (r) onScan(r.getText()); });
           }
         }
       } catch { setError("Camera not available. Paste the receipt code below."); }
     })();
-    return () => { if (timer) clearInterval(timer); };
+    return () => { if (timer) clearInterval(timer); zxing.current?.stop(); zxing.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   function onScan(text: string) {
-    if (!/[?&]r=/.test(text) || text === lastCode.current) return;
-    lastCode.current = text; setToken(text); setStep("bag");
+    const t = text.trim();
+    const looksLikeReceipt = /[?&]r=/.test(t) || /^[A-Za-z0-9_-]+\.[a-f0-9]{64}$/.test(t);
+    if (!looksLikeReceipt) { if (t) setError("That is not an exit code."); return; }
+    if (t === lastCode.current) return;
+    lastCode.current = t; setError(""); setToken(t); setStep("bag");
   }
 
   async function capture(skip = false) {
@@ -54,7 +63,7 @@ export default function Kiosk() {
       blob = await new Promise<Blob | undefined>((res) => c.toBlob((b) => res(b ?? undefined), "image/jpeg", 0.8));
     }
     try { setResult(await api.exitVerify(store, pin, token, kioskId, blob)); setStep("result"); }
-    catch (e) { setError((e as Error).message); setStep("scan"); }
+    catch (e) { setError((e as Error).message); lastCode.current = ""; setStep("scan"); }
   }
 
   async function review(outcome: "cleared" | "issue_confirmed") {

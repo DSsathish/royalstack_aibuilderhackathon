@@ -5,6 +5,7 @@ import random
 import uuid
 from datetime import timedelta
 
+from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from app.domain.models import Layers, Verification, now
@@ -14,6 +15,21 @@ from app.services import catalog, checkout, db, qr, vision
 def random_audit(store_id: str) -> bool:
     rate = db.store_ref(store_id).get().to_dict().get("audit_rate", 0.1)
     return random.random() < rate
+
+
+def _claim(order_id: str) -> bool:
+    """Atomically move a paid order to verified. False if it was not 'paid' (already used, pending, flagged)."""
+    ref = db.orders().document(order_id)
+
+    @firestore.transactional
+    def run(tx: firestore.Transaction) -> bool:
+        snap = ref.get(transaction=tx)
+        if not snap.exists or snap.to_dict().get("status") != "paid":
+            return False
+        tx.update(ref, {"status": "verified", "exited_at": now()})
+        return True
+
+    return run(db.client().transaction(max_attempts=10))
 
 
 def verify_exit(store_id: str, receipt_token: str, *, image: tuple[bytes, str] | None,
@@ -32,10 +48,10 @@ def verify_exit(store_id: str, receipt_token: str, *, image: tuple[bytes, str] |
     else:
         flags.append("invalid receipt")
 
-    # 2. order state
-    if order and order.status == "paid":
+    # 2. order state: claim it now, before the slow vision call, so two kiosks cannot both clear it
+    if order and _claim(order.order_id):
         v.layers.order_ok = True
-    elif order and order.status in ("verified", "flagged"):
+    elif order and order.status in ("verified", "flagged", "paid"):
         flags.append("receipt already used at the exit")
     elif order:
         flags.append("order not paid")
@@ -75,9 +91,8 @@ def verify_exit(store_id: str, receipt_token: str, *, image: tuple[bytes, str] |
     v.reasons = flags + spots
     v.verdict = "flag" if flags else "spot_check" if spots else "clear"
     db.verifications().document(v.verification_id).set(v.model_dump())
-    if order and v.layers.order_ok:
-        db.orders().document(order.order_id).update({
-            "status": "flagged" if v.verdict == "flag" else "verified", "exited_at": now()})
+    if order and v.layers.order_ok and v.verdict == "flag":
+        db.orders().document(order.order_id).update({"status": "flagged"})
     return v
 
 

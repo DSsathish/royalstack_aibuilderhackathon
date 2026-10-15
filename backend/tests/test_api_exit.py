@@ -70,3 +70,13 @@ def test_owner_listing(shop):
     assert res.status_code == 200
     assert res.json()["summary"]["total"] == 1 and res.json()["items"][0]["verdict"] == "clear"
     assert client.get(f"/owner/{shop}/verifications").status_code == 401
+
+
+def test_pin_lockout_after_repeated_failures(shop):
+    from app.api import exit as exit_api
+    exit_api._pin_failures.clear()
+    for _ in range(exit_api.MAX_PIN_FAILURES):
+        client.post(f"/exit/{shop}/verify", data={"receipt_token": "x", "kiosk_id": "k"}, headers={"X-Kiosk-Pin": "0000"})
+    res = client.post(f"/exit/{shop}/verify", data={"receipt_token": "x", "kiosk_id": "k"}, headers={"X-Kiosk-Pin": "9876"})
+    assert res.status_code == 429
+    exit_api._pin_failures.clear()

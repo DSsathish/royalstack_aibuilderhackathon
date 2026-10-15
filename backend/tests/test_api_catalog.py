@@ -65,3 +65,8 @@ def test_store_id_validation():
 def test_search_unknown_store_is_404_and_writes_nothing(store_id):
     assert client.get(f"/stores/{store_id}/search", params={"q": "milk"}).status_code == 404
     assert list(db.demand_signals(store_id).stream()) == []
+
+
+def test_public_store_hides_kiosk_pin_and_audit_rate(shop):
+    body = client.get(f"/stores/{shop}").json()
+    assert "kiosk_pin" not in body and "audit_rate" not in body

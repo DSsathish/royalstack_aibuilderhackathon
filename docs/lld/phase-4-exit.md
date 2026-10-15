@@ -29,13 +29,13 @@ Deterministic layers decide; Gemini vision only adjusts confidence; every flag g
 | 1 | receipt | token verifies, `kind == receipt`, `store_id` matches | flag "invalid receipt" |
 | 2 | order | order exists, `status == paid` (not already `verified`/`flagged`) | flag "receipt already used" / "order not paid" |
 | 3 | count | if `counted_items` given: within ±1 for ≤ 10 items, ±10% above | flag "item count mismatch" |
-| 4 | limit | `sum(qty) <= store.self_checkout_item_limit` | flag "over self-checkout limit" |
+| 4 | limit | `len(items) <= store.self_checkout_item_limit` (distinct lines, same rule as checkout) | flag "over self-checkout limit" |
 | 5 | high value | lines with `is_high_value` (looked up from products) | spot_check "show <item>" |
 | 6 | random audit | `random() < store.audit_rate` | spot_check "random audit" |
 | 7 | vision | if image: `check_bag`; `confidence < 0.5` → flag; any `unexpected_items` → flag | |
 
 Verdict: `flag` if any flag reason; else `spot_check` if any spot reason; else `clear`.
-Persist `verifications/{id}`; inside the same transaction set `orders/{id}.status` to `verified` (clear/spot_check) or `flagged`, and `exited_at`. The receipt is therefore single-use.
+The order is claimed in a Firestore transaction (`paid` → `verified`, `exited_at`) before the vision call, so two kiosks cannot both clear one receipt; a `flag` verdict then sets `flagged`.
 
 `review(verification_id, outcome, by, note)` — staff decision; sets `review_outcome`, and if `issue_confirmed` keeps order `flagged`, else sets `verified`.
 
@@ -75,3 +75,11 @@ Receipt tokens come either as the raw token or as the full exit URL `…/exit/?r
 - Receipt token accepted either raw or as the full `/exit/?r=` URL, so the kiosk can scan the QR directly.
 - Composite index `verifications(store_id, created_at)` added in `firestore.indexes.json` for the owner listing.
 - Kiosk settings (store, PIN, name) live in the tablet's localStorage; "Settings" clears them.
+
+## Review fixes (fresh-eyes review before merge)
+
+- **Critical:** the kiosk PIN (and audit rate) were returned by the public store endpoint. Now excluded from that response; regression test added.
+- Receipt single-use under concurrency: the order is claimed in a Firestore transaction before the vision call. Test runs two exits on one receipt in parallel; exactly one clears.
+- PIN brute force: constant-time compare and a per-store lockout after 5 wrong PINs for 60 s (429).
+- Kiosk: same QR can be re-scanned after an API error; ZXing decoder is stopped on step change; a pasted raw token is accepted; saved settings are restored after hydration to avoid a mismatch.
+- LLD aligned with the code: the limit layer counts distinct lines, the same rule as checkout.

@@ -110,3 +110,14 @@ def test_summary_counts(shop):
     s = verification.summary(shop, days=7)
     assert s["total"] == 4 and s["clear"] == 3 and s["flag"] == 1
     assert s["flag_rate"] == 0.25
+
+
+def test_concurrent_exits_on_one_receipt_only_one_clears(shop, monkeypatch):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    monkeypatch.setattr(vision, "check_bag", lambda *a, **k: (time.sleep(0.5), VisionResult(confidence=0.9, skipped=False))[1])
+    o = paid_order(shop, "salt")
+    run = lambda _: verification.verify_exit(shop, o.receipt_token, image=(b"x", "image/jpeg"), counted_items=None, kiosk_id="k")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        verdicts = [v.verdict for v in pool.map(run, range(2))]
+    assert sorted(verdicts) == ["clear", "flag"]

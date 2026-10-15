@@ -1,6 +1,8 @@
 """Exit kiosk endpoints (PIN-protected) and the owner's verification listing."""
 
+import hmac
 import re
+import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Path, Query, UploadFile
@@ -12,14 +14,23 @@ from app.services.auth import STORE_ID, current_uid, require_owner
 
 router = APIRouter(tags=["exit"])
 HEX_ID = r"^[a-f0-9]{32}$"
+MAX_PIN_FAILURES, LOCKOUT_S = 5, 60
+_pin_failures: dict[str, tuple[int, float]] = {}   # store_id -> (failures, locked_until)
 
 
 def kiosk_auth(store_id: str = STORE_ID, x_kiosk_pin: str | None = Header(default=None)) -> str:
+    fails, until = _pin_failures.get(store_id, (0, 0.0))
+    if time.time() < until:
+        raise HTTPException(429, "too many wrong PINs, try again in a minute")
     store = db.store_ref(store_id).get()
     if not store.exists:
         raise HTTPException(404, "store not found")
-    if not x_kiosk_pin or x_kiosk_pin != store.to_dict().get("kiosk_pin"):
+    expected = str(store.to_dict().get("kiosk_pin", ""))
+    if not x_kiosk_pin or not hmac.compare_digest(x_kiosk_pin, expected):
+        fails += 1
+        _pin_failures[store_id] = (0, time.time() + LOCKOUT_S) if fails >= MAX_PIN_FAILURES else (fails, 0.0)
         raise HTTPException(401, "kiosk PIN required")
+    _pin_failures.pop(store_id, None)
     return store_id
 
 
