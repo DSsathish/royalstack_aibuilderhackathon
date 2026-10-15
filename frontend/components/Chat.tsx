@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { listenOnce } from "@/lib/voice";
+import { LiveFrame, LiveState, liveSupported, startLive } from "@/lib/live";
 import { Product, api } from "@/lib/api";
 import { Msg, sayAloud, useApp } from "@/lib/store";
 import { UiEvent } from "@/lib/sse";
@@ -22,6 +23,9 @@ export default function Chat() {
   const [voiceState, setVoiceState] = useState<"listening" | "thinking" | "speaking" | "">("");
   const voiceRef = useRef(false);
   const media = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
+  const [live, setLive] = useState<LiveState>("closed");
+  const liveStop = useRef<(() => void) | null>(null);
+  const liveMsg = useRef<{ user: number | null; assistant: number | null }>({ user: null, assistant: null });
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -94,6 +98,34 @@ export default function Chat() {
     setVoiceState("");
   }
 
+  /** Real-time speech-to-speech on the Gemini Live API. Transcripts and tool actions flow into the same chat. */
+  async function toggleLive() {
+    if (liveStop.current) { liveStop.current(); return; }
+    if (voiceRef.current) stopVoice();
+    if (!session) return;
+    try {
+      liveStop.current = await startLive(session.session_id, {
+        onState: (st) => { setLive(st); setAvatar(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" ? "thinking" : "idle"); if (st === "closed") { liveStop.current = null; liveMsg.current = { user: null, assistant: null }; } },
+        onFrame: (f: LiveFrame) => {
+          if (f.type === "transcript") {
+            const slot = f.role;
+            const cur = liveMsg.current[slot];
+            if (cur === null) liveMsg.current[slot] = push({ role: slot, text: f.text });
+            else patch(cur, { text: (useApp.getState().messages.find((m) => m.id === cur)?.text ?? "") + f.text });
+            if (slot === "user") liveMsg.current.assistant = null;   // a new user utterance starts a new assistant bubble
+          } else if (f.type === "turn_complete") {
+            liveMsg.current = { user: null, assistant: null };
+          } else if (f.type === "action") {
+            const id = liveMsg.current.assistant ?? (liveMsg.current.assistant = push({ role: "assistant", text: "" }));
+            handleAction(f.name, f.data, id);
+          } else if (f.type === "error") {
+            push({ role: "assistant", text: f.text });
+          }
+        },
+      });
+    } catch (e) { push({ role: "assistant", text: `Live voice could not start: ${(e as Error).message}` }); liveStop.current = null; setLive("closed"); }
+  }
+
   function stopVoice() {
     voiceRef.current = false; setVoiceOn(false); setVoiceState("");
     window.speechSynthesis?.cancel();
@@ -103,7 +135,7 @@ export default function Chat() {
     setAvatar("idle");
   }
 
-  useEffect(() => () => { if (voiceRef.current) stopVoice(); }, []);   // leaving the tab ends the conversation
+  useEffect(() => () => { if (voiceRef.current) stopVoice(); liveStop.current?.(); }, []);   // leaving the tab ends the conversation
 
   return (
     <div className="flex flex-col h-full">
@@ -117,7 +149,17 @@ export default function Chat() {
           <option value="auto">Auto</option><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option>
         </select>
         <button onClick={() => setSpeak(!speak)} title="Read aloud" className="text-lg">{speak ? "🔊" : "🔇"}</button>
+        {liveSupported() && (
+          <button onClick={toggleLive} className={`text-xs rounded-full px-3 py-1.5 font-semibold ${live !== "closed" ? "bg-red-500 text-white" : "bg-emerald-600 text-white"}`}>
+            {live === "closed" ? "Talk live" : live === "connecting" ? "Connecting…" : "End"}
+          </button>
+        )}
       </header>
+      {live !== "closed" && (
+        <div className="flex items-center justify-between px-4 py-1.5 text-xs bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200">
+          <span>{live === "listening" ? "Live · listening, just talk. You can interrupt." : live === "speaking" ? "Live · speaking" : "Live · connecting"}</span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         {messages.length === 0 && (
