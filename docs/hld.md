@@ -15,8 +15,9 @@ flowchart LR
   end
 
   subgraph CloudRun[Cloud Run: retail-api]
-    API[FastAPI routers]
+    API[FastAPI routers + websocket]
     AG[ADK agent + tools]
+    LV[Live voice bridge<br/>Gemini Live, same tools]
     SVC[Services: catalog, inventory,<br/>cart, checkout, verification, forecast]
     CON[Connectors: CSV, Sheets, Shopify]
   end
@@ -27,8 +28,9 @@ flowchart LR
   end
 
   subgraph Google AI
-    GF[Gemini Flash<br/>chat, vision, audio, embeddings]
-    GP[Gemini Pro<br/>reorder reasoning]
+    GF[Gemini Flash<br/>chat, vision, audio, embeddings, rationale]
+    GL[Gemini Live<br/>speech-to-speech]
+    BQML[BigQuery ML<br/>ARIMA_PLUS forecasts]
   end
 
   JOBS[Cloud Scheduler → Cloud Run jobs<br/>sync, forecast, alerts]
@@ -36,11 +38,14 @@ flowchart LR
   S & W & O & K --> API
   WA --> API
   API --> AG --> SVC
+  API --> LV --> SVC
   API --> SVC
   SVC --> FS
   SVC --> BQ
   AG --> GF
-  SVC --> GP
+  LV --> GL
+  SVC --> GF
+  JOBS --> BQML --> FS
   CON --> FS
   JOBS --> CON
   JOBS --> SVC
@@ -56,9 +61,13 @@ flowchart LR
 | Jobs | Cloud Run jobs via Scheduler | Connector sync, forecast, alerts |
 | Firestore | Google Cloud | Catalog, inventory, sessions, carts, orders, verifications, drafts, audit |
 | BigQuery | Google Cloud | Sales history, daily aggregates, ARIMA_PLUS forecasts |
-| Gemini | AI Studio key now, Vertex AI when billing is linked | All generative and multimodal calls |
+| Gemini | Vertex AI, `global` endpoint | `gemini-3.5-flash` for chat, vision, transcription and rationale; `gemini-live-2.5-flash` for speech-to-speech; `gemini-embedding-001` for search |
+| BigQuery ML | `retail` dataset | `ARIMA_PLUS` per store, retrained nightly by the forecast job |
+| Owner dashboard | Firebase Hosting (`/owner`) | Firebase Google sign-in; overview, inventory, reorders, signals, loss, connectors, assistant with live voice |
 
 ## 2. Core data flows
+
+**Live voice turn.** Browser streams 16 kHz PCM over `WS /agent/live`; the bridge relays audio to Gemini Live, runs each tool call locally, forwards tool results as UI actions, streams 24 kHz speech back; interruptions flush playback. Same tools, same gating, for shoppers and owners.
 
 **Shopper chat turn.** Client → `POST /agent/chat` → ADK agent picks tools → tools read Firestore → agent reply streamed as SSE `token` and `action` events → UI renders cards, map, cart from `action` events only.
 
@@ -66,7 +75,7 @@ flowchart LR
 
 **Exit verification.** Kiosk → `POST /exit/verify` with receipt token and optional bag photo → deterministic layers → Gemini vision confidence → verdict stored, image discarded.
 
-**Owner reorder.** Scheduled job trains ARIMA_PLUS in BigQuery → forecasts written to Firestore → low-stock items grouped by supplier → Gemini Pro writes rationale → draft waits in approval inbox → owner approves → supplier email, audit log.
+**Owner reorder.** Nightly job syncs paid orders to BigQuery, trains ARIMA_PLUS, writes 14-day forecasts to Firestore → reorder point = forecast × lead time + safety stock (owner's manual value is a floor) → low-stock items grouped by supplier → one Gemini call per supplier writes the rationale → draft waits in the approval inbox → owner approves → supplier email text generated and audited (not sent).
 
 **Connector sync.** Scheduler → `POST /jobs/sync` → connector pulls rows → mapped with the store's column mapping → upsert products and inventory.
 
@@ -84,10 +93,13 @@ Internet ──► Firebase Hosting (static) ──► retail-api on Cloud Run �
 | Shopper identity | Firebase Auth anonymous session. ID token sent as `Authorization: Bearer`. Session documents keyed by a server-generated id; a client can only act on its own session. |
 | In-store entry | Entrance QR carries an HMAC token signed with `QR_SESSION_SIGNING_KEY`. Sessions expire after 4 hours. Self-checkout only in `instore` mode. |
 | Owner endpoints | Firebase ID token verified server-side; `users/{uid}.stores` must contain the `store_id`. No owner data is readable from the client SDK. |
-| Jobs endpoints | Accept only Cloud Scheduler OIDC tokens for the runtime service account. |
+| Jobs endpoints | `X-Job-Key` shared secret from Secret Manager, constant-time compare; Cloud Scheduler sends it. |
+| Owner identity | Firebase Google sign-in; token verified server-side; membership from `users/{uid}.stores` or a verified email listed in `stores/{id}.owner_emails`. |
+| Kiosk | Store PIN header, constant-time compare, lockout after 5 failures; PIN never in public responses. |
+| Live voice | Session id is the credential; one socket per session; 15 min cap; frame size cap; owner sessions only from the authenticated owner endpoint. |
 | Firestore | Security rules deny all client reads and writes except the shopper's own session, cart, and orders. Everything else goes through the API. |
 | Secrets | Secret Manager mounted as env vars on Cloud Run. Locally in `.env`, git-ignored. Never in code or logs. |
-| Payments | Razorpay test mode only. Webhook and checkout signatures verified with HMAC before any order is written. |
+| Payments | Razorpay test mode or mock. Signatures verified with HMAC before stock is committed; mock refused in prod. |
 | Receipts | Receipt token is a signed JWT, 30 minute expiry, single use (marked used inside the verdict transaction). |
 | WhatsApp | Twilio request signature verified. |
 | Uploads | Images limited to 5 MB, content type checked, bag photos processed in memory and discarded. Product photos stored only if the shopper confirms. |
@@ -114,3 +126,8 @@ Every document carries or is nested under `store_id`. The API resolves `store_id
 ## 6. Non-goals for the hackathon
 
 Indoor positioning or AR navigation, live payments, Shopify write-back, 3D avatar (stretch), email digests, multi-region.
+
+
+## 7. Where each control is implemented and tested
+
+See `security.md` for the control-by-control map to code paths and test names, and the list of known gaps.
