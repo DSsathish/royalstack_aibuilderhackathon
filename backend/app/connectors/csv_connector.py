@@ -17,7 +17,7 @@ REQUIRED = ("sku", "name", "price", "on_hand")
 OPTIONAL = ("barcode", "brand", "category", "subcategory", "description", "mrp", "unit",
             "image_url", "tags", "substitutes", "aisle", "bay", "shelf", "side",
             "reorder_point", "reorder_qty", "lead_time_days", "supplier_id")
-HEADER_RE = re.compile(r"^[A-Za-z0-9 _./-]{1,64}$")
+HEADER_RE = re.compile(r"^[^\x00-\x1f]{1,64}$")   # any printable header text, e.g. "Rate (Rs)" or "M.R.P."
 
 
 class ImportError_(ValueError):
