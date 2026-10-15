@@ -1,7 +1,11 @@
 """FastAPI entry point. Routers are added here as phases land."""
 
-from fastapi import FastAPI
+import logging
+import uuid
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import agent, catalog, exit, owner, owner_import, shop
 from app.config import settings
@@ -14,6 +18,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+log = logging.getLogger(__name__)
+
+
+@app.exception_handler(Exception)
+async def unhandled(request: Request, exc: Exception) -> JSONResponse:
+    """Return JSON on unexpected errors so CORS headers still apply and the client sees a real message."""
+    ref = uuid.uuid4().hex[:8]
+    log.exception("unhandled error %s on %s %s: %s", ref, request.method, request.url.path, exc)
+    # this handler runs outside the CORS middleware, so add the header for allowed origins ourselves
+    origin = request.headers.get("origin", "")
+    headers = {"Access-Control-Allow-Origin": origin} if origin in settings.cors_origins else {}
+    return JSONResponse({"detail": f"internal error (ref {ref})"}, status_code=500, headers=headers)
+
 
 app.include_router(catalog.router)
 app.include_router(owner_import.router)
