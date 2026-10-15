@@ -26,3 +26,10 @@ def test_receipt_token_carries_order_and_expires():
 
 def test_non_ascii_token_is_rejected_not_500():
     assert qr.verify("abc.éé") is None
+
+
+def test_key_whitespace_is_ignored(monkeypatch):
+    from app.config import settings
+    t = qr.entrance_token("demo")
+    monkeypatch.setattr(settings, "qr_session_signing_key", settings.qr_session_signing_key + "\n")
+    assert qr.verify(t) == {"kind": "entrance", "store_id": "demo"}

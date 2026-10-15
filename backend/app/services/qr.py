@@ -20,7 +20,8 @@ def _unb64(text: str) -> bytes:
 
 
 def _mac(body: str) -> str:
-    return hmac.new(settings.qr_session_signing_key.encode(), body.encode(), hashlib.sha256).hexdigest()
+    key = settings.qr_session_signing_key.strip().encode()  # secrets mounted from files may carry a newline
+    return hmac.new(key, body.encode(), hashlib.sha256).hexdigest()
 
 
 def sign(payload: dict, ttl_s: int | None = None) -> str:
