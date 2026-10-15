@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { listenOnce } from "@/lib/voice";
 import { Product, api } from "@/lib/api";
 import { Msg, sayAloud, useApp } from "@/lib/store";
 import { UiEvent } from "@/lib/sse";
@@ -17,8 +18,10 @@ export default function Chat() {
   const { session, store, messages, push, patch, setCart, setHighlight, language, setLanguage, speak, setSpeak, setAvatar } = useApp();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const recorder = useRef<MediaRecorder | null>(null);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [voiceState, setVoiceState] = useState<"listening" | "thinking" | "speaking" | "">("");
+  const voiceRef = useRef(false);
+  const media = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -36,7 +39,7 @@ export default function Chat() {
         else if (e.type === "action") handleAction(e.name, e.data, id);
         else if (e.type === "error") { buffer = ""; patch(id, { text: e.text, status: undefined }); }
       }
-      if (speak && buffer) { setAvatar("speaking"); sayAloud(buffer, language); setTimeout(() => setAvatar("idle"), 2500); }
+      if ((speak || voiceRef.current) && buffer) { setAvatar("speaking"); sayAloud(buffer, language); setTimeout(() => setAvatar("idle"), 2500); }
       else setAvatar("idle");
     } catch (err) {
       patch(id, { text: `Assistant unavailable: ${(err as Error).message}`, status: undefined });
@@ -68,25 +71,39 @@ export default function Chat() {
   }
   function whereIs(p: Product) { send(`Where is ${p.name}?`); }
 
-  async function toggleMic() {
-    if (recording) { recorder.current?.stop(); return; }
+  /** Hands-free conversation: listen -> transcribe and answer -> speak -> listen again, until stopped. */
+  async function toggleVoice() {
+    if (voiceRef.current) { stopVoice(); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      const rec = new MediaRecorder(stream, { mimeType: mime });
-      const chunks: Blob[] = [];
-      rec.ondataavailable = (e) => chunks.push(e.data);
-      rec.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setRecording(false); setAvatar("thinking"); setBusy(true);
-        const userId = push({ role: "user", text: "🎤 …" });
-        if (session) await consume(api.audio(session, new Blob(chunks, { type: mime })), userId);
-        setBusy(false);
-      };
-      rec.start(); recorder.current = rec; setRecording(true); setAvatar("listening");
-      setTimeout(() => rec.state === "recording" && rec.stop(), 10000);
-    } catch { push({ role: "assistant", text: "Microphone not available. Please type instead." }); }
+      const ctx = new AudioContext();
+      media.current = { stream, ctx };
+    } catch { push({ role: "assistant", text: "Microphone not available. Please type instead." }); return; }
+    voiceRef.current = true; setVoiceOn(true);
+    if (messages.length === 0) push({ role: "assistant", text: "I'm listening. Ask me anything about the store, in English, Tamil or Hindi." });
+    while (voiceRef.current && media.current) {
+      setVoiceState("listening"); setAvatar("listening");
+      const heard = await listenOnce(media.current.stream, media.current.ctx, () => !voiceRef.current);
+      if (!voiceRef.current) break;
+      if (!heard) continue;                       // nothing said: keep listening
+      setVoiceState("thinking"); setBusy(true);
+      const userId = push({ role: "user", text: "🎤 …" });
+      if (session) await consume(api.audio(session, heard.blob), userId);   // speaks the reply before returning
+      setBusy(false);
+    }
+    setVoiceState("");
   }
+
+  function stopVoice() {
+    voiceRef.current = false; setVoiceOn(false); setVoiceState("");
+    window.speechSynthesis?.cancel();
+    media.current?.stream.getTracks().forEach((t) => t.stop());
+    media.current?.ctx.close();
+    media.current = null;
+    setAvatar("idle");
+  }
+
+  useEffect(() => () => { if (voiceRef.current) stopVoice(); }, []);   // leaving the tab ends the conversation
 
   return (
     <div className="flex flex-col h-full">
@@ -128,12 +145,18 @@ export default function Chat() {
         <div ref={bottom} />
       </div>
 
+      {voiceOn && (
+        <div className="flex items-center justify-between px-4 py-1.5 text-xs bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200">
+          <span>{voiceState === "listening" ? "Listening… speak now, pause when done" : voiceState === "thinking" ? "Thinking…" : voiceState === "speaking" ? "Speaking…" : "Voice conversation on"}</span>
+          <button onClick={stopVoice} className="underline">End</button>
+        </div>
+      )}
       <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="flex items-center gap-2 px-3 py-2 border-t border-zinc-200 dark:border-zinc-800">
         <label className="text-xl cursor-pointer" title="Send a photo of a product">📷
           <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) send(text, f); e.target.value = ""; }} />
         </label>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask about products, prices, aisles…" className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 bg-transparent px-4 py-2 text-sm" disabled={busy} />
-        <button type="button" onClick={toggleMic} className={`text-xl rounded-full w-10 h-10 ${recording ? "bg-red-500 text-white" : "bg-zinc-200 dark:bg-zinc-700"}`} title="Hold to talk">🎤</button>
+        <button type="button" onClick={toggleVoice} className={`text-xl rounded-full w-10 h-10 ${voiceOn ? "bg-red-500 text-white animate-pulse" : "bg-zinc-200 dark:bg-zinc-700"}`} title={voiceOn ? "End voice conversation" : "Start voice conversation"}>{voiceOn ? "■" : "🎤"}</button>
         <button type="submit" disabled={busy || !text.trim()} className="rounded-full bg-emerald-600 disabled:bg-zinc-300 text-white w-10 h-10">➤</button>
       </form>
     </div>
