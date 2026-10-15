@@ -22,6 +22,23 @@ app.include_router(shop.router)
 app.include_router(exit.router)
 
 
+@app.on_event("startup")
+def warm_up() -> None:
+    """Pay the cold Gemini client/auth cost once at boot, off the request path."""
+    import threading
+
+    from app.services import gemini
+
+    def go():
+        try:
+            gemini.embed_texts(["warm up"], for_query=True)
+        except Exception:
+            pass
+
+    if gemini.configured() and settings.env != "test":
+        threading.Thread(target=go, daemon=True).start()
+
+
 @app.get("/health")  # /healthz is intercepted by Google front ends on Cloud Run
 def healthz() -> dict:
     return {"ok": True, "env": settings.env}

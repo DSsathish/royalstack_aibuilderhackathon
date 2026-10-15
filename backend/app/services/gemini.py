@@ -44,6 +44,8 @@ def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float
             config=types.EmbedContentConfig(
                 task_type="RETRIEVAL_QUERY" if for_query else "RETRIEVAL_DOCUMENT",
                 output_dimensionality=768,
+                # a query embed sits on the shopper's critical path: answer fast or fall back to keywords
+                http_options=types.HttpOptions(timeout=2500, retry_options=types.HttpRetryOptions(attempts=1)) if for_query else None,
             ),
         )
         return [e.values for e in res.embeddings]
