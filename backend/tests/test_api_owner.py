@@ -87,3 +87,9 @@ def test_forecast_job_requires_key(shop, monkeypatch):
     assert client.post(f"/jobs/forecast?store_id={shop}").status_code == 401
     res = client.post(f"/jobs/forecast?store_id={shop}", headers={"X-Job-Key": "test-job-key"})
     assert res.status_code == 200 and res.json()["method"] == "mocked"
+
+
+def test_owner_session_endpoint(shop):
+    res = client.post(f"/owner/{shop}/session", headers=H)
+    assert res.status_code == 200 and res.json()["mode"] == "owner" and res.json()["user_id"] == "owner-1"
+    assert client.post(f"/owner/{shop}/session").status_code == 401

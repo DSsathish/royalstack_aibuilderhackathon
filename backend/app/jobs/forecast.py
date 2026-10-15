@@ -22,6 +22,7 @@ HORIZON = forecast.HORIZON
 def sync_sales(bq: bigquery.Client, store_id: str) -> int:
     """Append paid orders that are not yet in retail.sales (idempotent on order_id)."""
     ds = f"{settings.google_cloud_project}.retail"
+    bq.query(f"ALTER TABLE `{ds}.sales` ADD COLUMN IF NOT EXISTS order_id STRING").result()   # seed table predates order ids
     known = {r.order_id for r in bq.query(f"SELECT DISTINCT order_id FROM `{ds}.sales` WHERE store_id = '{store_id}' AND order_id IS NOT NULL").result()}
     rows = []
     for o in db.orders().where(filter=FieldFilter("store_id", "==", store_id)).stream():

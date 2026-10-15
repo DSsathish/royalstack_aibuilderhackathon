@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.domain.models import now
-from app.services import db, insights, reorder, verification
+from app.services import db, insights, reorder, sessions, verification
 from app.services.auth import STORE_ID, current_uid, owned_stores, require_owner
 
 router = APIRouter(tags=["owner"])
@@ -17,6 +17,13 @@ PID = Path(pattern=r"^[a-z0-9-]{3,80}$")
 @router.get("/owner/me")
 def me(uid: str = Depends(current_uid)):
     return {"uid": uid, "stores": owned_stores(uid)}
+
+
+@router.post("/owner/{store_id}/session")
+def owner_session(store_id: str = STORE_ID, uid: str = Depends(current_uid)):
+    """An owner-mode agent session for the dashboard chat; the only way to get one outside dev."""
+    require_owner(store_id, uid)
+    return sessions.create(store_id, "owner", user_id=uid).model_dump()
 
 
 @router.get("/owner/{store_id}/overview")
