@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Product, api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import ProductCard from "./ProductCard";
+import { IconCamera, IconMinus, IconPlus } from "./Icons";
 
 type Detector = { detect(src: ImageBitmapSource): Promise<{ rawValue: string }[]> };
 declare global { interface Window { BarcodeDetector?: new (o?: { formats: string[] }) => Detector } }
@@ -62,27 +63,29 @@ export default function Scanner({ onPhoto }: { onPhoto: (f: File) => void }) {
 
   return (
     <div className="flex flex-col gap-3 p-3">
-      <div className="relative rounded-xl overflow-hidden bg-black aspect-[3/4] max-h-[50vh]">
+      <div className="eyebrow px-1">Scan a barcode</div>
+      <div className="relative rounded-[18px] overflow-hidden bg-ink aspect-[3/4] max-h-[48vh]">
         <video ref={video} className="w-full h-full object-cover" muted playsInline />
-        <div className="absolute inset-x-8 top-1/2 h-0.5 bg-emerald-400/80 animate-pulse" />
+        <div className="absolute inset-x-10 top-1/2 h-0.5 bg-accent animate-pulse" />
+        <div className="absolute inset-8 border-2 border-surface/60 rounded-[14px] pointer-events-none" />
       </div>
-      {error && <div className="text-sm text-amber-600">{error}</div>}
+      {error && <div className="text-sm text-warn">{error}</div>}
       {found && (
-        <div className="rounded-xl border border-emerald-300 p-3 flex flex-col gap-2">
+        <div className="card p-3 flex flex-col gap-3 border-accent">
           <ProductCard p={found} />
           <div className="flex items-center gap-3">
-            <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-9 h-9 rounded-full border">−</button>
-            <span className="font-semibold">{qty}</span>
-            <button onClick={() => setQty(qty + 1)} className="w-9 h-9 rounded-full border">+</button>
-            <button onClick={add} className="flex-1 rounded-lg bg-emerald-600 text-white py-2 font-semibold">Add to cart</button>
+            <button onClick={() => setQty(Math.max(1, qty - 1))} className="btn btn-ghost w-10 h-10 p-0 rounded-full" aria-label="Less"><IconMinus className="w-4 h-4" /></button>
+            <span className="mono text-lg w-6 text-center">{qty}</span>
+            <button onClick={() => setQty(qty + 1)} className="btn btn-ghost w-10 h-10 p-0 rounded-full" aria-label="More"><IconPlus className="w-4 h-4" /></button>
+            <button onClick={add} className="btn btn-primary flex-1">Add to cart</button>
           </div>
         </div>
       )}
       <form onSubmit={(e) => { e.preventDefault(); onCode(manual.trim()); setManual(""); }} className="flex gap-2">
-        <input value={manual} onChange={(e) => setManual(e.target.value)} inputMode="numeric" placeholder="Type barcode" className="flex-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm" />
-        <button className="rounded-lg border px-3 text-sm">Look up</button>
+        <input value={manual} onChange={(e) => setManual(e.target.value)} inputMode="numeric" placeholder="Type the barcode number" className="field flex-1" />
+        <button className="btn btn-ghost">Look up</button>
       </form>
-      <label className="text-center text-sm text-emerald-700 dark:text-emerald-400 cursor-pointer">Can&apos;t find the barcode? Take a photo instead
+      <label className="btn btn-ghost w-full cursor-pointer"><IconCamera className="w-4 h-4" />No barcode? Photograph the product
         <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onPhoto(f); e.target.value = ""; }} />
       </label>
     </div>

@@ -3,7 +3,7 @@
   "short_name": "Royal Stack",
   "start_url": "/shop",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#059669",
+  "background_color": "#eef2ec",
+  "theme_color": "#e39a0c",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }

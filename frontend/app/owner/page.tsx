@@ -27,29 +27,29 @@ export default function OwnerPage() {
     owner.me().then((m) => { setStores(m.stores); setStore(m.stores[0] ?? ""); }).catch((e) => setError(e.message));
   }, [user]);
 
-  if (user === undefined) return <main className="p-6 text-zinc-500">Loading…</main>;
+  if (user === undefined) return <main className="p-6 text-muted">Loading…</main>;
   if (!user) return (
     <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-2xl font-bold">Store owner dashboard</h1>
-      <p className="text-zinc-500 max-w-sm">Sign in with the Google account registered for your store.</p>
-      <button onClick={() => signInWithGoogle().catch((e) => setError(e.message))} className="rounded-lg bg-emerald-600 text-white px-5 py-2 font-semibold">Sign in with Google</button>
-      {error && <p className="text-sm text-red-600 max-w-sm">{error.includes("operation-not-allowed") ? "Google sign-in is not enabled yet in the Firebase console (Authentication → Sign-in method → Google)." : error}</p>}
+      <div><div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Owner dashboard</h1></div>
+      <p className="text-muted max-w-sm">Sign in with the Google account registered for your store.</p>
+      <button onClick={() => signInWithGoogle().catch((e) => setError(e.message))} className="btn btn-primary px-6 py-3">Sign in with Google</button>
+      {error && <p className="chip chip-bad max-w-sm">{error.includes("operation-not-allowed") ? "Google sign-in is not enabled yet in the Firebase console (Authentication → Sign-in method → Google)." : error}</p>}
     </main>
   );
-  if (!store) return <main className="p-6 text-zinc-500">{error || `No store is registered for ${user.email}. Ask the administrator to add your email to the store.`}</main>;
+  if (!store) return <main className="p-6 text-muted">{error || `No store is registered for ${user.email}. Ask the administrator to add your email to the store.`}</main>;
 
   return (
     <div className="flex flex-col h-dvh">
-      <header className="flex items-center gap-3 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800">
+      <header className="flex items-center gap-3 px-4 py-2.5 border-b border-line bg-surface">
         <img src="/icon.svg" alt="" className="w-7 h-7" />
-        <div className="font-semibold">Owner</div>
-        {stores.length > 1 ? <select value={store} onChange={(e) => setStore(e.target.value)} className="text-sm bg-transparent border rounded px-1">{stores.map((s) => <option key={s}>{s}</option>)}</select> : <span className="text-sm text-zinc-500">{store}</span>}
+        <div><div className="eyebrow leading-none">Owner</div><div className="display font-semibold leading-tight">Royal Stack</div></div>
+        {stores.length > 1 ? <select value={store} onChange={(e) => setStore(e.target.value)} className="field w-auto py-1 text-sm">{stores.map((s) => <option key={s}>{s}</option>)}</select> : <span className="chip chip-muted">{store}</span>}
         <span className="flex-1" />
-        <span className="text-xs text-zinc-500 hidden sm:inline">{user.email}</span>
-        <button onClick={() => signOutOwner()} className="text-xs underline">Sign out</button>
+        <span className="text-xs text-muted hidden sm:inline">{user.email}</span>
+        <button onClick={() => signOutOwner()} className="btn btn-ghost py-1.5 text-xs">Sign out</button>
       </header>
-      <nav className="flex overflow-x-auto border-b border-zinc-200 dark:border-zinc-800 text-sm">
-        {TABS.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2 whitespace-nowrap ${tab === t.id ? "border-b-2 border-emerald-600 font-semibold" : "text-zinc-500"}`}>{t.label}</button>)}
+      <nav className="flex overflow-x-auto border-b border-line text-sm bg-surface">
+        {TABS.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 whitespace-nowrap font-semibold ${tab === t.id ? "border-b-2 border-accent text-ink" : "text-muted"}`}>{t.label}</button>)}
       </nav>
       <div className="flex-1 overflow-y-auto">
         {tab === "overview" && <OverviewTab store={store} />}
@@ -65,13 +65,13 @@ export default function OwnerPage() {
 }
 
 function Tile({ label, value, tone = "" }: { label: string; value: string | number; tone?: string }) {
-  return <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 p-3"><div className="text-xs text-zinc-500">{label}</div><div className={`text-xl font-bold ${tone}`}>{value}</div></div>;
+  return <div className="card p-3"><div className="eyebrow">{label}</div><div className={`mono text-2xl font-semibold mt-1 ${tone}`}>{value}</div></div>;
 }
 
 function OverviewTab({ store }: { store: string }) {
   const [o, setO] = useState<Overview | null>(null);
   useEffect(() => { owner.overview(store).then(setO); const t = setInterval(() => owner.overview(store).then(setO), 15000); return () => clearInterval(t); }, [store]);
-  if (!o) return <p className="p-4 text-zinc-500">Loading…</p>;
+  if (!o) return <p className="p-4 text-muted">Loading</p>;
   return (
     <div className="p-4 space-y-4 max-w-4xl">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -85,7 +85,7 @@ function OverviewTab({ store }: { store: string }) {
         <Tile label="Exit flags open" value={o.open_flags} tone={o.open_flags ? "text-red-600" : ""} />
       </div>
       <RevenueChart series={o.series} />
-      <div className="text-sm text-zinc-500">By channel today: {Object.entries(o.today.by_channel).map(([k, v]) => `${k} ${money(v)}`).join(" · ") || "no sales yet"}</div>
+      <div className="text-sm text-muted">By channel today: {Object.entries(o.today.by_channel).map(([k, v]) => `${k} ${money(v)}`).join(" · ") || "no sales yet"}</div>
     </div>
   );
 }
@@ -97,7 +97,7 @@ function InventoryTab({ store }: { store: string }) {
   const load = () => owner.inventory(store).then(setRows);
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shown = rows.filter((r) => (filter === "all" || r.status === filter) && r.name.toLowerCase().includes(q.toLowerCase()));
-  const badge: Record<string, string> = { ok: "bg-zinc-100 text-zinc-600", low: "bg-amber-100 text-amber-800", out: "bg-red-100 text-red-800", dead: "bg-purple-100 text-purple-800", overstock: "bg-blue-100 text-blue-800" };
+  const badge: Record<string, string> = { ok: "chip-muted", low: "chip-warn", out: "chip-bad", dead: "chip-accent", overstock: "chip-muted" };
   async function edit(r: InvRow, field: "reorder_point" | "reorder_qty") {
     const v = window.prompt?.(`${field.replace("_", " ")} for ${r.name}`, String(r[field]));
     if (v && /^\d+$/.test(v)) { await owner.patchInventory(store, r.product_id, { [field]: Number(v) }); load(); }
@@ -109,21 +109,21 @@ function InventoryTab({ store }: { store: string }) {
   return (
     <div className="p-4 space-y-3">
       <div className="flex flex-wrap gap-2 items-center">
-        {(["all", "low", "out", "dead", "overstock", "ok"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-3 py-1 text-xs border ${filter === f ? "bg-emerald-600 text-white border-emerald-600" : ""}`}>{f}</button>)}
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="ml-auto rounded-lg border px-3 py-1 text-sm bg-transparent" />
+        {(["all", "low", "out", "dead", "overstock", "ok"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`chip ${filter === f ? "bg-ink text-bg" : "chip-muted"}`}>{f}</button>)}
+        <input id="inv-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="field ml-auto w-auto py-1.5 text-sm" />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-zinc-500"><tr><th className="py-1">Product</th><th>Status</th><th className="text-right">Available</th><th className="text-right">Avg/day</th><th className="text-right">Days cover</th><th className="text-right">Reorder pt</th><th className="text-right">Reorder qty</th><th>Aisle</th><th></th></tr></thead>
+          <thead className="text-left eyebrow"><tr><th className="py-1">Product</th><th>Status</th><th className="text-right">Available</th><th className="text-right">Avg/day</th><th className="text-right">Days cover</th><th className="text-right">Reorder pt</th><th className="text-right">Reorder qty</th><th>Aisle</th><th></th></tr></thead>
           <tbody>{shown.map((r) => (
-            <tr key={r.product_id} className="border-t border-zinc-100 dark:border-zinc-800">
+            <tr key={r.product_id} className="border-t border-line">
               <td className="py-1.5">{r.name}</td>
-              <td><span className={`rounded-full px-2 py-0.5 text-xs ${badge[r.status]}`}>{r.status}</span></td>
-              <td className="text-right">{r.available}</td><td className="text-right">{r.avg_daily ?? "–"}</td><td className="text-right">{r.days_of_cover ?? "–"}</td>
-              <td className="text-right"><button onClick={() => edit(r, "reorder_point")} className="underline decoration-dotted">{r.reorder_point}</button></td>
-              <td className="text-right"><button onClick={() => edit(r, "reorder_qty")} className="underline decoration-dotted">{r.reorder_qty}</button></td>
+              <td><span className={`chip ${badge[r.status]}`}><span className="dot" />{r.status}</span></td>
+              <td className="text-right mono">{r.available}</td><td className="text-right mono">{r.avg_daily ?? "–"}</td><td className="text-right mono">{r.days_of_cover ?? "–"}</td>
+              <td className="text-right"><button onClick={() => edit(r, "reorder_point")} className="mono underline decoration-dotted">{r.reorder_point}</button></td>
+              <td className="text-right"><button onClick={() => edit(r, "reorder_qty")} className="mono underline decoration-dotted">{r.reorder_qty}</button></td>
               <td>{r.aisle}</td>
-              <td><button onClick={() => count(r)} className="text-xs text-zinc-500 underline">count</button></td>
+              <td><button onClick={() => count(r)} className="text-xs text-muted underline">count</button></td>
             </tr>))}</tbody>
         </table>
       </div>
@@ -141,27 +141,27 @@ function ReordersTab({ store }: { store: string }) {
   return (
     <div className="p-4 space-y-3 max-w-4xl">
       <div className="flex items-center gap-3">
-        <button onClick={makeDrafts} disabled={busy} className="rounded-lg bg-emerald-600 disabled:bg-zinc-300 text-white px-4 py-2 text-sm font-semibold">{busy ? "Drafting with Gemini…" : "Draft reorders now"}</button>
-        <span className="text-xs text-zinc-500">Nothing is sent to a supplier until you approve.</span>
+        <button onClick={makeDrafts} disabled={busy} className="btn btn-primary">{busy ? "Drafting with Gemini" : "Draft reorders now"}</button>
+        <span className="text-xs text-muted">Nothing is sent to a supplier until you approve.</span>
       </div>
-      {drafts.length === 0 && <p className="text-zinc-500 text-sm">No drafts yet.</p>}
+      {drafts.length === 0 && <p className="text-muted text-sm">No drafts yet.</p>}
       {drafts.map((d) => (
-        <div key={d.po_id} className={`rounded-xl border p-3 space-y-2 ${d.status === "draft" ? "border-amber-300" : "border-zinc-200 dark:border-zinc-700"}`}>
+        <div key={d.po_id} className={`card p-3 space-y-2 ${d.status === "draft" ? "border-accent" : ""}`}>
           <div className="flex items-center gap-2">
             <div className="font-semibold">{d.supplier_name}</div>
-            <span className={`text-xs rounded-full px-2 py-0.5 ${d.status === "approved" ? "bg-emerald-100 text-emerald-800" : d.status === "rejected" ? "bg-zinc-200 text-zinc-600" : "bg-amber-100 text-amber-800"}`}>{d.status}</span>
-            <span className="text-xs text-zinc-500">{d.lines.length} lines · {new Date(d.created_at).toLocaleString()}</span>
+            <span className={`chip ${d.status === "approved" ? "chip-good" : d.status === "rejected" ? "chip-muted" : "chip-warn"}`}><span className="dot" />{d.status}</span>
+            <span className="text-xs text-muted">{d.lines.length} lines · {new Date(d.created_at).toLocaleString()}</span>
           </div>
-          <p className="text-sm italic text-zinc-600 dark:text-zinc-300">{d.summary}</p>
-          <ul className="text-sm space-y-1">{d.lines.map((l) => <li key={l.product_id}><b>{l.name}</b> × {l.qty} <span className="text-zinc-500">· {l.available} left, reorder point {l.reorder_point}{l.avg_daily ? `, ${l.avg_daily}/day` : ""}</span><div className="text-xs text-zinc-500">{l.reason}</div></li>)}</ul>
+          <p className="text-sm text-muted">{d.summary}</p>
+          <ul className="text-sm space-y-1">{d.lines.map((l) => <li key={l.product_id}><b>{l.name}</b> × {l.qty} <span className="text-muted mono text-xs">· {l.available} left, point {l.reorder_point}{l.avg_daily ? `, ${l.avg_daily}/day` : ""}</span><div className="text-xs text-muted">{l.reason}</div></li>)}</ul>
           {d.status === "draft" && (
             <div className="flex gap-2">
-              <button onClick={async () => { await owner.approve(store, d.po_id, {}); load(); }} className="rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-sm">Approve</button>
-              <button onClick={async () => { const r = window.prompt?.("Reason") ?? ""; await owner.reject(store, d.po_id, r); load(); }} className="rounded-lg border px-3 py-1.5 text-sm">Reject</button>
+              <button onClick={async () => { await owner.approve(store, d.po_id, {}); load(); }} className="btn btn-primary py-2">Approve</button>
+              <button onClick={async () => { const r = window.prompt?.("Reason") ?? ""; await owner.reject(store, d.po_id, r); load(); }} className="btn btn-ghost py-2">Reject</button>
             </div>
           )}
-          {d.status === "approved" && <button onClick={() => setOpen(open === d.po_id ? null : d.po_id)} className="text-xs underline">{open === d.po_id ? "Hide" : "Show"} supplier email</button>}
-          {open === d.po_id && <pre className="text-xs whitespace-pre-wrap bg-zinc-50 dark:bg-zinc-900 rounded p-2">{d.email_text}</pre>}
+          {d.status === "approved" && <button onClick={() => setOpen(open === d.po_id ? null : d.po_id)} className="text-xs underline text-muted">{open === d.po_id ? "Hide" : "Show"} supplier email</button>}
+          {open === d.po_id && <pre className="text-xs whitespace-pre-wrap bg-surface-2 rounded-[10px] p-3 mono">{d.email_text}</pre>}
         </div>
       ))}
     </div>
@@ -172,18 +172,18 @@ function SignalsTab({ store }: { store: string }) {
   const [s, setS] = useState<Signals | null>(null);
   const [days, setDays] = useState(7);
   useEffect(() => { owner.signals(store, days).then(setS); }, [store, days]);
-  if (!s) return <p className="p-4 text-zinc-500">Loading…</p>;
+  if (!s) return <p className="p-4 text-muted">Loading</p>;
   return (
     <div className="p-4 space-y-4 max-w-3xl">
-      <div className="flex gap-2 text-xs">{[1, 7, 30].map((d) => <button key={d} onClick={() => setDays(d)} className={`rounded-full px-3 py-1 border ${days === d ? "bg-emerald-600 text-white border-emerald-600" : ""}`}>{d === 1 ? "Today" : `${d} days`}</button>)}</div>
+      <div className="flex gap-2 text-xs">{[1, 7, 30].map((d) => <button key={d} onClick={() => setDays(d)} className={`chip ${days === d ? "bg-ink text-bg" : "chip-muted"}`}>{d === 1 ? "Today" : `${d} days`}</button>)}</div>
       <section>
-        <h2 className="font-semibold">Asked for, but we don&apos;t carry it</h2>
-        <p className="text-xs text-zinc-500 mb-2">Captured from shopper conversations. The assistant records these itself.</p>
-        {s.not_carried.length === 0 ? <p className="text-sm text-zinc-500">Nothing yet.</p> : <ul className="text-sm space-y-1">{s.not_carried.map((r) => <li key={r.query} className="flex justify-between border-t border-zinc-100 dark:border-zinc-800 py-1"><span>{r.query} {r.source === "agent" && <span className="text-xs text-emerald-600">· assistant</span>}</span><b>{r.count}×</b></li>)}</ul>}
+        <h2 className="text-base font-semibold">Asked for, but we don&apos;t carry it</h2>
+        <p className="text-xs text-muted mb-2">Captured from shopper conversations. The assistant records these itself.</p>
+        {s.not_carried.length === 0 ? <p className="text-sm text-muted">Nothing yet.</p> : <ul className="text-sm space-y-1">{s.not_carried.map((r) => <li key={r.query} className="flex justify-between border-t border-line py-1.5"><span>{r.query} {r.source === "agent" && <span className="chip chip-accent ml-1">assistant</span>}</span><b className="mono">{r.count}×</b></li>)}</ul>}
       </section>
       <section>
-        <h2 className="font-semibold">Asked for, but out of stock</h2>
-        {s.out_of_stock.length === 0 ? <p className="text-sm text-zinc-500">Nothing yet.</p> : <ul className="text-sm space-y-1">{s.out_of_stock.map((r) => <li key={r.product_id} className="flex justify-between border-t border-zinc-100 dark:border-zinc-800 py-1"><span>{r.name}</span><span>{r.count}× · est. lost {money(r.lost_sales)}</span></li>)}</ul>}
+        <h2 className="text-base font-semibold">Asked for, but out of stock</h2>
+        {s.out_of_stock.length === 0 ? <p className="text-sm text-muted">Nothing yet.</p> : <ul className="text-sm space-y-1">{s.out_of_stock.map((r) => <li key={r.product_id} className="flex justify-between border-t border-line py-1.5"><span>{r.name}</span><span className="mono">{r.count}× · lost {money(r.lost_sales)}</span></li>)}</ul>}
       </section>
     </div>
   );
@@ -194,32 +194,32 @@ function LossTab({ store }: { store: string }) {
   const [form, setForm] = useState<Partial<Loss["settings"]>>({});
   const load = () => owner.loss(store).then((x) => { setL(x); setForm(x.settings); });
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!l) return <p className="p-4 text-zinc-500">Loading…</p>;
+  if (!l) return <p className="p-4 text-muted">Loading</p>;
   const s = l.summary;
   return (
     <div className="p-4 space-y-4 max-w-3xl">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Tile label="Exits (7d)" value={s.total} /><Tile label="Clear" value={s.clear} /><Tile label="Spot checks" value={s.spot_check} tone="text-amber-600" /><Tile label="Flags" value={s.flag} tone="text-red-600" />
+        <Tile label="Exits (7d)" value={s.total} /><Tile label="Clear" value={s.clear} /><Tile label="Spot checks" value={s.spot_check} tone="text-warn" /><Tile label="Flags" value={s.flag} tone="text-bad" />
         <Tile label="Flag rate" value={`${Math.round(s.flag_rate * 100)}%`} /><Tile label="Issues confirmed" value={s.issue_confirmed} /><Tile label="Random audits" value={`${Math.round(s.audit_rate * 100)}%`} />
       </div>
       <section>
-        <h2 className="font-semibold">Shrink candidates (shelf count vs system)</h2>
-        {l.shrink.length === 0 ? <p className="text-sm text-zinc-500">No discrepancies. Use &quot;count&quot; on the Inventory tab to record shelf counts.</p> :
-          <ul className="text-sm">{l.shrink.map((r) => <li key={r.product_id} className="flex justify-between border-t border-zinc-100 dark:border-zinc-800 py-1"><span>{r.name}</span><span>{r.counted} counted vs {r.system} · <b>{r.difference > 0 ? "+" : ""}{r.difference}</b> · {money(r.value)}</span></li>)}</ul>}
+        <h2 className="text-base font-semibold">Shrink candidates (shelf count vs system)</h2>
+        {l.shrink.length === 0 ? <p className="text-sm text-muted">No discrepancies. Use &quot;count&quot; on the Inventory tab to record shelf counts.</p> :
+          <ul className="text-sm">{l.shrink.map((r) => <li key={r.product_id} className="flex justify-between border-t border-line py-1.5"><span>{r.name}</span><span className="mono">{r.counted} vs {r.system} · <b>{r.difference > 0 ? "+" : ""}{r.difference}</b> · {money(r.value)}</span></li>)}</ul>}
       </section>
       <section>
-        <h2 className="font-semibold">Recent exits</h2>
-        <ul className="text-sm">{l.recent.slice(0, 10).map((v) => <li key={v.verification_id} className="border-t border-zinc-100 dark:border-zinc-800 py-1"><span className={v.verdict === "flag" ? "text-red-600" : v.verdict === "spot_check" ? "text-amber-600" : "text-emerald-600"}>{v.verdict}</span> · {new Date(v.created_at).toLocaleTimeString()} {v.reasons.length > 0 && <span className="text-zinc-500">· {v.reasons.join("; ")}</span>}{v.review_outcome && <span className="text-xs"> · {v.review_outcome}</span>}</li>)}</ul>
+        <h2 className="text-base font-semibold">Recent exits</h2>
+        <ul className="text-sm">{l.recent.slice(0, 10).map((v) => <li key={v.verification_id} className="border-t border-line py-1.5"><span className={`chip ${v.verdict === "flag" ? "chip-bad" : v.verdict === "spot_check" ? "chip-warn" : "chip-good"}`}>{v.verdict}</span> · {new Date(v.created_at).toLocaleTimeString()} {v.reasons.length > 0 && <span className="text-muted">· {v.reasons.join("; ")}</span>}{v.review_outcome && <span className="text-xs"> · {v.review_outcome}</span>}</li>)}</ul>
       </section>
       <section className="space-y-2">
-        <h2 className="font-semibold">Controls</h2>
+        <h2 className="text-base font-semibold">Controls</h2>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <label>Self-checkout item limit<input type="number" value={form.self_checkout_item_limit ?? ""} onChange={(e) => setForm({ ...form, self_checkout_item_limit: Number(e.target.value) })} className="w-full rounded border px-2 py-1 bg-transparent" /></label>
-          <label>High-value threshold (₹)<input type="number" value={form.high_value_threshold ?? ""} onChange={(e) => setForm({ ...form, high_value_threshold: Number(e.target.value) })} className="w-full rounded border px-2 py-1 bg-transparent" /></label>
-          <label>Random audit rate (0–1)<input type="number" step="0.05" value={form.audit_rate ?? ""} onChange={(e) => setForm({ ...form, audit_rate: Number(e.target.value) })} className="w-full rounded border px-2 py-1 bg-transparent" /></label>
-          <label>Kiosk PIN<input value={form.kiosk_pin ?? ""} onChange={(e) => setForm({ ...form, kiosk_pin: e.target.value })} className="w-full rounded border px-2 py-1 bg-transparent" /></label>
+          <label>Self-checkout item limit<input type="number" value={form.self_checkout_item_limit ?? ""} onChange={(e) => setForm({ ...form, self_checkout_item_limit: Number(e.target.value) })} className="field mt-1" /></label>
+          <label>High-value threshold (₹)<input type="number" value={form.high_value_threshold ?? ""} onChange={(e) => setForm({ ...form, high_value_threshold: Number(e.target.value) })} className="field mt-1" /></label>
+          <label>Random audit rate (0–1)<input type="number" step="0.05" value={form.audit_rate ?? ""} onChange={(e) => setForm({ ...form, audit_rate: Number(e.target.value) })} className="field mt-1" /></label>
+          <label>Kiosk PIN<input value={form.kiosk_pin ?? ""} onChange={(e) => setForm({ ...form, kiosk_pin: e.target.value })} className="field mt-1" /></label>
         </div>
-        <button onClick={async () => { await owner.settings(store, form); load(); }} className="rounded-lg bg-emerald-600 text-white px-4 py-1.5 text-sm">Save</button>
+        <button onClick={async () => { await owner.settings(store, form); load(); }} className="btn btn-primary">Save</button>
       </section>
     </div>
   );
@@ -252,35 +252,35 @@ function ConnectorsTab({ store }: { store: string }) {
   return (
     <div className="p-4 space-y-4 max-w-3xl">
       <section className="space-y-2">
-        <h2 className="font-semibold">Import products from any file</h2>
-        <p className="text-xs text-zinc-500">Export from your POS, Excel, Google Sheets or Shopify as CSV. The assistant reads the header and a few rows, proposes how the columns map to ours, and you confirm. Your data is converted by the connector, not by the model.</p>
+        <h2 className="text-base font-semibold">Import products from any file</h2>
+        <p className="text-xs text-muted">Export from your POS, Excel, Google Sheets or Shopify as CSV. The assistant reads the header and a few rows, proposes how the columns map to ours, and you confirm. Your data is converted by the connector, not by the model.</p>
         <div className="flex flex-wrap items-center gap-2">
           <input type="file" accept=".csv,text/csv" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setAnalysis(null); }} className="text-sm" />
-          <button onClick={analyse} disabled={!file || busy} className="rounded-lg bg-emerald-600 disabled:bg-zinc-300 text-white px-4 py-1.5 text-sm">{busy ? "Analysing…" : "Analyse with AI"}</button>
+          <button onClick={analyse} disabled={!file || busy} className="btn btn-primary">{busy ? "Analysing" : "Analyse with AI"}</button>
         </div>
         {analysis && (
-          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 p-3 text-sm space-y-1">
-            <div className="flex items-center gap-2"><b>Proposed mapping</b><span className="text-xs rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5">{analysis.source === "model" ? `AI · ${Math.round(analysis.confidence * 100)}% confident` : "heuristic"}</span></div>
-            {analysis.notes.map((n) => <div key={n} className="text-zinc-600 dark:text-zinc-300">· {n}</div>)}
-            {analysis.questions.map((q) => <div key={q} className="text-amber-700 dark:text-amber-400">? {q}</div>)}
-            <div className="text-xs text-zinc-500">Columns in your file: {analysis.header.join(", ")}</div>
+          <div className="card border-accent p-3 text-sm space-y-1">
+            <div className="flex items-center gap-2"><b>Proposed mapping</b><span className="chip chip-accent">{analysis.source === "model" ? `AI · ${Math.round(analysis.confidence * 100)}% confident` : "heuristic"}</span></div>
+            {analysis.notes.map((n) => <div key={n} className="text-muted">· {n}</div>)}
+            {analysis.questions.map((q) => <div key={q} className="text-warn">? {q}</div>)}
+            <div className="text-xs text-muted">Columns in your file: {analysis.header.join(", ")}</div>
           </div>
         )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-          {fields.map((k) => <label key={k} className="text-xs">{k}{["sku", "name", "price", "on_hand"].includes(k) && <span className="text-red-600">*</span>}
+          {fields.map((k) => <label key={k} className="text-xs">{k}{["sku", "name", "price", "on_hand"].includes(k) && <span className="text-bad">*</span>}
             {analysis ? (
-              <select value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="w-full rounded border px-2 py-1 bg-transparent text-sm">
-                <option value="">— not in file —</option>{analysis.header.map((h) => <option key={h} value={h}>{h}</option>)}
+              <select value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="field py-1.5 text-sm">
+                <option value="">not in file</option>{analysis.header.map((h) => <option key={h} value={h}>{h}</option>)}
               </select>
-            ) : <input value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="w-full rounded border px-2 py-1 bg-transparent text-sm" />}
+            ) : <input value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="field py-1.5 text-sm" />}
           </label>)}
         </div>
-        <button onClick={run} disabled={!file} className="rounded-lg bg-emerald-600 disabled:bg-zinc-300 text-white px-4 py-1.5 text-sm">Import with this mapping</button>
+        <button onClick={run} disabled={!file} className="btn btn-ink">Import with this mapping</button>
         {result && <p className="text-sm">{result}</p>}
       </section>
       <section className="space-y-2">
-        <h2 className="font-semibold">Printable QR codes</h2>
-        <button onClick={() => owner.qr(store).then(setQr)} className="rounded-lg border px-4 py-1.5 text-sm">Show entrance and aisle links</button>
+        <h2 className="text-base font-semibold">Printable QR codes</h2>
+        <button onClick={() => owner.qr(store).then(setQr)} className="btn btn-ghost">Show entrance and aisle links</button>
         {qr && <ul className="text-xs break-all space-y-1"><li><b>Entrance:</b> {qr.entrance_url}</li>{qr.aisles.map((a) => <li key={a.aisle}><b>{a.aisle}:</b> {a.url}</li>)}</ul>}
       </section>
     </div>
@@ -295,7 +295,7 @@ function OwnerChat({ store }: { store: string }) {
     owner.session(store).then((s) => { setSession(s); }).catch((e) => setErr(e.message));
     import("@/lib/api").then(({ api }) => api.store(store).then(setStore).catch(() => {}));
   }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (err) return <p className="p-4 text-red-600 text-sm">{err}</p>;
-  if (session?.mode !== "owner") return <p className="p-4 text-zinc-500">Starting owner assistant…</p>;
+  if (err) return <p className="p-4 chip chip-bad">{err}</p>;
+  if (session?.mode !== "owner") return <p className="p-4 text-muted">Starting the owner assistant</p>;
   return <div className="h-full"><Chat /></div>;
 }

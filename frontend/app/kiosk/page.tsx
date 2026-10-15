@@ -74,57 +74,57 @@ export default function Kiosk() {
   useEffect(() => { if (step === "result" && result?.verdict === "clear") { const t = setTimeout(reset, 5000); return () => clearTimeout(t); } }, [step, result]);
 
   if (step === "setup") return (
-    <main className="flex-1 flex flex-col gap-3 p-6 max-w-sm mx-auto w-full">
-      <h1 className="text-xl font-bold">Exit kiosk setup</h1>
-      <input value={store} onChange={(e) => setStore(e.target.value)} placeholder="Store id (demo-grocery)" className="rounded-lg border px-3 py-2" />
-      <input value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Kiosk PIN" type="password" className="rounded-lg border px-3 py-2" />
-      <input value={kioskId} onChange={(e) => setKioskId(e.target.value)} placeholder="Kiosk name" className="rounded-lg border px-3 py-2" />
-      <button onClick={() => { localStorage.setItem("rs.kiosk", JSON.stringify({ store, pin, kioskId })); setStep("scan"); }} disabled={!store || !pin} className="rounded-lg bg-emerald-600 disabled:bg-zinc-300 text-white py-2 font-semibold">Start</button>
+    <main className="flex-1 flex flex-col gap-3 p-6 max-w-sm mx-auto w-full justify-center">
+      <div><div className="eyebrow">Exit kiosk</div><h1 className="text-2xl font-semibold">Set up this tablet</h1></div>
+      <input id="k-store" value={store} onChange={(e) => setStore(e.target.value)} placeholder="Store id (demo-grocery)" className="field" />
+      <input id="k-pin" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Kiosk PIN" type="password" className="field" />
+      <input id="k-name" value={kioskId} onChange={(e) => setKioskId(e.target.value)} placeholder="Kiosk name" className="field" />
+      <button onClick={() => { localStorage.setItem("rs.kiosk", JSON.stringify({ store, pin, kioskId })); setStep("scan"); }} disabled={!store || !pin} className="btn btn-primary py-3">Start</button>
     </main>
   );
 
-  const color = result?.verdict === "clear" ? "bg-emerald-600" : result?.verdict === "spot_check" ? "bg-amber-500" : "bg-red-600";
+  const color = result?.verdict === "clear" ? "bg-good" : result?.verdict === "spot_check" ? "bg-warn" : "bg-bad";
   return (
     <main className="flex-1 flex flex-col h-dvh">
-      <header className="flex justify-between items-center px-4 py-2 text-sm text-zinc-500 border-b">
+      <header className="flex justify-between items-center px-4 py-2 text-sm text-muted border-b border-line">
         <span>{store} · {kioskId}</span>
         <button onClick={() => { localStorage.removeItem("rs.kiosk"); setStep("setup"); }}>Settings</button>
       </header>
       {(step === "scan" || step === "bag") && (
         <div className="flex-1 flex flex-col items-center gap-3 p-4">
-          <h1 className="text-2xl font-bold text-center">{step === "scan" ? "Scan your exit QR code" : "Now show your bag to the camera"}</h1>
-          <div className="relative w-full max-w-md aspect-[3/4] rounded-2xl overflow-hidden bg-black">
+          <h1 className="text-3xl font-semibold text-center">{step === "scan" ? "Scan your exit code" : "Now show your bag to the camera"}</h1>
+          <div className="relative w-full max-w-md aspect-[3/4] rounded-[18px] overflow-hidden bg-ink">
             <video ref={video} className="w-full h-full object-cover" muted playsInline />
-            {step === "scan" && <div className="absolute inset-12 border-4 border-emerald-400/70 rounded-2xl" />}
+            {step === "scan" && <div className="absolute inset-12 border-4 border-accent/80 rounded-[16px]" />}
           </div>
           {step === "bag" && (
             <div className="flex gap-3 w-full max-w-md">
-              <button onClick={() => capture()} className="flex-1 rounded-xl bg-emerald-600 text-white py-3 text-lg font-semibold">Check my bag</button>
-              <button onClick={() => capture(true)} className="rounded-xl border px-4 text-sm">Skip photo</button>
+              <button onClick={() => capture()} className="btn btn-primary flex-1 py-3.5 text-base">Check my bag</button>
+              <button onClick={() => capture(true)} className="btn btn-ghost">Skip photo</button>
             </div>
           )}
           {step === "scan" && (
             <form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); onScan(String(f.get("code"))); }} className="flex gap-2 w-full max-w-md">
-              <input name="code" placeholder="…or paste the receipt code" className="flex-1 rounded-lg border px-3 py-2 text-sm" />
-              <button className="rounded-lg border px-3 text-sm">Go</button>
+              <input name="code" placeholder="…or paste the receipt code" className="field flex-1" />
+              <button className="btn btn-ghost">Go</button>
             </form>
           )}
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <p className="text-xs text-zinc-400">A photo of your bag is checked by AI and not stored.</p>
+          {error && <p className="chip chip-bad">{error}</p>}
+          <p className="text-xs text-muted">A photo of your bag is checked by AI and not stored.</p>
         </div>
       )}
-      {step === "checking" && <div className="flex-1 flex items-center justify-center text-2xl animate-pulse">Checking…</div>}
+      {step === "checking" && <div className="flex-1 flex flex-col items-center justify-center gap-3"><div className="w-12 h-12 rounded-full border-2 border-accent border-t-transparent animate-spin" /><div className="eyebrow">Checking</div></div>}
       {step === "result" && result && (
         <div className={`flex-1 flex flex-col items-center justify-center gap-4 p-6 text-white text-center ${color}`}>
           <div className="text-7xl">{result.verdict === "clear" ? "✓" : result.verdict === "spot_check" ? "!" : "✕"}</div>
-          <h1 className="text-3xl font-bold">{result.verdict === "clear" ? "Thank you, have a nice day" : result.verdict === "spot_check" ? "Quick check with staff" : "Please wait for staff"}</h1>
+          <h1 className="text-4xl font-semibold">{result.verdict === "clear" ? "Thank you, have a nice day" : result.verdict === "spot_check" ? "Quick check with staff" : "Please wait for staff"}</h1>
           {result.order_summary && <p className="opacity-90">{result.order_summary.items.reduce((n, i) => n + i.qty, 0)} items · {money(result.order_summary.total)}</p>}
           {result.reasons.length > 0 && <ul className="text-lg space-y-1">{result.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
           {result.vision && !result.vision.skipped && <p className="text-sm opacity-80">Bag match confidence {Math.round(result.vision.confidence * 100)}%</p>}
           {result.verdict !== "clear" && (
             <div className="flex gap-3 mt-4">
-              <button onClick={() => review("cleared")} className="rounded-xl bg-white text-zinc-900 px-5 py-3 font-semibold">Checked, clear</button>
-              {result.verdict === "flag" && <button onClick={() => review("issue_confirmed")} className="rounded-xl border-2 border-white px-5 py-3 font-semibold">Issue confirmed</button>}
+              <button onClick={() => review("cleared")} className="btn bg-white text-ink px-6 py-3">Checked, clear</button>
+              {result.verdict === "flag" && <button onClick={() => review("issue_confirmed")} className="btn border-2 border-white text-white px-6 py-3">Issue confirmed</button>}
             </div>
           )}
         </div>

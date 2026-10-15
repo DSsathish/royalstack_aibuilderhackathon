@@ -8,7 +8,7 @@ const NO_SPEECH_MS = 7000;     // give up if nobody talks
 const MAX_MS = 15000;
 
 /** Records one utterance. Resolves null when no speech was detected or the loop was cancelled. */
-export function listenOnce(stream: MediaStream, ctx: AudioContext, cancelled: () => boolean): Promise<ListenResult> {
+export function listenOnce(stream: MediaStream, ctx: AudioContext, cancelled: () => boolean, onLevel?: (level: number) => void): Promise<ListenResult> {
   return new Promise((resolve) => {
     const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
     const rec = new MediaRecorder(stream, { mimeType: mime });
@@ -28,6 +28,7 @@ export function listenOnce(stream: MediaStream, ctx: AudioContext, cancelled: ()
       let sum = 0;
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
       const rms = Math.sqrt(sum / buf.length);
+      onLevel?.(Math.min(1, rms * 6));
       const now = Date.now();
       if (rms > SPEECH_RMS) { lastLoud = now; if (!spokeAt) spokeAt = now; }
       const silentFor = now - lastLoud;

@@ -28,7 +28,12 @@ function Enter() {
   }, [p?.store, p?.token, p?.aisle]);
 
   const msg = !p ? "Scan the QR code at the store entrance to start." : error || "Opening your store session…";
-  return <main className="flex-1 flex items-center justify-center p-6 text-center text-zinc-600">{msg}</main>;
+  return (
+    <main className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="w-10 h-10 rounded-full border-2 border-accent border-t-transparent animate-spin" aria-hidden />
+      <p className="text-muted">{msg}</p>
+    </main>
+  );
 }
 
 export default function Page() { return <Suspense><Enter /></Suspense>; }
