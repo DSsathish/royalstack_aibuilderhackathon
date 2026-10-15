@@ -110,7 +110,7 @@ def test_owner_qr_urls(shop):
     res = client.get(f"/owner/{shop}/qr", headers={"X-Test-Uid": "owner-1"})
     assert res.status_code == 200
     body = res.json()
-    assert f"/s/{shop}?t=" in body["entrance_url"]
+    assert f"/enter/?store={shop}&t=" in body["entrance_url"]
     assert body["aisles"][0]["aisle"] == "A1" and "&aisle=A1" in body["aisles"][0]["url"]
     assert client.get(f"/owner/{shop}/qr").status_code == 401
 

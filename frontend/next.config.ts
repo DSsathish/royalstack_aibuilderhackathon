@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  output: "export",          // static site for Firebase Hosting; every page is a client component
+  trailingSlash: true,       // /shop/ -> /shop/index.html
+  images: { unoptimized: true },
   turbopack: {
     rules: {
       "*.css": {

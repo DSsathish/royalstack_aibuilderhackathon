@@ -161,6 +161,6 @@ def owner_qr(store_id: str = STORE_ID, uid: str = Depends(current_uid)):
     store = db.store_ref(store_id).get()
     if not store.exists:
         raise HTTPException(404, "store not found")
-    base = f"{settings.app_base_url}/s/{store_id}?t={qr.entrance_token(store_id)}"
+    base = f"{settings.app_base_url}/enter/?store={store_id}&t={qr.entrance_token(store_id)}"
     aisles = [a["aisle"] for a in store.to_dict().get("floor_map", [])]
     return {"entrance_url": base, "aisles": [{"aisle": a, "url": f"{base}&aisle={a}"} for a in aisles]}

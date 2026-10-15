@@ -63,7 +63,7 @@ export default function Checkout() {
 }
 
 export function Receipt({ order }: { order: Order }) {
-  const exitUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/exit/${order.receipt_token}`;
+  const exitUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/exit/?r=${order.receipt_token}`;
   return (
     <main className="flex-1 p-4 space-y-4 max-w-md mx-auto w-full text-center">
       <div className="text-emerald-600 text-5xl">✓</div>
