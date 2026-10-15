@@ -45,3 +45,10 @@ Cloud Run: websockets are supported; request timeout raised to 3600 s for the se
 - Direct `google-genai` Live API rather than ADK `run_live`: fewer moving parts, and the tools are plain functions anyway.
 - Text frames are accepted on the live socket so the same session can be tested and typed into without a microphone.
 - Browser echo cancellation is relied on to stop the model hearing itself; no server-side AEC.
+
+## Findings during implementation
+
+- `session.receive()` in google-genai yields one model turn and stops at `turn_complete`; the connection stays open. The downlink must loop over `receive()` forever. Missing this made the session end after the first tool call.
+- Tool latency is on the critical path: the first query embedding took 12 s cold (client and auth), and retries on 429/503 could add 12 s more. Query embeddings now time out at 2.5 s with no retry and fall back to keyword search; the API warms the client at startup.
+- Production round trip through Cloud Run (16 Oct): connected 0.2 s, ready 1.8 s, spoken answer with `show_products` action at 6.7 s.
+- Cloud Run request timeout raised to 3600 s for websocket sessions.
