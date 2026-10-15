@@ -55,3 +55,7 @@ def carts() -> firestore.CollectionReference:
 
 def orders() -> firestore.CollectionReference:
     return client().collection("orders")
+
+
+def verifications() -> firestore.CollectionReference:
+    return client().collection("verifications")
