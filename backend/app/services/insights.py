@@ -59,10 +59,11 @@ def shrink(store_id: str) -> list[dict]:
 
 def inventory(store_id: str) -> list[dict]:
     fc = forecast.all(store_id)
+    products, locations = catalog.product_map(store_id)   # one cached read; inventory streamed once below
     rows = []
     for d in db.inventory(store_id).stream():
         inv = d.to_dict()
-        p = catalog.get_product(store_id, d.id)
+        p = products.get(d.id)
         if not p:
             continue
         available = max(0, inv["on_hand"] - inv.get("reserved", 0))
@@ -82,7 +83,7 @@ def inventory(store_id: str) -> list[dict]:
                      "on_hand": inv["on_hand"], "reserved": inv.get("reserved", 0), "reorder_point": inv.get("reorder_point", 0),
                      "reorder_qty": inv.get("reorder_qty", 0), "supplier_id": inv.get("supplier_id", ""),
                      "lead_time_days": inv.get("lead_time_days", 3), "avg_daily": avg, "days_of_cover": cover, "status": status,
-                     "aisle": p.location.aisle if p.location else ""})
+                     "aisle": locations[d.id].aisle if d.id in locations else ""})
     return sorted(rows, key=lambda r: ({"out": 0, "low": 1, "dead": 2, "overstock": 3, "ok": 4}[r["status"]], r["name"]))
 
 

@@ -122,12 +122,13 @@ def record_demand_signal(requested_item: str, tool_context: ToolContext) -> dict
 def get_low_stock(tool_context: ToolContext, limit: int = 20) -> dict:
     """Owner tool: products at or below their reorder point, with supplier."""
     store_id = tool_context.state["store_id"]
+    products, _ = catalog.product_map(store_id)
     items = []
     for d in db.inventory(store_id).stream():
         inv = d.to_dict()
         available = inv["on_hand"] - inv.get("reserved", 0)
         if available <= inv.get("reorder_point", 0):
-            v = catalog.get_product(store_id, d.id)
+            v = products.get(d.id)
             items.append({"product_id": d.id, "name": v.name if v else d.id, "available": available,
                           "reorder_point": inv.get("reorder_point", 0), "supplier_id": inv.get("supplier_id", "")})
     items.sort(key=lambda i: i["available"])

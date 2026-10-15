@@ -38,6 +38,12 @@ def _view(store_id: str, p: Product, locations: dict[str, Location]) -> ProductV
                        location=locations.get(p.product_id))
 
 
+def product_map(store_id: str) -> tuple[dict[str, Product], dict[str, Location]]:
+    """Cached products and locations by id, with no inventory reads. For bulk views that stream inventory themselves."""
+    products, locations = _load(store_id)
+    return {p.product_id: p for p in products}, locations
+
+
 def get_product(store_id: str, product_id: str) -> ProductView | None:
     products, locations = _load(store_id)
     p = next((p for p in products if p.product_id == product_id), None)

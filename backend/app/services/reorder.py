@@ -25,10 +25,11 @@ def reorder_point(*, avg_daily: float, lead_time_days: int, std_daily: float) ->
 
 def candidates(store_id: str) -> dict[str, list[dict]]:
     fc = forecast.all(store_id)
+    products, _ = catalog.product_map(store_id)
     groups: dict[str, list[dict]] = {}
     for d in db.inventory(store_id).stream():
         inv = d.to_dict()
-        p = catalog.get_product(store_id, d.id)
+        p = products.get(d.id)
         if not p:
             continue
         f = fc.get(d.id)
