@@ -18,6 +18,7 @@ def verify_id_token(token: str) -> dict:
 
 
 _EMAILS: dict[str, str] = {}   # uid -> email seen on the last verified token (for owner bootstrap)
+_PHONES: dict[str, str] = {}   # uid -> phone number from a phone sign-in token (shopper identity)
 
 
 def current_uid(authorization: str | None = Header(default=None),
@@ -29,7 +30,17 @@ def current_uid(authorization: str | None = Header(default=None),
     claims = verify_id_token(authorization.removeprefix("Bearer "))
     if claims.get("email") and claims.get("email_verified"):
         _EMAILS[claims["sub"]] = claims["email"].lower()
+    if claims.get("phone_number"):
+        _PHONES[claims["sub"]] = claims["phone_number"]
     return claims["sub"]
+
+
+def require_phone(uid: str) -> str:
+    """The phone number behind a shopper token; 403 for tokens without one."""
+    phone = _PHONES.get(uid)
+    if not phone:
+        raise HTTPException(403, "a phone sign-in is required")
+    return phone
 
 
 def _bootstrap(uid: str, field: str, role: str) -> list[str]:

@@ -27,3 +27,4 @@ Rules we follow in code:
 | conversation memory, voice tuning, reconnect, named voice | [voice-memory.md](voice-memory.md) | done |
 | R1 self-service shops: registration, setup, roles, per-store payments | [r1-self-service.md](r1-self-service.md) | done |
 | R3 scan-first cart, owner add-by-scan with barcode lookup | [r3-scan-first.md](r3-scan-first.md) | done |
+| R4 optional shopper identity: phone OTP, profile, history, export and delete, customers for owners | [r4-identity.md](r4-identity.md) | done |

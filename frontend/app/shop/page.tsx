@@ -2,6 +2,8 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, api } from "@/lib/api";
+import { firstAuthState } from "@/lib/firebase";
+import { me } from "@/lib/me";
 import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import Scanner from "@/components/Scanner";
@@ -14,7 +16,7 @@ type Tab = "chat" | "scan" | "cart" | "map";
 
 export default function Shop() {
   const router = useRouter();
-  const { session, store, setStore, setCart, highlight, setSession } = useApp();
+  const { session, store, setStore, setCart, highlight, setSession, setCustomer } = useApp();
   const [tab, setTab] = useState<Tab>("chat");
   const [photo, setPhoto] = useState<File | null>(null);
 
@@ -23,7 +25,10 @@ export default function Shop() {
     const expired = (e: unknown) => { if (e instanceof ApiError && (e.status === 401 || e.status === 404)) setSession(null); };
     api.store(session.store_id).then(setStore).catch(expired);
     api.cart(session).then(setCart).catch(expired);
-  }, [session, router, setStore, setCart, setSession]);
+    if (session.customer_id && !useApp.getState().customer) {      // reload: remember who is signed in
+      firstAuthState().then((u) => { if (u?.phoneNumber) me.profile(session.store_id).then((p) => setCustomer({ uid: p.uid, name: p.name })).catch(() => {}); });
+    }
+  }, [session, router, setStore, setCart, setSession, setCustomer]);
 
   useEffect(() => {   // per-store accent colour
     const accent = (store as unknown as { brand?: { accent?: string } })?.brand?.accent;

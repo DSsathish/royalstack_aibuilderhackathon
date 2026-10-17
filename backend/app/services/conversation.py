@@ -8,7 +8,9 @@ LINE_CHARS = 160
 
 
 def key(s: Session) -> str:
-    return s.user_id if s.mode == "owner" and s.user_id else s.session_id
+    if s.mode == "owner" and s.user_id:
+        return s.user_id
+    return s.customer_id or s.session_id      # signed-in shoppers keep memory across visits; guests per visit
 
 
 def _turns(s: Session):

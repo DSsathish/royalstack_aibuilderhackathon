@@ -11,6 +11,11 @@ Companion to `hld.md` section 3. Every row is implemented in the code path named
 | The dev `/sessions` endpoint cannot mint in-store sessions; owner sessions only in dev/test | `api/agent.py::create_session` | `test_api_agent.py::test_dev_sessions_endpoint_cannot_mint_instore` |
 | Owner identity: Firebase ID token verified server-side; uid from `sub`; email used only when `email_verified` | `services/auth.py::current_uid`, `verify_id_token` | `test_api_owner_import.py::test_bearer_token_uid_comes_from_sub`, `::test_unverified_email_does_not_bootstrap` |
 | Owner membership: `users/{uid}.stores`, or bootstrap from `stores/{id}.owner_emails` on first verified sign-in | `services/auth.py::owned_stores`, `require_owner` | `test_api_owner.py::test_owner_by_email_is_bootstrapped` |
+| Shopper identity is optional; a phone sign-in token is required for `/sessions/{id}/link` and every `/me/*` route, Google tokens get 403 | `services/auth.py::require_phone`, `api/me.py` | `test_api_me.py::test_link_requires_phone_token`, `::test_guest_session_has_no_customer` |
+| Only the last four digits of the phone number are stored; owners see name, spend and preferences, never the number or conversations | `services/customers.py::link`, `api/owner.py::customers_list` | `test_api_me.py::test_link_session_creates_customer_and_marks_orders`, `::test_owner_customers_listing` |
+| Self-service export and delete; delete anonymises orders and open sessions, removes turns and profiles, writes an audit entry | `services/customers.py::export`, `delete` | `test_api_me.py::test_export_and_delete` |
+| Past receipts open only for the paying visit or a later visit linked to the same shopper | `api/shop.py::get_order` | `test_api_me.py::test_signed_in_shopper_reopens_old_receipts` |
+| Profile fields bounded (name 60, lists 8/12/30 entries of 32 chars, enumerated language and substitution) | `api/me.py::ProfilePatch` | `test_api_me.py::test_profile_patch_and_assistant_block` |
 | Owner chat sessions only through the authenticated owner endpoint | `api/owner.py::owner_session` | `test_api_owner.py::test_owner_session_endpoint` |
 | `X-Test-Uid` shortcut active only when `ENV=test` | `services/auth.py::current_uid` | implicit in every owner test; Dockerfile sets no ENV, Cloud Run sets `ENV=demo` |
 
@@ -70,5 +75,5 @@ Companion to `hld.md` section 3. Every row is implemented in the code path named
 
 - Cart `add` is read-modify-write outside a transaction; a simultaneous add from chat and scan could drop a line.
 - Owner membership is not revoked when an email is removed from `owner_emails`.
-- Firebase web API key should be restricted by HTTP referrer in the Google Cloud console, and only the Google provider should be enabled in Firebase Auth (*console*).
+- Firebase web API key should be restricted by HTTP referrer in the Google Cloud console, and only the Google and Phone providers should be enabled in Firebase Auth (*console*; phone enabled 17 Oct with three test numbers that never send SMS).
 - Verification records and conversation turns are kept indefinitely; the 90-day retention job from the plan is not implemented.

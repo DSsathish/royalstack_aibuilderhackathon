@@ -16,3 +16,11 @@ os.environ["JOB_KEY"] = "test-job-key"
 @pytest.fixture
 def store_id() -> str:
     return "t-" + uuid.uuid4().hex[:10]
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """Every test starts with empty limiter windows; the suite shares one client address."""
+    from app.api import agent, exit as exit_api
+    agent.limiter.clear()
+    getattr(exit_api, "limiter", agent.limiter).clear()

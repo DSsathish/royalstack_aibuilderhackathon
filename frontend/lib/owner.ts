@@ -1,5 +1,6 @@
 /** Owner dashboard API calls. Every call carries the Firebase ID token. */
 import { API, ApiError, Session } from "./api";
+import { authed as call } from "./authed";
 import { idToken } from "./firebase";
 
 export type Overview = { today: { orders: number; revenue: number; by_channel: Record<string, number>; avg_basket: number };
@@ -16,12 +17,8 @@ export type Loss = { summary: { total: number; clear: number; spot_check: number
   recent: { verification_id: string; verdict: string; reasons: string[]; created_at: string; review_outcome: string | null }[];
   settings: { self_checkout_item_limit: number; high_value_threshold: number; audit_rate: number; kiosk_pin: string } };
 
-async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await idToken();
-  const res = await fetch(`${API}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(init.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
-  if (!res.ok) { let d = res.statusText; try { d = (await res.json()).detail ?? d; } catch {} throw new ApiError(res.status, String(d)); }
-  return res.json();
-}
+export type Customer = { uid: string; phone_last4: string; name: string; language: string; dietary: string[]; favourite_categories: string[];
+  visits: number; spend: number; points: number; last_seen: string; created_at: string };
 
 export type StoreDoc = { store_id: string; name: string; city: string; currency: string; languages: string[]; self_checkout_item_limit: number;
   brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string }[] };
@@ -49,6 +46,7 @@ export const owner = {
   draft: (s: string) => call<Draft[]>(`/owner/${s}/reorders/draft`, { method: "POST" }),
   approve: (s: string, po: string, qty: Record<string, number>) => call<Draft>(`/owner/${s}/reorders/${po}/approve`, { method: "POST", body: JSON.stringify({ qty }) }),
   reject: (s: string, po: string, reason: string) => call<Draft>(`/owner/${s}/reorders/${po}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  customers: (s: string) => call<Customer[]>(`/owner/${s}/customers`),
   signals: (s: string, days = 7) => call<Signals>(`/owner/${s}/signals?days=${days}`),
   loss: (s: string) => call<Loss>(`/owner/${s}/loss`),
   settings: (s: string, body: Partial<Loss["settings"]>) => call(`/owner/${s}/settings`, { method: "PATCH", body: JSON.stringify(body) }),

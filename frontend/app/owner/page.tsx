@@ -3,17 +3,17 @@ import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { money } from "@/lib/api";
 import { signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
-import { Draft, InvRow, Loss, Overview, Signals, StoreDoc, owner } from "@/lib/owner";
+import { Customer, Draft, InvRow, Loss, Overview, Signals, StoreDoc, owner } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
 import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import RevenueChart from "@/components/RevenueChart";
 
-type Tab = "overview" | "inventory" | "reorders" | "signals" | "loss" | "connectors" | "setup" | "exits" | "chat";
+type Tab = "overview" | "inventory" | "reorders" | "signals" | "customers" | "loss" | "connectors" | "setup" | "exits" | "chat";
 const OWNER_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" }, { id: "inventory", label: "Inventory" }, { id: "reorders", label: "Reorders" },
-  { id: "signals", label: "Signals" }, { id: "loss", label: "Loss" }, { id: "connectors", label: "Connectors" }, { id: "setup", label: "Store" }, { id: "chat", label: "Ask" },
+  { id: "signals", label: "Signals" }, { id: "customers", label: "Customers" }, { id: "loss", label: "Loss" }, { id: "connectors", label: "Connectors" }, { id: "setup", label: "Store" }, { id: "chat", label: "Ask" },
 ];
 const STAFF_TABS: { id: Tab; label: string }[] = [{ id: "inventory", label: "Shelf counts" }, { id: "exits", label: "Exits" }];
 
@@ -29,14 +29,14 @@ export default function OwnerPage() {
 
   useEffect(() => watchUser(setUser), []);
   useEffect(() => {
-    if (!user) return;
+    if (!user?.email) return;
     owner.me().then((m) => { setStores(m.stores); setRoles(m.roles); setStore(m.stores[0] ?? ""); setLoadedMe(true); if (m.roles[m.stores[0]] === "staff") setTab("inventory"); }).catch((e) => { setError(e.message); setLoadedMe(true); });
   }, [user]);
   const role = roles[store] ?? "owner";
   const TABS = role === "staff" ? STAFF_TABS : OWNER_TABS;
 
   if (user === undefined) return <main className="p-6 text-muted">Loading…</main>;
-  if (!user) return (
+  if (!user?.email) return (                       // shoppers signed in by phone are not owners
     <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
       <div><div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Owner dashboard</h1></div>
       <p className="text-muted max-w-sm">Sign in with the Google account registered for your store.</p>
@@ -67,6 +67,7 @@ export default function OwnerPage() {
         {tab === "inventory" && <InventoryTab store={store} />}
         {tab === "reorders" && <ReordersTab store={store} />}
         {tab === "signals" && <SignalsTab store={store} />}
+        {tab === "customers" && <CustomersTab store={store} />}
         {tab === "loss" && <LossTab store={store} />}
         {tab === "connectors" && <ConnectorsTab store={store} />}
         {tab === "setup" && <SetupTab store={store} newPin={newPin} />}
@@ -343,6 +344,33 @@ function SignalsTab({ store }: { store: string }) {
         <h2 className="text-base font-semibold">Asked for, but out of stock</h2>
         {s.out_of_stock.length === 0 ? <p className="text-sm text-muted">Nothing yet.</p> : <ul className="text-sm space-y-1">{s.out_of_stock.map((r) => <li key={r.product_id} className="flex justify-between border-t border-line py-1.5"><span>{r.name}</span><span className="mono">{r.count}× · lost {money(r.lost_sales)}</span></li>)}</ul>}
       </section>
+    </div>
+  );
+}
+
+function CustomersTab({ store }: { store: string }) {
+  const [rows, setRows] = useState<Customer[] | null>(null);
+  useEffect(() => { owner.customers(store).then(setRows).catch(() => setRows([])); }, [store]);
+  if (!rows) return <p className="p-4 text-muted">Loading</p>;
+  return (
+    <div className="p-4 space-y-3 max-w-4xl">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Tile label="Signed-in customers" value={rows.length} /><Tile label="Their spend" value={money(rows.reduce((n, r) => n + r.spend, 0))} />
+        <Tile label="Repeat (2+ visits)" value={rows.filter((r) => r.visits >= 2).length} /><Tile label="Points outstanding" value={rows.reduce((n, r) => n + r.points, 0)} />
+      </div>
+      <p className="text-xs text-muted">Only shoppers who chose to sign in appear here, with the last four digits of their number. Guests are counted in Overview.</p>
+      {rows.length === 0 ? <p className="text-sm text-muted">No signed-in customers yet.</p> : (
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead className="text-left text-muted text-xs"><tr><th className="py-1 pr-2">Customer</th><th className="pr-2">Visits</th><th className="pr-2">Spend</th><th className="pr-2">Points</th><th className="pr-2">Prefers</th><th>Last visit</th></tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.uid} className="border-t border-line">
+              <td className="py-1.5 pr-2">{r.name || "Shopper"} <span className="text-muted mono text-xs">····{r.phone_last4}</span></td>
+              <td className="mono pr-2">{r.visits}</td><td className="mono pr-2">{money(r.spend)}</td><td className="mono pr-2">{r.points}</td>
+              <td className="text-xs text-muted pr-2">{[...r.dietary, ...r.favourite_categories].join(", ") || "–"}</td>
+              <td className="text-xs text-muted">{new Date(r.last_seen).toLocaleDateString()}</td>
+            </tr>))}</tbody>
+        </table></div>
+      )}
     </div>
   );
 }

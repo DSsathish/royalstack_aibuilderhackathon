@@ -69,3 +69,43 @@ def store_block(state: dict) -> str:
     if state.get("store_greeting"):
         lines.append(f"When the conversation starts, greet with: \"{state['store_greeting']}\"")
     return " ".join(lines) + "\n"
+
+
+def customer_state(s) -> dict:
+    """Profile of a signed-in shopper for the prompt; {} for guests."""
+    if not getattr(s, "customer_id", None):
+        return {}
+    from app.services import catalog, customers
+    c = customers.get(s.store_id, s.customer_id)
+    if not c:
+        return {}
+    usual: list[str] = []
+    if c.usual_items:
+        products, _ = catalog.product_map(s.store_id)
+        usual = [products[pid].name for pid in c.usual_items if pid in products][:8]
+    return {"customer_name": c.name, "customer_language": c.language, "customer_dietary": c.dietary,
+            "customer_favourites": c.favourite_categories, "customer_usual": usual, "customer_substitution": c.substitution}
+
+
+def customer_block(state: dict) -> str:
+    if not state.get("customer_name") and not state.get("customer_dietary") and not state.get("customer_language"):
+        return ""
+    lines = ["\nThe shopper is signed in."]
+    if state.get("customer_name"):
+        lines.append(f"Their name is {state['customer_name']}; greet them by name once.")
+    if state.get("customer_language") and state["customer_language"] != "auto":
+        lines.append(f"They prefer {dict(en='English', ta='Tamil', hi='Hindi').get(state['customer_language'], state['customer_language'])}.")
+    if state.get("customer_dietary"):
+        lines.append(f"Dietary preferences: {', '.join(state['customer_dietary'])}. Never suggest products that conflict with these.")
+    if state.get("customer_favourites"):
+        lines.append(f"Favourite categories: {', '.join(state['customer_favourites'])}.")
+    if state.get("customer_usual"):
+        lines.append(f"They usually buy: {', '.join(state['customer_usual'])}. Mention these only when relevant, "
+                     "for example when they ask what they might be forgetting.")
+    if state.get("customer_substitution") == "same_brand":
+        lines.append("When something is out of stock, prefer the same brand in another size before other brands.")
+    elif state.get("customer_substitution") == "any":
+        lines.append("When something is out of stock, suggest any equivalent product directly.")
+    else:
+        lines.append("When something is out of stock, ask before suggesting a substitute.")
+    return " ".join(lines) + "\n"

@@ -21,7 +21,7 @@ const SUGGESTIONS = ["Where is atta?", "பால் எங்கே இரு�
 const OWNER_SUGGESTIONS = ["What is running low?", "How much milk will we sell this week?", "Prepare purchase orders", "Anything suspicious at the exits?"];
 
 export default function Chat() {
-  const { session, store, messages, push, patch, setCart, setHighlight, language, setLanguage, speak, setSpeak, setAvatar } = useApp();
+  const { session, store, messages, push, patch, setCart, setHighlight, language, setLanguage, speak, setSpeak, setAvatar, customer } = useApp();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [level, setLevel] = useState(0);
@@ -167,6 +167,7 @@ export default function Chat() {
           <div className="eyebrow">{owner ? "Owner assistant" : store?.brand?.tagline || (session?.mode === "instore" ? "In-store assistant" : "Shopping assistant")}</div>
           <h1 className="text-lg font-semibold leading-tight truncate">{store?.name ?? "Store"}</h1>
         </div>
+        {!owner && <Link href="/me" className={`chip ${customer ? "chip-accent" : "chip-muted"}`}>{customer ? (customer.name ? `Hi, ${customer.name.split(" ")[0]}` : "My profile") : "Sign in"}</Link>}
         <select id="lang" value={language} onChange={(e) => setLanguage(e.target.value as never)} className="chip chip-muted bg-surface border border-line" aria-label="Language">
           <option value="auto">Auto</option><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option>
         </select>

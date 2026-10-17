@@ -71,3 +71,13 @@ def po_drafts(store_id: str) -> firestore.CollectionReference:
 
 def counts(store_id: str) -> firestore.CollectionReference:
     return store_ref(store_id).collection("counts")
+
+
+def customers(store_id: str) -> firestore.CollectionReference:
+    """Per-store customer records: stores/{store_id}/customers/{uid}."""
+    return store_ref(store_id).collection("customers")
+
+
+def people() -> firestore.CollectionReference:
+    """One doc per signed-in shopper listing the stores they linked: people/{uid}."""
+    return client().collection("people")
