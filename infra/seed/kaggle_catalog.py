@@ -91,8 +91,8 @@ def download(dataset: str) -> Path:
     return Path(files[0])
 
 
-def sample(src: Path, category_col: str, limit: int, seed: int, categories: set[str] | None) -> list[dict]:
-    """A deterministic cross-section: every category represented, larger ones get more rows."""
+def sample(src: Path, category_col: str, limit: int, seed: int, categories: set[str] | None, per_category: int = 0) -> list[dict]:
+    """A deterministic cross-section: every category represented, larger ones get more rows (or a fixed quota each)."""
     rng = random.Random(seed)
     rows = [r for r in csv.DictReader(src.open(encoding="utf-8-sig")) if not categories or r.get(category_col) in categories]
     if not rows:
@@ -103,7 +103,7 @@ def sample(src: Path, category_col: str, limit: int, seed: int, categories: set[
     picked, seen = [], set()
     for cat, items in sorted(by_cat.items()):
         rng.shuffle(items)
-        want = max(10, round(limit * len(items) / len(rows)))
+        want = per_category or max(10, round(limit * len(items) / len(rows)))
         taken = 0
         for r in items:
             if taken >= want:
@@ -158,6 +158,7 @@ def main() -> None:
     ap.add_argument("--owner-email", action="append", default=[])
     ap.add_argument("--seed", type=int, default=1, help="different seeds give different product subsets")
     ap.add_argument("--limit", type=int, default=300)
+    ap.add_argument("--per-category", type=int, default=0, help="take this many from every source category instead of a proportional share")
     ap.add_argument("--file", help="use a local copy of the dataset instead of downloading")
     ap.add_argument("--categories", help="source categories to draw from, separated by | (names may contain commas); default: all")
     ap.add_argument("--append-sales", action="store_true", help="add to the store's sales history instead of replacing it")
@@ -169,7 +170,8 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     wanted = {c.strip() for c in a.categories.split("|")} if a.categories else None
     rng = random.Random(a.seed + 1)
-    rows = [row for r in sample(src, prof["category_col"], a.limit, a.seed, wanted) if (row := prof["row"](r, rng))]
+    limit = a.per_category * 20 if a.per_category else a.limit          # a quota run is capped by the quota, not the limit
+    rows = [row for r in sample(src, prof["category_col"], limit, a.seed, wanted, a.per_category) if (row := prof["row"](r, rng))]
     products_csv, sales_csv = OUT / f"{a.store}-products.csv", OUT / f"{a.store}-sales.csv"
     with products_csv.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=COLUMNS)
@@ -183,7 +185,7 @@ def main() -> None:
     print(f"{a.store}: {len(rows)} products across {len({r['category'] for r in rows})} categories, {len(sales)} sales rows -> {OUT}")
 
     cmd = [sys.executable, str(HERE / "import_dataset.py"), "--file", str(products_csv), "--store", a.store, "--name", a.name,
-           "--sales", str(sales_csv), "--limit", str(a.limit), "--mapping", json.dumps({c: c for c in COLUMNS})]
+           "--sales", str(sales_csv), "--limit", str(len(rows)), "--mapping", json.dumps({c: c for c in COLUMNS})]
     for e in a.owner_email:
         cmd += ["--owner-email", e]
     if a.append_sales:
