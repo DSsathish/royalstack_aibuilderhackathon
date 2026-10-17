@@ -33,6 +33,12 @@ def client() -> genai.Client:
     return genai.Client(**client_kwargs(), http_options=types.HttpOptions(retry_options=RETRY))
 
 
+
+def live_client() -> genai.Client:
+    """The client for speech-to-speech sessions: AI Studio when a live key is configured, else the same client as text."""
+    if settings.gemini_live_api_key:
+        return genai.Client(vertexai=False, api_key=settings.gemini_live_api_key)    # explicit: the Vertex env flag must not win
+    return client()
 def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float]]:
     """Returns one vector per text, or [] when Gemini is not configured or fails."""
     if not texts or not configured():

@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     # are no longer served. On a free-tier AI Studio key use gemini-3-flash-preview / gemini-3.1-flash-lite.
     gemini_flash_model: str = "gemini-3.5-flash"
     gemini_pro_model: str = "gemini-3.1-pro-preview"
-    gemini_live_model: str = "gemini-live-2.5-flash"   # speech-to-speech, verified on Vertex global
+    gemini_live_model: str = "gemini-live-2.5-flash"   # speech-to-speech; Vertex default, or an AI Studio model when the live key is set
+    gemini_live_api_key: str = ""                      # AI Studio key for the live bridge only (newer live models land there first)
+    gemini_live_affective: bool = True                 # affective dialog; some models (gemini-3.8-live) reject the option
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

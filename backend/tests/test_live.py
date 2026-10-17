@@ -135,3 +135,26 @@ def test_dispatch_coerces_string_numbers(monkeypatch):
     fake_add.__name__ = "fake_add"
     assert live.dispatch("fake_add", {"product_id": "x", "qty": "2"}, {"mode": "online"}) == {"ok": True}
     assert seen == {"product_id": "x", "qty": 2}
+
+
+def test_live_client_prefers_ai_studio_when_a_live_key_is_set(monkeypatch):
+    from app.config import settings
+    from app.services import gemini
+    sentinel = object()
+    monkeypatch.setattr(gemini, "client", lambda: sentinel)
+    monkeypatch.setattr(settings, "gemini_live_api_key", "")
+    assert gemini.live_client() is sentinel                       # no live key: the shared (Vertex) client
+    monkeypatch.setattr(settings, "gemini_live_api_key", "test-key")
+    c = gemini.live_client()
+    assert c is not sentinel and not c.vertexai
+
+
+def test_affective_dialog_is_a_setting(monkeypatch, store_id):
+    from app.config import settings
+    from app.domain.models import Store
+    from app.services import db, sessions
+    db.store_ref(store_id).set(Store(store_id=store_id, name="S").model_dump())
+    s = sessions.create(store_id, "online")
+    assert live._config(s).enable_affective_dialog is True
+    monkeypatch.setattr(settings, "gemini_live_affective", False)
+    assert live._config(s).enable_affective_dialog is None

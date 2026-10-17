@@ -11,6 +11,9 @@ os.environ["GOOGLE_CLOUD_PROJECT"] = "demo-test"
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"   # no Gemini calls in unit tests
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["JOB_KEY"] = "test-job-key"
+os.environ["GEMINI_LIVE_API_KEY"] = ""          # unit tests never touch AI Studio; local .env values must not leak in
+os.environ["GEMINI_LIVE_MODEL"] = "gemini-live-2.5-flash"
+os.environ["GEMINI_LIVE_AFFECTIVE"] = "true"
 
 
 @pytest.fixture

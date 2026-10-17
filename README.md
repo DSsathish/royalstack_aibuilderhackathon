@@ -27,7 +27,7 @@ Scan the entrance QR (see `docs/plan/00-overview.md` or the owner dashboard's Co
 
 ## Google Cloud services
 
-Cloud Run (API and websocket bridge), Firebase Hosting (static PWA), Firebase Auth (Google or email-and-password for owners and staff, phone OTP for shoppers), Firestore (operational data), BigQuery and BigQuery ML `ARIMA_PLUS` (sales history and forecasts), Vertex AI Gemini (`gemini-3.5-flash`, `gemini-live-2.5-flash`, `gemini-embedding-001`), Google ADK (agent runtime), Cloud Scheduler (nightly forecasts and customer jobs, sync every 15 minutes), Secret Manager (signing keys, per-store payment and sync secrets), Cloud Build, Artifact Registry.
+Cloud Run (API and websocket bridge), Firebase Hosting (static PWA), Firebase Auth (Google or email-and-password for owners and staff, phone OTP for shoppers), Firestore (operational data), BigQuery and BigQuery ML `ARIMA_PLUS` (sales history and forecasts), Vertex AI Gemini (`gemini-3.5-flash`, `gemini-embedding-001`) with the live voice bridge on `gemini-3.8-live` through the Gemini API (AI Studio key in Secret Manager; falls back to `gemini-live-2.5-flash` on Vertex when no live key is set), Google ADK (agent runtime), Cloud Scheduler (nightly forecasts and customer jobs, sync every 15 minutes), Secret Manager (signing keys, per-store payment and sync secrets), Cloud Build, Artifact Registry.
 
 ## Codebase
 
@@ -121,6 +121,7 @@ Scheduled jobs (Cloud Scheduler, all authenticated with `X-Job-Key`): `POST /job
 | `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` | project and region for Firestore and BigQuery |
 | `GOOGLE_GENAI_USE_VERTEXAI`, `GEMINI_LOCATION` | Vertex AI on the `global` endpoint (default); set `false` plus `GEMINI_API_KEY` for AI Studio |
 | `GEMINI_FLASH_MODEL`, `GEMINI_PRO_MODEL`, `GEMINI_LIVE_MODEL` | model ids |
+| `GEMINI_LIVE_API_KEY`, `GEMINI_LIVE_AFFECTIVE` | optional AI Studio key for the live bridge only (secret); affective dialog off for models that reject it |
 | `QR_SESSION_SIGNING_KEY` | HMAC key for entrance and receipt tokens (secret) |
 | `JOB_KEY` | shared secret for `/jobs/*` (secret) |
 | `APP_BASE_URL`, `CORS_ORIGINS` | hosting origin |

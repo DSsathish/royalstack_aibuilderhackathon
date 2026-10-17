@@ -130,7 +130,7 @@ def _config(s: Session) -> types.LiveConnectConfig:
             start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
             end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
             prefix_padding_ms=400, silence_duration_ms=1100)),
-        enable_affective_dialog=True,
+        enable_affective_dialog=True if settings.gemini_live_affective else None,
         context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
         session_resumption=types.SessionResumptionConfig(handle=_resume_handles.get(s.session_id)),
     )
@@ -148,15 +148,14 @@ async def run(ws: WebSocket, s: Session) -> None:
 
 async def _run(ws: WebSocket, s: Session) -> None:
     state = {"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "language": s.language, "customer_id": s.customer_id, "user_id": s.user_id}
-    client = gemini.client()
     recorder = TurnRecorder(lambda role, text: conversation.add_turn(s, role, text))
     try:
-        cm = client.aio.live.connect(model=settings.gemini_live_model, config=_config(s))
+        cm = gemini.live_client().aio.live.connect(model=settings.gemini_live_model, config=_config(s))
         live = await cm.__aenter__()
     except Exception:
         if not _resume_handles.pop(s.session_id, None):
             raise
-        cm = client.aio.live.connect(model=settings.gemini_live_model, config=_config(s))   # stale handle: start fresh
+        cm = gemini.live_client().aio.live.connect(model=settings.gemini_live_model, config=_config(s))   # stale handle: start fresh
         live = await cm.__aenter__()
     try:
         await ws.send_text(json.dumps({"type": "ready"}))
