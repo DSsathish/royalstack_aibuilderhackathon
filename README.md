@@ -47,7 +47,7 @@ backend/                 Python 3.12, FastAPI, Google ADK, google-genai
                          products, me (shopper), sync (inbound), owner_sync
   app/jobs/              forecast.py (sales -> ARIMA_PLUS -> forecasts), customers.py (segments, points expiry)
   app/connectors/        csv_connector (column mapping, caps, idempotent upsert), normalizer (mapping agent)
-  tests/                 257 unit tests (Firestore emulator) + live tests gated by LIVE_GEMINI=1
+  tests/                 271 unit tests (Firestore emulator) + live tests gated by LIVE_GEMINI=1
 frontend/                Next.js 16 static export, TypeScript, Tailwind
   app/enter, shop, checkout, receipt, exit, kiosk, owner, me
   components/            Chat (text, voice loop, live voice), VoiceOrb, Scanner, BarcodeScan, PhoneSignIn, Cart,

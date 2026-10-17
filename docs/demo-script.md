@@ -38,7 +38,7 @@ Record on a laptop with the phone screen mirrored (QuickTime or scrcpy) so both 
 
 ## 2:35 Architecture and close (15 s)
 - Architecture slide: Firebase Hosting PWA, Cloud Run API with Google ADK and the Gemini Live bridge, Firestore, BigQuery ML, Vertex AI Gemini 3.5 Flash and Live, Cloud Scheduler, Secret Manager.
-- "One canonical layer, many adapters. Two hundred and fifty-seven unit tests, every control mapped in docs/security.md. Next: the Shopify adapter and an MCP server so any shopping assistant can talk to a Royal Stack store."
+- "One canonical layer, many adapters. Two hundred and seventy-one unit tests, every control mapped in docs/security.md. Next: the Shopify adapter and an MCP server so any shopping assistant can talk to a Royal Stack store."
 
 ## If something fails live
 - Voice: fall back to typing the same question; the tools and answers are identical.
