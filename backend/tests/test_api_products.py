@@ -44,3 +44,16 @@ def test_create_and_update_product(shop):
     assert res.json()["price"] == 270 and res.json()["available"] == 40
     assert client.post(f"/owner/{shop}/products", json={**body, "price": -1}, headers=H).status_code == 422
     assert client.get(f"/stores/{shop}/products/by-barcode/8901725012345").json()["name"] == "Aashirvaad Atta 5kg"
+
+
+def test_owner_moves_a_product_to_an_aisle(owned):
+    h = {"X-Test-Uid": "owner-1"}
+    created = client.post(f"/owner/{owned}/products", json={"barcode": "8901234567890", "name": "Rice 5kg", "price": 400, "on_hand": 5}, headers=h).json()
+    pid = created["product_id"]
+    aisle = db.store_ref(owned).get().to_dict()["floor_map"][0]["aisle"]
+    res = client.patch(f"/owner/{owned}/products/{pid}/location", json={"aisle": aisle, "bay": 3, "side": "right"}, headers=h)
+    assert res.status_code == 200, res.text
+    assert client.get(f"/stores/{owned}/products/{pid}").json()["location"]["bay"] == 3
+    assert client.patch(f"/owner/{owned}/products/{pid}/location", json={"aisle": "Nowhere"}, headers=h).status_code == 422
+    assert client.patch(f"/owner/{owned}/products/{pid}/location", json={"aisle": aisle}, headers={"X-Test-Uid": "stranger"}).status_code == 403
+    assert any(e.to_dict()["action"] == "product_moved" for e in db.audit(owned).stream())

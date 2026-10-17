@@ -207,7 +207,7 @@ export default function Chat() {
         )}
         {messages.map((m) => (
           <div key={m.id} className={m.role === "user" ? "flex justify-end" : "space-y-2"}>
-            <div className={`px-3.5 py-2.5 text-[15px] max-w-[85%] whitespace-pre-wrap ${m.role === "user" ? "bubble-user" : "bubble-ai"}`}>
+            <div className={`reveal px-3.5 py-2.5 text-[15px] max-w-[85%] whitespace-pre-wrap ${m.role === "user" ? "bubble-user" : "bubble-ai"}`}>
               {m.text || (m.status ? <span className="text-muted inline-flex items-center gap-2"><span className="dot animate-pulse" />{m.status}</span> : <span className="text-muted">…</span>)}
             </div>
             {m.products && m.products.length > 0 && (

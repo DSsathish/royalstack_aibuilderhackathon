@@ -43,7 +43,7 @@ export default function Shop() {
   ];
   return (
     <div className="flex flex-col h-dvh">
-      <div className="flex-1 overflow-hidden">
+      <div key={tab} className="flex-1 overflow-hidden reveal">
         {tab === "chat" && <ChatWithPhoto photo={photo} clear={() => setPhoto(null)} />}
         {tab === "scan" && <Scanner onPhoto={(f) => { setPhoto(f); setTab("chat"); }} />}
         {tab === "cart" && <div className="overflow-y-auto h-full"><Cart /></div>}

@@ -61,7 +61,7 @@ export default function Checkout() {
   if (!session) return null;
   if (order) return <Receipt order={order} />;
   return (
-    <main className="flex-1 p-4 space-y-4 max-w-md mx-auto w-full">
+    <main className="reveal flex-1 p-4 space-y-4 max-w-md mx-auto w-full">
       <div><div className="eyebrow">Self-checkout</div><h1 className="text-2xl font-semibold">Review and pay</h1></div>
       <div className="card divide-y divide-line">
         {cart?.items.map((i) => (

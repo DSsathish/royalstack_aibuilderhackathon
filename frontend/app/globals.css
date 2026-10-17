@@ -118,3 +118,20 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em
 .status-ok { color: var(--good); } .status-low { color: var(--warn); } .status-out { color: var(--bad); } .status-dead, .status-overstock { color: var(--muted); }
 .section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .section > h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+
+/* Motion: one vocabulary for the whole app. Views rise in once; lists stagger by a few frames; loading shimmers.
+   Nothing loops except the orb and the skeleton, and prefers-reduced-motion turns all of it off. */
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.reveal { animation: rise .32s cubic-bezier(.2, .7, .2, 1) both; }
+.reveal-stagger > * { animation: rise .36s cubic-bezier(.2, .7, .2, 1) both; }
+.reveal-stagger > *:nth-child(2) { animation-delay: 40ms; } .reveal-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.reveal-stagger > *:nth-child(4) { animation-delay: 120ms; } .reveal-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.reveal-stagger > *:nth-child(6) { animation-delay: 200ms; } .reveal-stagger > *:nth-child(7) { animation-delay: 240ms; }
+.reveal-stagger > *:nth-child(8) { animation-delay: 280ms; } .reveal-stagger > *:nth-child(n+9) { animation-delay: 320ms; }
+.skeleton { background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface) 50%, var(--surface-2) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; border-radius: 8px; }
+.bar { transform-origin: bottom; animation: grow .9s cubic-bezier(.2, .7, .2, 1) both; }
+.btn, .chip, .rail-link, .card { transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .08s ease; }
+.card:hover { border-color: #cfd6d0; }
+.table tbody tr td { transition: background-color .12s ease; }

@@ -10,7 +10,7 @@ export default function ProductCard({ p, onAdd, onWhere }: { p: Product; onAdd?:
   const out = p.available <= 0;
   const initials = p.name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (
-    <div className="card min-w-[11.5rem] max-w-[12.5rem] shrink-0 overflow-hidden flex flex-col">
+    <div className="reveal card min-w-[11.5rem] max-w-[12.5rem] shrink-0 overflow-hidden flex flex-col">
       <div className="h-16 flex items-center justify-between px-3" style={{ background: TINT[p.category ?? ""] ?? "var(--surface-2)" }}>
         <span className="display text-2xl font-semibold text-ink/70">{initials}</span>
         {aisle && <span className="chip bg-surface text-ink"><IconPin className="w-3.5 h-3.5" />{aisle}{bay ? `·${bay}` : ""}</span>}

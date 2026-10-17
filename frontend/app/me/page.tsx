@@ -101,7 +101,7 @@ export default function MePage() {
     <div className="flex flex-wrap gap-1.5 mt-1">{items.map((d) => <button key={d} onClick={() => toggle(key, d)} className={`chip ${form[key]?.includes(d) ? "chip-accent" : "chip-muted"}`}>{d}</button>)}</div>;
 
   return (
-    <main className="p-4 space-y-4 max-w-xl mx-auto w-full">
+    <main className="reveal p-4 space-y-4 max-w-xl mx-auto w-full">
       <header className="flex items-center gap-3">
         <div className="flex-1 min-w-0"><div className="eyebrow">Signed in · ····{profile.phone_last4}</div><h1 className="text-xl font-semibold truncate">{profile.name || "Your profile"}</h1></div>
         <Link href="/shop" className="btn btn-ghost py-1.5 text-xs">Back to shop</Link>

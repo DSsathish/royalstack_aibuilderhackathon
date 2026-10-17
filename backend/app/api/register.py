@@ -64,6 +64,15 @@ def register(body: RegisterIn, uid: str = Depends(current_uid)):
     return {"store": store.model_dump(exclude={"kiosk_pin"}), "kiosk_pin": store.kiosk_pin}
 
 
+class AisleIn(BaseModel):
+    """One block on the 1000 x 600 floor. The corridor and entrance sit below y 540."""
+    aisle: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ]*$")
+    x: float = Field(ge=0, le=1000)
+    y: float = Field(ge=0, le=540)
+    w: float = Field(ge=40, le=1000)
+    h: float = Field(ge=40, le=540)
+
+
 class StorePatch(BaseModel):
     name: str | None = Field(default=None, min_length=3, max_length=60)
     city: str | None = Field(default=None, max_length=60)
@@ -73,6 +82,7 @@ class StorePatch(BaseModel):
     languages: list[str] | None = Field(default=None, max_length=5)
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     aisles: list[str] | None = Field(default=None, min_length=1, max_length=12)
+    floor_map: list[AisleIn] | None = Field(default=None, min_length=1, max_length=16)     # the owner's own layout
 
 
 @router.patch("/owner/{store_id}/store", response_model=Store, response_model_exclude=PUBLIC_STORE_EXCLUDE)
@@ -92,6 +102,13 @@ def patch_store(body: StorePatch, store_id: str = STORE_ID, uid: str = Depends(c
     if body.aisles:
         names = [re.sub(r"[^A-Za-z0-9 ]+", "", a).strip()[:16] or f"A{i + 1}" for i, a in enumerate(body.aisles)]
         changes["floor_map"] = [a.model_dump() for a in floor_map(names)]
+    if body.floor_map is not None:                                     # a drawn layout wins over a plain list of names
+        names = [a.aisle.strip() for a in body.floor_map]
+        if len({n.lower() for n in names}) != len(names):
+            raise HTTPException(422, "aisle names must be unique")
+        if any(a.x + a.w > 1000 or a.y + a.h > 540 for a in body.floor_map):
+            raise HTTPException(422, "an aisle sticks out of the floor")
+        changes["floor_map"] = [Aisle(aisle=n, x=a.x, y=a.y, w=a.w, h=a.h).model_dump() for n, a in zip(names, body.floor_map)]
     ref.update(changes)
     catalog.invalidate(store_id)
     return ref.get().to_dict()

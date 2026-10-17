@@ -2,11 +2,13 @@
 
 import uuid
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from app.connectors import csv_connector as csvc
-from app.domain.models import now
+from app.domain.models import Location, now
 from app.services import barcode, catalog, db
 from app.services.auth import STORE_ID, current_uid, require_owner
 
@@ -29,6 +31,30 @@ class ProductIn(BaseModel):
     mrp: float | None = Field(default=None, ge=0, le=10_000_000)
     on_hand: int = Field(ge=0, le=1_000_000)
     aisle: str | None = Field(default=None, max_length=16)
+
+
+class LocationIn(BaseModel):
+    aisle: str = Field(min_length=1, max_length=16)
+    bay: int = Field(default=1, ge=1, le=12)
+    shelf: int = Field(default=1, ge=1, le=8)
+    side: Literal["left", "right"] = "left"
+
+
+@router.patch("/owner/{store_id}/products/{product_id}/location")
+def set_location(body: LocationIn, store_id: str = STORE_ID, product_id: str = Path(pattern=r"^[a-z0-9-]{3,80}$"), uid: str = Depends(current_uid)):
+    """Move a product to an aisle on the owner's floor map; the shopper map and the assistant follow immediately."""
+    require_owner(store_id, uid)
+    store = db.store_ref(store_id).get()
+    if not store.exists or not db.products(store_id).document(product_id).get().exists:
+        raise HTTPException(404, "store or product not found")
+    if body.aisle.strip() not in {a["aisle"] for a in store.to_dict().get("floor_map", [])}:
+        raise HTTPException(422, "that aisle is not on the floor map")
+    loc = Location(product_id=product_id, store_id=store_id, aisle=body.aisle.strip(), bay=body.bay, shelf=body.shelf, side=body.side)
+    db.locations(store_id).document(product_id).set(loc.model_dump())
+    catalog.bump(store_id)
+    db.audit(store_id).document(uuid.uuid4().hex).set({"actor": uid, "action": "product_moved", "created_at": now(),
+                                                       "payload": {"product_id": product_id, "aisle": loc.aisle, "bay": loc.bay}})
+    return loc.model_dump()
 
 
 @router.post("/owner/{store_id}/products")

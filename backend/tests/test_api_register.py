@@ -106,3 +106,15 @@ def test_team_listing_and_staff_can_list_inventory(shop, monkeypatch):
     assert client.get(f"/owner/{sid}/inventory", headers=sh).status_code == 200
     assert client.get(f"/owner/{sid}/team", headers=sh).status_code == 403
     assert client.patch(f"/owner/{sid}/inventory/some-product", json={"reorder_point": 1}, headers=sh).status_code == 403
+
+
+def test_owner_draws_a_floor_map(monkeypatch):
+    h = bearer(monkeypatch, "u-map", "map@example.com")
+    sid = register(h).json()["store"]["store_id"]
+    layout = [{"aisle": "Dairy", "x": 60, "y": 60, "w": 120, "h": 300}, {"aisle": "Snacks", "x": 240, "y": 60, "w": 90, "h": 420}]
+    res = client.patch(f"/owner/{sid}/store", json={"floor_map": layout}, headers=h)
+    assert res.status_code == 200, res.text
+    assert [a["aisle"] for a in res.json()["floor_map"]] == ["Dairy", "Snacks"] and res.json()["floor_map"][0]["w"] == 120
+    assert client.patch(f"/owner/{sid}/store", json={"floor_map": [{"aisle": "A", "x": 950, "y": 60, "w": 100, "h": 100}]}, headers=h).status_code == 422   # off the floor
+    assert client.patch(f"/owner/{sid}/store", json={"floor_map": [{"aisle": "A", "x": 0, "y": 0, "w": 50, "h": 50}, {"aisle": "a", "x": 100, "y": 0, "w": 50, "h": 50}]}, headers=h).status_code == 422   # duplicate names
+    assert client.get(f"/stores/{sid}").json()["floor_map"][1]["aisle"] == "Snacks"

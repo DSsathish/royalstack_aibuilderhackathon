@@ -29,15 +29,17 @@ export type SyncView = {
   outbox: { pending: number; dead: number } };
 
 export type StoreDoc = { store_id: string; name: string; city: string; currency: string; languages: string[]; self_checkout_item_limit: number;
-  brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string }[] };
+  brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string; x: number; y: number; w: number; h: number }[] };
 
 export const owner = {
   me: () => call<{ uid: string; stores: string[]; roles: Record<string, "owner" | "staff"> }>("/owner/me"),
   register: (body: { name: string; city: string; languages: string[]; currency: string }) =>
     call<{ store: StoreDoc; kiosk_pin: string }>("/owner/register", { method: "POST", body: JSON.stringify(body) }),
   store: (s: string) => call<StoreDoc>(`/stores/${s}`),
-  patchStore: (s: string, body: Partial<{ name: string; city: string; tagline: string; greeting: string; accent: string; languages: string[]; currency: string; aisles: string[] }>) =>
+  patchStore: (s: string, body: Partial<{ name: string; city: string; tagline: string; greeting: string; accent: string; languages: string[]; currency: string; aisles: string[]; floor_map: { aisle: string; x: number; y: number; w: number; h: number }[] }>) =>
     call<StoreDoc>(`/owner/${s}/store`, { method: "PATCH", body: JSON.stringify(body) }),
+  setLocation: (s: string, pid: string, body: { aisle: string; bay?: number; shelf?: number; side?: "left" | "right" }) =>
+    call<{ aisle: string; bay: number }>(`/owner/${s}/products/${pid}/location`, { method: "PATCH", body: JSON.stringify(body) }),
   lookup: (s: string, code: string) => call<{ found: boolean; name?: string; brand?: string; category?: string; image_url?: string }>(`/owner/${s}/lookup/${code}`),
   createProduct: (s: string, body: { barcode: string; sku?: string; name: string; brand?: string; category?: string; price: number; mrp?: number; on_hand: number; aisle?: string }) =>
     call<{ product_id: string; name: string }>(`/owner/${s}/products`, { method: "POST", body: JSON.stringify(body) }),

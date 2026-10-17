@@ -35,7 +35,7 @@ function Enter() {
   }, [p?.store, p?.token, p?.aisle]);
 
   if (offer) return (
-    <main className="flex-1 flex flex-col items-center justify-center p-6">
+    <main className="reveal flex-1 flex flex-col items-center justify-center p-6">
       <div className="card p-5 w-full max-w-sm space-y-3">
         <div className="eyebrow">Welcome</div>
         <h1 className="text-xl font-semibold">Sign in for offers and your history?</h1>

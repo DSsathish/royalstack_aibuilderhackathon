@@ -3,7 +3,7 @@ import { IconStore } from "@/components/Icons";
 
 export default function Home() {
   return (
-    <main className="flex-1 flex flex-col items-center justify-center gap-6 px-6 py-10 text-center">
+    <main className="reveal-stagger flex-1 flex flex-col items-center justify-center gap-6 px-6 py-10 text-center">
       <div className="w-16 h-16 rounded-full bg-accent-soft text-accent-ink flex items-center justify-center"><IconStore /></div>
       <div className="space-y-2 max-w-sm">
         <div className="eyebrow">Royal Stack</div>

@@ -2,11 +2,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { User } from "firebase/auth";
-import { money } from "@/lib/api";
+import { API, money, type Aisle } from "@/lib/api";
 import { createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
 import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
+import FloorMapEditor from "@/components/FloorMapEditor";
 import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import RevenueChart from "@/components/RevenueChart";
@@ -40,28 +41,30 @@ export default function OwnerPage() {
   const [roles, setRoles] = useState<Record<string, "owner" | "staff">>({});
   const [store, setStore] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
-  const [error, setError] = useState("");
   const [loadedMe, setLoadedMe] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [verifiedTick, setVerifiedTick] = useState(0);
+  const [meError, setMeError] = useState("");
   const onVerified = useCallback(() => setVerifiedTick((t) => t + 1), []);
 
-  useEffect(() => watchUser(setUser), []);
+  useEffect(() => watchUser((u) => { setUser(u); setLoadedMe(false); setMeError(""); }), []);
   useEffect(() => {
     if (!user?.email || (isPasswordUser(user) && !user.emailVerified)) return;
-    owner.me().then((m) => { setStores(m.stores); setRoles(m.roles); setStore(m.stores[0] ?? ""); setLoadedMe(true); if (m.roles[m.stores[0]] === "staff") setTab("inventory"); }).catch((e) => { setError(e.message); setLoadedMe(true); });
+    owner.me().then((m) => { setStores(m.stores); setRoles(m.roles); setStore(m.stores[0] ?? ""); setLoadedMe(true); if (m.roles[m.stores[0]] === "staff") setTab("inventory"); })
+      .catch((e) => { setMeError((e as Error).message || "no response"); setLoadedMe(true); });
   }, [user, verifiedTick]);
   const role = roles[store] ?? "owner";
   const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => role !== "staff" || STAFF_IDS.includes(i.id)) })).filter((g) => g.items.length);
   const [storeName, setStoreName] = useState("");
   useEffect(() => { if (store) owner.store(store).then((d) => setStoreName(d.name)).catch(() => setStoreName(store)); }, [store]);
 
-  if (user === undefined) return <main className="p-6 text-muted">Loading…</main>;
+  if (user === undefined) return <AuthShell><p className="text-muted">Loading</p></AuthShell>;
   if (!user?.email) return <OwnerSignIn />;          // shoppers signed in by phone are not owners
   if (isPasswordUser(user) && !user.emailVerified) return <VerifyEmail email={user.email} onVerified={onVerified} />;
   if (!store) {
-    if (!loadedMe) return <main className="p-6 text-muted">Loading</main>;
-    return <RegisterForm email={user.email ?? ""} error={error} onDone={(s, pin) => { setStores([s.store_id]); setRoles({ [s.store_id]: "owner" }); setStore(s.store_id); setNewPin(pin); setTab("setup"); }} />;
+    if (!loadedMe) return <AuthShell><Skeleton /></AuthShell>;
+    if (meError) return <ServerError error={meError} email={user.email} retry={() => { setLoadedMe(false); setMeError(""); setVerifiedTick((t) => t + 1); }} />;
+    return <RegisterForm email={user.email ?? ""} error="" onDone={(s, pin) => { setStores([s.store_id]); setRoles({ [s.store_id]: "owner" }); setStore(s.store_id); setNewPin(pin); setTab("setup"); }} />;
   }
 
   const picker = stores.length > 1
@@ -92,8 +95,8 @@ export default function OwnerPage() {
         <nav className="lg:hidden flex overflow-x-auto border-b border-line text-sm bg-surface px-1">
           {nav.flatMap((g) => g.items).map((i) => <button key={i.id} onClick={() => setTab(i.id)} className={`px-3 py-2.5 whitespace-nowrap font-medium ${tab === i.id ? "border-b-2 border-accent text-ink" : "text-muted"}`}>{i.label}</button>)}
         </nav>
-        <div className="page-head"><div><h1>{TITLES[tab][0]}</h1><p>{TITLES[tab][1]}</p></div></div>
-      <div className="flex-1 overflow-y-auto">
+        <div key={`head-${tab}`} className="page-head reveal"><div><h1>{TITLES[tab][0]}</h1><p>{TITLES[tab][1]}</p></div></div>
+      <div key={tab} className="flex-1 overflow-y-auto reveal">
         {tab === "overview" && <OverviewTab store={store} />}
         {tab === "inventory" && <InventoryTab store={store} />}
         {tab === "reorders" && <ReordersTab store={store} />}
@@ -111,6 +114,51 @@ export default function OwnerPage() {
   );
 }
 
+/** The frame around every screen before the dashboard. A green brand panel with the one-line promise on wide screens; the form beside it. */
+function AuthShell({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
+  return (
+    <div data-theme="owner" className="min-h-dvh grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] bg-bg text-ink">
+      <aside className="hidden lg:flex flex-col justify-between p-10 bg-accent text-accent-ink">
+        <div className="flex items-center gap-3"><span className="w-9 h-9 rounded-md bg-white/15 grid place-items-center font-semibold" aria-hidden>R</span><span className="font-semibold text-lg">Royal Stack</span></div>
+        <div className="space-y-6">
+          <BrandBars />
+          <h2 className="text-3xl font-semibold leading-tight max-w-md text-white">One AI commerce agent, one inventory truth.</h2>
+          <ul className="space-y-2 text-[15px] text-white/85 max-w-md reveal-stagger">
+            <li>See what sells, what runs low and what to reorder, with a reason.</li>
+            <li>Shoppers ask by voice in the aisle; the answer comes from your stock.</li>
+            <li>Your billing software stays the source of truth.</li>
+          </ul>
+        </div>
+        <p className="text-sm text-white/70">For shop owners and staff.</p>
+      </aside>
+      <main className="flex flex-col">
+        <header className="lg:hidden flex items-center gap-3 px-5 py-3 border-b border-line bg-surface">
+          <span className="w-7 h-7 rounded-md bg-accent text-accent-ink grid place-items-center font-semibold text-sm" aria-hidden>R</span>
+          <div className="leading-tight"><div className="font-semibold">Royal Stack</div><div className="label">Owner dashboard</div></div>
+          <span className="flex-1" /><Link href="/" className="text-sm text-muted underline">Shopper app</Link>
+        </header>
+        <div className="flex-1 flex items-start sm:items-center justify-center p-4 sm:p-10">
+          <div className={`reveal card w-full ${wide ? "max-w-lg" : "max-w-md"} p-6 sm:p-8 space-y-4`}>{children}</div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/** Twelve bars rising once on load: a stock ledger filling up. Decorative, hidden from screen readers. */
+function BrandBars() {
+  const heights = [34, 52, 44, 70, 58, 86, 64, 96, 78, 110, 90, 120];
+  return (
+    <svg viewBox="0 0 260 130" className="w-64 h-32" aria-hidden>
+      {heights.map((h, i) => <rect key={i} x={i * 21} y={130 - h} width="14" height={h} rx="3" className="bar" style={{ animationDelay: `${i * 70}ms`, fill: `rgba(255,255,255,${0.3 + i * 0.05})` }} />)}
+    </svg>
+  );
+}
+
+function Skeleton({ rows = 3 }: { rows?: number }) {
+  return <div className="space-y-2 w-full">{Array.from({ length: rows }, (_, i) => <div key={i} className="skeleton h-10 w-full" style={{ animationDelay: `${i * 120}ms` }} />)}</div>;
+}
+
 /** Google, or email and password. New password accounts must verify the address before the API lets them own or join a store. */
 function OwnerSignIn() {
   const [email, setEmail] = useState("");
@@ -123,24 +171,22 @@ function OwnerSignIn() {
     setBusy(false);
   };
   return (
-    <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
-      <div className="text-center"><div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Owner dashboard</h1><p className="text-muted mt-1">For shop owners and staff.</p></div>
-      <div className="card p-5 w-full max-w-sm space-y-3">
-        <button onClick={() => run(signInWithGoogle)} disabled={busy} className="btn btn-primary w-full py-3">Continue with Google</button>
-        <div className="flex items-center gap-3 text-xs text-muted"><span className="flex-1 border-t border-line" />or with email<span className="flex-1 border-t border-line" /></div>
-        <form onSubmit={(e) => { e.preventDefault(); run(() => signInWithEmail(email, password)); }} className="space-y-2">
-          <label className="block text-sm">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required className="field mt-1" /></label>
-          <label className="block text-sm">Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" minLength={6} required className="field mt-1" /></label>
-          <div className="flex gap-2">
-            <button type="submit" disabled={busy || !email || !password} className="btn btn-ink flex-1">Sign in</button>
-            <button type="button" onClick={() => run(() => createOwnerAccount(email, password), "Account created. Check your inbox for the verification link.")} disabled={busy || !email || password.length < 6} className="btn btn-ghost flex-1">Create account</button>
-          </div>
-        </form>
-        <button onClick={() => run(() => resetPassword(email), "If that address has an account, a reset link is on its way.")} disabled={busy || !email} className="text-xs text-muted underline">Forgot password?</button>
-        {msg && <p className={`chip ${msg.bad ? "chip-bad" : "chip-good"} whitespace-normal`}>{msg.text}</p>}
-      </div>
-      <p className="text-xs text-muted max-w-sm text-center">New here? Create an account, verify the email, and the dashboard opens with “Register your shop”. Staff use the email their owner added.</p>
-    </main>
+    <AuthShell>
+      <div><h1 className="text-2xl font-semibold">Sign in</h1><p className="text-muted text-sm mt-1">For shop owners and staff. Use the Google account or email your store knows.</p></div>
+      <button onClick={() => run(signInWithGoogle)} disabled={busy} className="btn btn-primary w-full py-3">Continue with Google</button>
+      <div className="flex items-center gap-3 text-xs text-muted"><span className="flex-1 border-t border-line" />or with email<span className="flex-1 border-t border-line" /></div>
+      <form onSubmit={(e) => { e.preventDefault(); run(() => signInWithEmail(email, password)); }} className="space-y-3">
+        <label className="block text-sm font-medium">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required className="field mt-1" /></label>
+        <label className="block text-sm font-medium">Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" minLength={6} required className="field mt-1" /></label>
+        <div className="flex gap-2">
+          <button type="submit" disabled={busy || !email || !password} className="btn btn-ink flex-1 py-2.5">Sign in</button>
+          <button type="button" onClick={() => run(() => createOwnerAccount(email, password), "Account created. Check your inbox for the verification link.")} disabled={busy || !email || password.length < 6} className="btn btn-ghost flex-1 py-2.5">Create account</button>
+        </div>
+      </form>
+      <button onClick={() => run(() => resetPassword(email), "If that address has an account, a reset link is on its way.")} disabled={busy || !email} className="text-xs text-muted underline">Forgot password?</button>
+      {msg && <p className={`chip ${msg.bad ? "chip-bad" : "chip-good"} whitespace-normal`}>{msg.text}</p>}
+      <p className="text-xs text-muted">New here? Create an account, verify the email, and the dashboard opens with “Register your shop”. Staff use the email their owner added.</p>
+    </AuthShell>
   );
 }
 
@@ -172,17 +218,16 @@ function VerifyEmail({ email, onVerified }: { email: string; onVerified: () => v
     return () => { clearTimeout(first); clearInterval(id); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
   }, [check]);
   return (
-    <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <div><div className="eyebrow">One more step</div><h1 className="text-2xl font-semibold">Verify your email</h1></div>
-      <p className="text-muted max-w-sm">We sent a verification link to <b>{email}</b>. Open it in your mail app; this page continues on its own once the address is verified. The address must be verified before it can own or join a store.</p>
-      <p className="text-xs text-muted max-w-sm">If the link page says it has expired or was already used, the address is usually verified anyway (some mail apps open links ahead of you); tap Continue.</p>
-      <div className="flex flex-wrap justify-center gap-2">
+    <AuthShell>
+      <div><h1 className="text-2xl font-semibold">Verify your email</h1><p className="text-muted text-sm mt-1">We sent a link to <b className="text-ink">{email}</b>. Open it in your mail app; this page continues on its own once the address is verified.</p></div>
+      <p className="text-xs text-muted">If the link page says it has expired or was already used, the address is usually verified anyway (some mail apps open links ahead of you). Tap Continue.</p>
+      <div className="flex flex-wrap gap-2">
         <button onClick={() => check(true)} disabled={checking} className="btn btn-primary">{checking ? "Checking" : "Continue"}</button>
         <button onClick={() => resendVerification().then(() => setMsg("Sent again. Check spam too.")).catch((e) => setMsg(authMessage(e)))} className="btn btn-ghost">Resend link</button>
         <button onClick={() => signOutOwner()} className="btn btn-ghost">Use a different email</button>
       </div>
-      {msg && <p className="chip chip-muted whitespace-normal max-w-sm">{msg}</p>}
-    </main>
+      {msg && <p className="chip chip-muted whitespace-normal">{msg}</p>}
+    </AuthShell>
   );
 }
 
@@ -205,7 +250,7 @@ function Tile({ label, value, tone = "" }: { label: string; value: string | numb
 function OverviewTab({ store }: { store: string }) {
   const [o, setO] = useState<Overview | null>(null);
   useEffect(() => { owner.overview(store).then(setO); const t = setInterval(() => owner.overview(store).then(setO), 15000); return () => clearInterval(t); }, [store]);
-  if (!o) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
+  if (!o) return <div className="px-4 lg:px-6"><Skeleton /></div>;
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-6xl">
       <div className="figures">
@@ -231,26 +276,51 @@ function RegisterForm({ email, error, onDone }: { email: string; error: string; 
   async function submit() {
     setBusy(true); setErr("");
     try { const r = await owner.register({ name, city, languages: langs.length ? langs : ["en"], currency: "INR" }); onDone(r.store, r.kiosk_pin); }
-    catch (e) { setErr((e as Error).message); }
+    catch (e) { setErr(friendlyApiError(e)); }
     setBusy(false);
   }
   return (
-    <main className="flex-1 flex flex-col gap-4 p-6 max-w-md mx-auto w-full justify-center">
-      <div>
-        <div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Register your shop</h1>
-        <p className="text-muted text-sm mt-1">Signed in as {email}. Takes a minute; you can change everything later.</p>
-        <p className="text-sm mt-2 flex flex-wrap gap-3">
-          <button type="button" onClick={() => signOutOwner()} className="text-accent font-semibold underline">Not you? Sign out</button>
-          <Link href="/" className="text-muted underline">Back to the shopper app</Link>
-        </p>
+    <AuthShell wide>
+      <div><h1 className="text-2xl font-semibold">Register your shop</h1><p className="text-muted text-sm mt-1">Takes a minute. Everything here can be changed later in Store settings.</p></div>
+      <div className="flex items-center gap-3 rounded-lg bg-surface-2 px-3 py-2 text-sm">
+        <span className="w-8 h-8 rounded-full bg-accent text-accent-ink grid place-items-center font-semibold" aria-hidden>{email.slice(0, 1).toUpperCase()}</span>
+        <span className="min-w-0 flex-1 truncate">Signed in as <b>{email}</b></span>
+        <button type="button" onClick={() => signOutOwner()} className="text-accent font-medium whitespace-nowrap">Not you? Sign out</button>
       </div>
-      <label className="text-sm">Shop name<input id="reg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sri Murugan Stores" className="field mt-1" /></label>
-      <label className="text-sm">City<input id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Chennai" className="field mt-1" /></label>
-      <div className="text-sm">Languages your shoppers use<div className="flex gap-2 mt-1">{[["en", "English"], ["ta", "தமிழ்"], ["hi", "हिन्दी"]].map(([k, l]) => <button key={k} onClick={() => toggle(k)} className={`chip ${langs.includes(k) ? "bg-ink text-bg" : "chip-muted"}`}>{l}</button>)}</div></div>
-      {err && <p className="chip chip-bad">{err}</p>}
-      <button onClick={submit} disabled={busy || name.trim().length < 3} className="btn btn-primary py-3">{busy ? "Creating" : "Create my shop"}</button>
-    </main>
+      <label className="block text-sm font-medium">Shop name<input id="reg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sri Murugan Stores" className="field mt-1" /><span className="label block mt-1">Shoppers see this name in the app; it also becomes your store’s web address.</span></label>
+      <label className="block text-sm font-medium">City<input id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Chennai" className="field mt-1" /></label>
+      <div className="text-sm font-medium">Languages your shoppers use<div className="flex gap-2 mt-1.5">{[["en", "English"], ["ta", "தமிழ்"], ["hi", "हिन्दी"]].map(([k, l]) => <button key={k} type="button" onClick={() => toggle(k)} className={`chip px-3 py-1.5 ${langs.includes(k) ? "bg-ink text-bg" : "chip-muted"}`}>{l}</button>)}</div><span className="label block mt-1">The assistant answers in whichever of these a shopper speaks.</span></div>
+      {err && <p className="chip chip-bad whitespace-normal">{err}</p>}
+      <button onClick={submit} disabled={busy || name.trim().length < 3} className="btn btn-primary w-full py-3">{busy ? "Creating your shop" : "Create my shop"}</button>
+      <p className="text-xs text-muted">Already own a store with a different account? <button type="button" onClick={() => signOutOwner()} className="underline">Switch account</button>.</p>
+    </AuthShell>
   );
+}
+
+/** The API could not be reached or answered with an error: say where the dashboard is looking, do not pretend the account has no stores. */
+function ServerError({ error, email, retry }: { error: string; email: string; retry: () => void }) {
+  const local = API.includes("localhost") || API.includes("127.0.0.1");
+  return (
+    <AuthShell>
+      <div><h1 className="text-2xl font-semibold">Can’t reach the store server</h1><p className="text-muted text-sm mt-1">Signed in as {email}, but the dashboard could not load your stores from <span className="mono">{API}</span>.</p></div>
+      <p className="chip chip-bad whitespace-normal">{error}</p>
+      {local
+        ? <p className="text-sm text-muted">This is a local build pointing at a local API. Start the backend with <span className="mono">uvicorn app.main:app --port 8080</span>, or set <span className="mono">NEXT_PUBLIC_API_URL</span> to the live API and rebuild. Your stores live on the deployed site either way.</p>
+        : <p className="text-sm text-muted">Check your connection and try again. If it keeps failing, the API may be deploying; it is usually back within a minute.</p>}
+      <div className="flex gap-2">
+        <button onClick={retry} className="btn btn-primary">Try again</button>
+        <button onClick={() => signOutOwner()} className="btn btn-ghost">Sign out</button>
+      </div>
+    </AuthShell>
+  );
+}
+
+function friendlyApiError(e: unknown): string {
+  const m = (e as Error).message ?? "";
+  if (m === "Not Found") return `The API at ${API} does not know this route. Is the backend running, and is NEXT_PUBLIC_API_URL pointing at it?`;
+  if (m.includes("verified email")) return "Verify your email first, then register.";
+  if (m.includes("Failed to fetch") || m.includes("NetworkError")) return `Could not reach ${API}.`;
+  return m || "Something went wrong. Please try again.";
 }
 
 function SetupTab({ store, newPin }: { store: string; newPin: string }) {
@@ -262,10 +332,16 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
   const [pay, setPay] = useState({ key_id: "", key_secret: "" });
   const [qr, setQr] = useState<{ entrance_url: string; aisles: { aisle: string; url: string }[] } | null>(null);
   const [msg, setMsg] = useState("");
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [savingMap, setSavingMap] = useState(false);
   const load = () => owner.store(store).then((d) => { setDoc(d); setAisles(d.floor_map.map((a) => a.aisle)); setBrand({ tagline: d.brand.tagline, greeting: d.brand.greeting, accent: d.brand.accent }); });
-  useEffect(() => { load(); owner.team(store).then(setTeam).catch(() => {}); owner.qr(store).then(setQr).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load(); owner.team(store).then(setTeam).catch(() => {}); owner.qr(store).then(setQr).catch(() => {});
+    owner.inventory(store).then((rows) => setCounts(rows.reduce((m, r) => (r.aisle ? { ...m, [r.aisle]: (m[r.aisle] ?? 0) + 1 } : m), {} as Record<string, number>))).catch(() => {});
+  }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   async function save(body: Parameters<typeof owner.patchStore>[1], note: string) { await owner.patchStore(store, body); setMsg(note); load(); owner.qr(store).then(setQr).catch(() => {}); }
-  if (!doc) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
+  async function saveMap(fm: Aisle[]) { setSavingMap(true); try { await save({ floor_map: fm }, "Floor map saved. Shoppers see it on their next visit."); } catch (e) { setMsg((e as Error).message); } setSavingMap(false); }
+  if (!doc) return <div className="px-4 lg:px-6"><Skeleton /></div>;
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-6 max-w-4xl">
       {newPin && <div className="card border-accent p-3 text-sm"><b>Your exit kiosk PIN is {newPin}.</b> It is also shown in the Loss tab under Controls. Enter it once on the tablet at the exit.</div>}
@@ -275,12 +351,9 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
         <p className="text-sm text-muted">Import a CSV from your billing software in the Connectors tab, or add products one by one from the Inventory tab by scanning their barcodes.</p>
       </section>
       <section className="section space-y-2">
-        <h2 className="text-base font-semibold">2. Aisles</h2>
-        <p className="text-sm text-muted">Name your aisles in order from the entrance. The map and the assistant use these.</p>
-        <div className="flex flex-wrap gap-2">{aisles.map((a, i) => <input key={i} value={a} onChange={(e) => setAisles(aisles.map((x, j) => (j === i ? e.target.value : x)))} className="field w-32 py-1.5 text-sm" />)}
-          {aisles.length < 12 && <button onClick={() => setAisles([...aisles, `A${aisles.length + 1}`])} className="btn btn-ghost py-1.5 text-sm">Add aisle</button>}
-          {aisles.length > 1 && <button onClick={() => setAisles(aisles.slice(0, -1))} className="btn btn-ghost py-1.5 text-sm">Remove last</button>}</div>
-        <button onClick={() => save({ aisles }, "Aisles saved")} className="btn btn-primary py-2">Save aisles</button>
+        <h2 className="text-base font-semibold">2. Floor map</h2>
+        <p className="text-sm text-muted">Draw your shop the way it is laid out. Shoppers see this map with the route to the product they asked for, and the assistant uses the aisle names in directions. {aisles.length} aisle{aisles.length === 1 ? "" : "s"} so far.</p>
+        <FloorMapEditor key={doc.floor_map.map((a) => `${a.aisle}:${a.x},${a.y},${a.w},${a.h}`).join("|")} aisles={doc.floor_map} counts={counts} saving={savingMap} onSave={saveMap} />
       </section>
       <section className="section space-y-2">
         <h2 className="text-base font-semibold">3. Brand</h2>
@@ -332,7 +405,7 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
 function ExitsTab({ store }: { store: string }) {
   const [data, setData] = useState<{ summary: Loss["summary"]; items: Loss["recent"] } | null>(null);
   useEffect(() => { owner.verifications(store).then(setData); }, [store]);
-  if (!data) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
+  if (!data) return <div className="px-4 lg:px-6"><Skeleton /></div>;
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-3 max-w-4xl">
       <div className="figures"><Tile label="Exits (7d)" value={data.summary.total} /><Tile label="Clear" value={data.summary.clear} /><Tile label="Spot checks" value={data.summary.spot_check} tone="text-warn" /><Tile label="Flags" value={data.summary.flag} tone="text-bad" /></div>
@@ -378,8 +451,15 @@ function InventoryTab({ store }: { store: string }) {
   const [filter, setFilter] = useState<"all" | InvRow["status"]>("all");
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
+  const [aisleNames, setAisleNames] = useState<string[]>([]);
+  const [moving, setMoving] = useState<{ pid: string; aisle: string; bay: string; side: "left" | "right" } | null>(null);
   const load = () => owner.inventory(store).then(setRows);
-  useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); owner.store(store).then((d) => setAisleNames(d.floor_map.map((a) => a.aisle))).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  async function move() {
+    if (!moving) return;
+    try { await owner.setLocation(store, moving.pid, { aisle: moving.aisle, bay: Number(moving.bay) || 1, side: moving.side }); setMoving(null); load(); }
+    catch (e) { alert?.((e as Error).message); }
+  }
   const shown = rows.filter((r) => (filter === "all" || r.status === filter) && r.name.toLowerCase().includes(q.toLowerCase()));
   const STATUS: Record<InvRow["status"], string> = { ok: "Healthy", low: "Low", out: "Out of stock", dead: "Not selling", overstock: "Overstocked" };
   const FILTERS: [typeof filter, string][] = [["all", "All"], ["low", "Low"], ["out", "Out of stock"], ["dead", "Not selling"], ["overstock", "Overstocked"], ["ok", "Healthy"]];
@@ -404,15 +484,30 @@ function InventoryTab({ store }: { store: string }) {
         <table className="table">
           <thead><tr><th>Product</th><th>Status</th><th className="num">On hand</th><th className="num">Sold per day</th><th className="num">Days of cover</th><th className="num">Reorder at</th><th className="num">Order qty</th><th>Aisle</th><th></th></tr></thead>
           <tbody>{shown.map((r) => (
-            <tr key={r.product_id}>
+            <React.Fragment key={r.product_id}>
+            <tr>
               <td className="font-medium">{r.name}</td>
               <td><span className={`status status-${r.status}`}>{STATUS[r.status]}</span></td>
               <td className="num">{r.available}</td><td className="num">{r.avg_daily ?? "–"}</td><td className="num">{r.days_of_cover ?? "–"}</td>
               <td className="text-right"><button onClick={() => edit(r, "reorder_point")} className="mono underline decoration-dotted">{r.reorder_point}</button></td>
               <td className="text-right"><button onClick={() => edit(r, "reorder_qty")} className="mono underline decoration-dotted">{r.reorder_qty}</button></td>
-              <td>{r.aisle}</td>
+              <td>{r.aisle || <span className="text-muted">not placed</span>} <button onClick={() => setMoving({ pid: r.product_id, aisle: r.aisle || aisleNames[0] || "", bay: "1", side: "left" })} className="text-xs text-accent font-medium ml-1">Move</button></td>
               <td><button onClick={() => count(r)} className="text-xs text-accent font-medium">Count shelf</button></td>
-            </tr>))}</tbody>
+            </tr>
+            {moving?.pid === r.product_id && (
+              <tr><td colSpan={9} className="bg-surface-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm py-1">
+                  <span className="text-muted">Place <b className="text-ink">{r.name}</b> in</span>
+                  <select value={moving.aisle} onChange={(e) => setMoving({ ...moving, aisle: e.target.value })} className="field w-auto py-1.5">{aisleNames.map((a) => <option key={a} value={a}>{a}</option>)}</select>
+                  <span className="text-muted">bay</span><input value={moving.bay} onChange={(e) => setMoving({ ...moving, bay: e.target.value })} inputMode="numeric" className="field w-16 py-1.5 mono" />
+                  <select value={moving.side} onChange={(e) => setMoving({ ...moving, side: e.target.value as "left" | "right" })} className="field w-auto py-1.5"><option value="left">left side</option><option value="right">right side</option></select>
+                  <button onClick={move} disabled={!moving.aisle} className="btn btn-primary py-1.5">Save</button>
+                  <button onClick={() => setMoving(null)} className="btn btn-ghost py-1.5">Cancel</button>
+                  {aisleNames.length === 0 && <span className="text-xs text-warn">Draw the floor map in Store settings first.</span>}
+                </div>
+              </td></tr>
+            )}
+            </React.Fragment>))}</tbody>
         </table>
         {shown.length === 0 && <p className="p-6 text-sm text-muted">{rows.length ? "Nothing matches this filter." : "No products yet. Add one by scanning its barcode, or import a file in Connectors."}</p>}
       </div>
@@ -461,7 +556,7 @@ function SignalsTab({ store }: { store: string }) {
   const [s, setS] = useState<Signals | null>(null);
   const [days, setDays] = useState(7);
   useEffect(() => { owner.signals(store, days).then(setS); }, [store, days]);
-  if (!s) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
+  if (!s) return <div className="px-4 lg:px-6"><Skeleton /></div>;
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-4xl">
       <div className="flex gap-2 text-xs">{[1, 7, 30].map((d) => <button key={d} onClick={() => setDays(d)} className={`chip ${days === d ? "bg-ink text-bg" : "chip-muted"}`}>{d === 1 ? "Today" : `${d} days`}</button>)}</div>
@@ -488,7 +583,7 @@ function CustomersTab({ store }: { store: string }) {
   const [msg, setMsg] = useState("");
   const load = () => owner.customers(store).then(setRows).catch(() => setRows([]));
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!rows) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
+  if (!rows) return <div className="px-4 lg:px-6"><Skeleton /></div>;
   const counts = rows.reduce((m, r) => ({ ...m, [r.segment]: (m[r.segment] ?? 0) + 1 }), {} as Record<string, number>);
   const shown = rows.filter((r) => filter === "all" || r.segment === filter);
   async function savePoints() {
@@ -604,7 +699,7 @@ function LossTab({ store }: { store: string }) {
   const [form, setForm] = useState<Partial<Loss["settings"]>>({});
   const load = () => owner.loss(store).then((x) => { setL(x); setForm(x.settings); });
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!l) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
+  if (!l) return <div className="px-4 lg:px-6"><Skeleton /></div>;
   const s = l.summary;
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-4xl">
