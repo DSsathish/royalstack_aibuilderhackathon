@@ -106,6 +106,8 @@ cd frontend && npm run build && cd .. && firebase deploy --only hosting,firestor
 
 `ENV=demo` keeps sandbox payments enabled while refusing the development signing key. Use `ENV=prod` with Razorpay keys for real payments.
 
+Scheduled jobs (Cloud Scheduler, all authenticated with `X-Job-Key`): `POST /jobs/forecast` nightly 20:30 IST for every store (BigQuery ML retrain), `POST /jobs/customers` nightly 21:15 IST (segments, points expiry, stale point holds), `POST /jobs/sync` every 15 minutes (CSV feeds and outbox retries).
+
 ## Environment variables
 
 | Variable | Purpose |
@@ -118,8 +120,24 @@ cd frontend && npm run build && cd .. && firebase deploy --only hosting,firestor
 | `APP_BASE_URL`, `CORS_ORIGINS` | hosting origin |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | optional; mock payments when unset |
 
+## Status
+
+Everything described above is live and covered by the unit suite. Built and reviewed on 15 to 17 Oct 2026: phases 0 to 7 of the plan plus roadmap releases R1 (self-service shops), R3 (scan-first), R4 (shopper identity), R5 (customers, offers, points) and the R2 sync core.
+
+Pending, in priority order (details in `docs/plan/09-roadmap-after-submission.md`):
+
+- Shopify adapter on the existing sync contract (Admin GraphQL, `orders/create` and `inventory_levels/update` webhooks) and POS file drops from Cloud Storage.
+- MCP server so any external shopping assistant can search, reserve and buy from a store.
+- GST invoices, returns against a receipt, and the 90-day retention job for verification records and conversation turns.
+- Phone sign-in for non-Indian numbers; logo upload for store branding; a retry button for dead outbox entries.
+
+Known gaps kept on purpose are listed at the end of `docs/security.md` (cart add outside a transaction, owner membership not revoked on email removal, sync signatures not bound to the URL path, shared job key instead of Scheduler OIDC, no automatic refund for an order cancelled by a later checkout attempt).
+
 ## For judges
 
-- Owner dashboard: sign in with a Google account listed on the demo store (ask the team), or read the API at `/docs`.
+- Owner dashboard: sign in with a Google account listed on the demo store (ask the team), or register your own store with any Google account: the dashboard opens a registration form, and the Connectors tab imports a CSV or lets you add products by scanning a barcode.
+- Shopper sign-in is optional. Test numbers `+91 99999 00001`, `00002`, `00003` with code `123456` work without an SMS (Firebase test numbers); real Indian numbers receive a real code.
 - Kiosk PIN for `demo-grocery` is `1234`. Payments are sandbox only.
+- Sync from a billing system: generate a secret in Connectors → Live sync, then run `python infra/scripts/sync_example.py --store demo-grocery --secret <secret> --sku <sku> --on-hand 2`; the assistant reflects the change within two seconds.
 - The model never invents stock, prices or locations: every product fact in a reply comes from a tool call, and the UI renders cards, map highlights and cart state only from tool results.
+- Demo walkthrough: `docs/demo-script.md`. Submission links: `docs/submission-checklist.md`.
