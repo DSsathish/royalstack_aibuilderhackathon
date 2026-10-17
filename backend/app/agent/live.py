@@ -147,7 +147,7 @@ async def run(ws: WebSocket, s: Session) -> None:
 
 
 async def _run(ws: WebSocket, s: Session) -> None:
-    state = {"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "language": s.language, "customer_id": s.customer_id}
+    state = {"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "language": s.language, "customer_id": s.customer_id, "user_id": s.user_id}
     client = gemini.client()
     recorder = TurnRecorder(lambda role, text: conversation.add_turn(s, role, text))
     try:

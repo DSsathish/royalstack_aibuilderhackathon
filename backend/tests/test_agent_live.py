@@ -140,3 +140,15 @@ def test_amount_is_turned_into_packs(shop):
     reply = reply.lower()
     assert ("two" in reply or "2 " in reply or "2x" in reply or "2 x" in reply) and "5" in reply, reply   # two 5 kg packs
     assert "530" in reply or "265" in reply, reply                                            # price of the combination or per pack
+
+
+def test_owner_briefing_and_confirmed_offer(shop):
+    from app.services import offers
+    s = sessions.create(shop, "owner", user_id="owner-live")
+    tools, reply, _ = run(s, "Good morning, how are we doing today?")
+    assert "store_snapshot" in tools and ("stock" in reply.lower() or "sales" in reply.lower() or "revenue" in reply.lower()), reply
+    tools, reply, _ = run(s, "Create an offer called Dairy week with 10% off the Dairy category for everyone")
+    assert "create_offer" in tools and offers.list_all(shop) == [], reply            # asked, not yet created
+    assert "?" in reply or "confirm" in reply.lower() or "yes" in reply.lower(), reply
+    tools, reply, _ = run(s, "Yes, go ahead")
+    assert "create_offer" in tools and [o.name for o in offers.list_all(shop)] == ["Dairy week"], reply

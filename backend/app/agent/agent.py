@@ -36,6 +36,10 @@ ACTION_FOR_TOOL = {
     "draft_purchase_order": "drafts_created",
     "get_anomalies": "show_anomalies",
     "get_offers": "show_offers",
+    "store_snapshot": "show_snapshot",
+    "find_products": "show_rows", "sales_report": "show_rows", "reorder_drafts": "show_rows", "demand_signals": "show_rows",
+    "customers_overview": "show_rows", "list_offers": "show_rows", "exit_summary": "show_rows", "sync_status": "show_rows",
+    "floor_map_summary": "show_rows",
 }
 
 _sessions = InMemorySessionService()
@@ -85,7 +89,7 @@ async def _fresh_session(s: Session) -> str:
     sid = uuid.uuid4().hex
     await _sessions.create_session(
         app_name=APP_NAME, user_id=s.session_id, session_id=sid,
-        state={"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "customer_id": s.customer_id,
+        state={"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "customer_id": s.customer_id, "user_id": s.user_id,
                "language": s.language, "history": conversation.history_text(s), **prompts.store_state(s.store_id), **prompts.customer_state(s)})
     return sid
 

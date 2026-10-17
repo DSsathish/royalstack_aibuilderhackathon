@@ -5,7 +5,9 @@ import { CartView, Location, Product, Session, Store, loadSession, saveSession }
 export type Msg = { id: number; role: "user" | "assistant"; text: string; products?: Product[]; map?: Location; status?: string; checkout?: boolean; fromPhoto?: boolean;
   lowStock?: { product_id: string; name: string; available: number; reorder_point: number }[];
   drafts?: { po_id: string; supplier: string; lines: number; summary: string }[];
-  offers?: { name: string; detail: string }[] };
+  offers?: { name: string; detail: string }[];
+  snapshot?: { today: { revenue: number; orders: number; avg_basket: number }; low_stock: number; out_of_stock: number; open_drafts: number; open_flags: number; signed_in_customers: number; live_offers: number; attention: string[] };
+  rows?: { columns: string[]; rows: Record<string, unknown>[] } };
 
 type State = {
   session: Session | null;

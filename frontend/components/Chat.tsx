@@ -16,9 +16,14 @@ const STATUS: Record<string, string> = {
   suggest_substitutes: "Looking for alternatives", view_cart: "Opening your cart", start_checkout: "Preparing checkout",
   get_low_stock: "Checking stock levels", forecast_demand: "Reading the forecast", draft_purchase_order: "Drafting orders",
   get_anomalies: "Checking exits and counts", record_demand_signal: "Noting your request", get_offers: "Checking offers",
+  store_snapshot: "Pulling today's figures", find_products: "Searching the inventory", sales_report: "Totting up sales", reorder_drafts: "Opening the drafts",
+  demand_signals: "Reading demand signals", customers_overview: "Looking at customers", list_offers: "Listing offers", exit_summary: "Checking exits",
+  sync_status: "Checking the sync", floor_map_summary: "Reading the floor map", set_reorder_rule: "Updating the reorder rule", adjust_stock: "Updating stock",
+  record_shelf_count: "Recording the count", update_price: "Updating the price", move_product: "Moving the product", create_offer: "Creating the offer",
+  set_offer_active: "Updating the offer", adjust_points: "Updating points", approve_purchase_order: "Approving the order",
 };
 const SUGGESTIONS = ["Where is atta?", "பால் எங்கே இருக்கு?", "Do you have oat milk?", "Something for a headache"];
-const OWNER_SUGGESTIONS = ["What is running low?", "How much milk will we sell this week?", "Prepare purchase orders", "Anything suspicious at the exits?"];
+const OWNER_SUGGESTIONS = ["How are we doing today?", "What should I reorder?", "Which products are not selling?", "Create 10% off on Dairy for everyone", "Who are my VIP customers?", "What did shoppers ask for that we don't have?"];
 
 export default function Chat() {
   const { session, store, messages, push, patch, setCart, setHighlight, language, setLanguage, speak, setSpeak, setAvatar, customer } = useApp();
@@ -81,6 +86,8 @@ export default function Chat() {
     else if (name === "show_low_stock") patch(id, { lowStock: (data.items as Msg["lowStock"]) ?? [] });
     else if (name === "drafts_created") patch(id, { drafts: (data.drafts as Msg["drafts"]) ?? [] });
     else if (name === "show_offers") patch(id, { offers: (data.offers as Msg["offers"]) ?? [] });
+    else if (name === "show_snapshot" && data.today) patch(id, { snapshot: data as unknown as Msg["snapshot"] });
+    else if (name === "show_rows" && Array.isArray(data.rows) && Array.isArray(data.columns)) patch(id, { rows: { columns: data.columns as string[], rows: data.rows as Record<string, unknown>[] } });
   }
   async function refreshCart() { if (session) setCart(await api.cart(session)); }
 
@@ -234,6 +241,27 @@ export default function Chat() {
                 <div className="eyebrow mb-1">Offers for you</div>
                 {m.offers.length === 0 ? <span className="text-muted">No offers running right now.</span>
                   : m.offers.map((o) => <div key={o.name} className="py-0.5"><b>{o.name}</b> <span className="text-muted">· {o.detail}</span></div>)}
+              </div>
+            )}
+            {m.snapshot && (
+              <div className="card p-3 text-sm max-w-[95%] space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  {([["Revenue today", `₹${m.snapshot.today.revenue.toLocaleString("en-IN")}`], ["Orders", m.snapshot.today.orders], ["Avg basket", `₹${m.snapshot.today.avg_basket.toLocaleString("en-IN")}`],
+                    ["Low stock", m.snapshot.low_stock], ["Out of stock", m.snapshot.out_of_stock], ["Drafts waiting", m.snapshot.open_drafts],
+                    ["Exit flags", m.snapshot.open_flags], ["Signed-in customers", m.snapshot.signed_in_customers], ["Live offers", m.snapshot.live_offers]] as [string, string | number][]).map(([l, v]) => (
+                    <div key={l}><div className="eyebrow">{l}</div><div className="mono text-base font-semibold">{v}</div></div>
+                  ))}
+                </div>
+                {m.snapshot.attention.length > 0 && <ul className="text-xs text-muted list-disc pl-4">{m.snapshot.attention.map((a) => <li key={a}>{a}</li>)}</ul>}
+              </div>
+            )}
+            {m.rows && m.rows.rows.length > 0 && (
+              <div className="card overflow-x-auto max-w-[95%]">
+                <table className="w-full text-xs">
+                  <thead><tr>{m.rows.columns.map((c) => <th key={c} className="text-left px-2 py-1 text-muted font-medium whitespace-nowrap">{c.replace(/_/g, " ")}</th>)}</tr></thead>
+                  <tbody>{m.rows.rows.slice(0, 15).map((r, i) => <tr key={i} className="border-t border-line">{m.rows!.columns.map((c) => <td key={c} className={`px-2 py-1 ${typeof r[c] === "number" ? "mono text-right" : ""}`}>{r[c] === null || r[c] === undefined ? "–" : typeof r[c] === "boolean" ? (r[c] ? "yes" : "no") : String(r[c])}</td>)}</tr>)}</tbody>
+                </table>
+                {m.rows.rows.length > 15 && <div className="px-2 py-1 text-xs text-muted">{m.rows.rows.length - 15} more rows</div>}
               </div>
             )}
             {m.checkout && <Link href="/checkout" className="btn btn-primary">Go to checkout</Link>}

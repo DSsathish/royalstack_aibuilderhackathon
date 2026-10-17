@@ -255,5 +255,15 @@ TOOLS_BY_MODE = {
                 remove_from_cart, view_cart, start_checkout, get_offers],      # items enter the cart only by scanning
     "online": [search_products, get_product, suggest_substitutes, record_demand_signal,
                add_to_cart, remove_from_cart, view_cart, start_checkout, get_offers],
-    "owner": [search_products, get_product, get_low_stock, forecast_demand, draft_purchase_order, get_anomalies],
+    "owner": [],      # filled below from owner_tools: a separate agent with full access to the store
 }
+
+from app.agent import owner_tools as _ot  # noqa: E402
+
+TOOLS_BY_MODE["owner"] = [
+    _ot.store_snapshot, _ot.find_products, get_low_stock, _ot.sales_report, forecast_demand, _ot.reorder_drafts, draft_purchase_order,
+    _ot.demand_signals, _ot.customers_overview, _ot.list_offers, _ot.exit_summary, get_anomalies, _ot.sync_status, _ot.floor_map_summary,
+    search_products, get_product,
+    _ot.set_reorder_rule, _ot.adjust_stock, _ot.record_shelf_count, _ot.update_price, _ot.move_product, _ot.create_offer,
+    _ot.set_offer_active, _ot.adjust_points, _ot.approve_purchase_order,
+]
