@@ -25,7 +25,9 @@ def _fetch_open_food_facts(code: str) -> dict:
     p = data.get("product") or {}
     if data.get("status") != 1 or not p.get("product_name"):
         return {"found": False}
-    cats = [c.split(":", 1)[-1].replace("-", " ").title() for c in p.get("categories_tags") or []]
+    tags = p.get("categories_tags") or []
+    cats = [c.split(":", 1)[-1].replace("-", " ").title() for c in tags if c.startswith("en:")] or \
+           [c.split(":", 1)[-1].replace("-", " ").title() for c in tags]
     return {"found": True, "name": p["product_name"].strip()[:120], "brand": (p.get("brands") or "").split(",")[0].strip()[:60],
             "category": cats[-1] if cats else "", "image_url": p.get("image_front_small_url") or ""}
 
