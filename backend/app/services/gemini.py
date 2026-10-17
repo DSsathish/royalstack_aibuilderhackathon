@@ -60,7 +60,6 @@ def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float
         return []
 
 
-LANG_NAMES = {"en": "English", "ta": "Tamil", "hi": "Hindi"}
 
 
 def transcribe(audio: bytes, mime_type: str, language: str = "auto") -> str:
@@ -68,7 +67,8 @@ def transcribe(audio: bytes, mime_type: str, language: str = "auto") -> str:
     script, Hindi in Devanagari, English in Latin letters; never translated or transliterated. Returns "" on failure."""
     if not configured():
         return ""
-    hint = f" The speaker is speaking {LANG_NAMES[language]}." if language in LANG_NAMES else ""
+    from app.domain import languages
+    hint = f" The speaker is speaking {languages.name(language)}." if language in languages.LANGUAGES else ""
     try:
         res = client().models.generate_content(
             model=settings.gemini_flash_model,

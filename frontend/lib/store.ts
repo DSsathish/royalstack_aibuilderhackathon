@@ -15,7 +15,7 @@ type State = {
   cart: CartView | null;
   messages: Msg[];
   highlight: Location | null;
-  language: "auto" | "en" | "ta" | "hi";
+  language: string;                       // "auto" or a code from lib/languages
   speak: boolean;
   avatar: "idle" | "listening" | "thinking" | "speaking";
   customer: { uid: string; name: string } | null;      // signed-in shopper; null for guests

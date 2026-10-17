@@ -16,6 +16,7 @@ from app.agent import prompts
 from app.agent.agent import ACTION_FOR_TOOL
 from app.agent.tools import TOOLS_BY_MODE
 from app.config import settings
+from app.domain import languages
 from app.domain.models import Mode, Session
 from app.services import conversation, gemini
 
@@ -26,8 +27,6 @@ MAX_AUDIO_FRAME = 32_000     # 1 s of PCM16 at 16 kHz; the worklet sends 3.2 KB 
 _active: set[str] = set()    # session ids with an open live socket (one Vertex session each)
 _resume_handles: dict[str, str] = {}   # session id -> latest Live resumption handle (reconnects continue the conversation)
 VOICE_NAME = "Kore"
-LANG = {"en": "English", "ta": "Tamil", "hi": "Hindi"}
-BCP47 = {"en": "en-IN", "ta": "ta-IN", "hi": "hi-IN"}
 NOISE = re.compile(r"\s*[\[{<][^\]}>]{0,40}[\]}>]")   # transcriber markers such as {background} or <noise>: sounds, not words
 
 
@@ -195,20 +194,21 @@ def dispatch(name: str, args: dict, state: dict) -> dict:
 
 
 def _language_block(s: Session) -> str:
-    if s.language not in LANG:
+    if s.language not in languages.LANGUAGES:
         return ""
-    who = "owner" if s.mode == "owner" else "shopper"
-    return f"\nThe {who} chose {LANG[s.language]} in the app. Speak {LANG[s.language]} unless they clearly speak another language.\n"
+    who, lang = "owner" if s.mode == "owner" else "shopper", languages.name(s.language)
+    return f"\nThe {who} chose {lang} in the app. Speak {lang} unless they clearly speak another language.\n"
 
 
 def _transcription(s: Session, store_languages: list[str]) -> types.AudioTranscriptionConfig:
     """Language hints for the live transcript. The model understands Tamil speech but writes it in another script unless
     hinted; a Tamil hint leaves English and Hindi speech intact (measured), while a hint that also lists Hindi tips
     Tamil into Devanagari. So: the chosen language alone, or the store's regional language plus English."""
-    if s.language in BCP47:
-        return types.AudioTranscriptionConfig(language_codes=[BCP47[s.language]])
-    regional = next((l for l in store_languages if l in BCP47 and l != "en"), None)
-    return types.AudioTranscriptionConfig(language_codes=[BCP47[regional], "en-IN"] if regional else ["en-IN"])
+    chosen = languages.bcp47(s.language)
+    if chosen:
+        return types.AudioTranscriptionConfig(language_codes=[chosen])
+    regional = next((languages.bcp47(l) for l in store_languages if l != "en" and languages.bcp47(l)), None)
+    return types.AudioTranscriptionConfig(language_codes=[regional, "en-IN"] if regional else ["en-IN"])
 
 
 def _config(s: Session) -> types.LiveConnectConfig:
@@ -277,6 +277,7 @@ async def _run(ws: WebSocket, s: Session) -> None:
                         await live.send_client_content(
                             turns=types.Content(role="user", parts=[types.Part(text=str(frame["text"])[:2000])]), turn_complete=True)
                     elif frame.get("type") == "end":
+                        _resume_handles.pop(s.session_id, None)   # a deliberate end: the next conversation starts a fresh model context
                         return
 
         async def downlink() -> None:

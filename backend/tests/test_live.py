@@ -232,6 +232,8 @@ def test_live_transcript_language_hints(store_id):
     assert live._config(s).input_audio_transcription.language_codes == ["ta-IN", "en-IN"]   # auto: regional language first
     s.language = "hi"
     assert live._config(s).input_audio_transcription.language_codes == ["hi-IN"]
+    s.language = "te"
+    assert live._config(s).input_audio_transcription.language_codes == ["te-IN"]       # any listed language, not just three
     db.store_ref(store_id).update({"languages": ["en"]})
     s.language = "auto"
     assert live._config(s).input_audio_transcription.language_codes == ["en-IN"]

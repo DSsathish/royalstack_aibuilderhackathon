@@ -18,7 +18,7 @@ def test_build_uses_mode_tools_and_prompt():
 
 def test_prompt_core_rules_present():
     p = prompts.for_mode("owner")
-    assert "tool" in p.lower() and "tamil" in p.lower()
+    assert "tool" in p.lower() and "owner's language" in p.lower()
     assert "approval" in p.lower()
 
 

@@ -5,6 +5,7 @@ import { Offer, Product, api } from "@/lib/api";
 import { GuardMode, LiveFrame, LiveState, liveSupported, startLive } from "@/lib/live";
 import { UiEvent } from "@/lib/sse";
 import { Msg, sayAloud, useApp } from "@/lib/store";
+import { LANGUAGES } from "@/lib/languages";
 import { listenOnce } from "@/lib/voice";
 import { IconCamera, IconMic, IconSend, IconSpeaker, IconStop } from "./Icons";
 import ProductCard from "./ProductCard";
@@ -194,8 +195,8 @@ export default function Chat() {
           <h1 className="text-lg font-semibold leading-tight truncate">{store?.name ?? "Store"}</h1>
         </div>
         {!owner && <Link href="/me" className={`chip ${customer ? "chip-accent" : "chip-muted"}`}>{customer ? (customer.name ? `Hi, ${customer.name.split(" ")[0]}` : "My profile") : "Sign in"}</Link>}
-        <select id="lang" value={language} onChange={(e) => setLanguage(e.target.value as never)} className="chip chip-muted bg-surface border border-line" aria-label="Language">
-          <option value="auto">Auto</option><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option>
+        <select id="lang" value={language} onChange={(e) => setLanguage(e.target.value)} className="chip chip-muted bg-surface border border-line max-w-[7.5rem]" aria-label="Language">
+          {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
         </select>
         <button onClick={() => setSpeak(!speak)} title={speak ? "Mute read-aloud" : "Read replies aloud"} className="text-muted"><IconSpeaker muted={!speak} /></button>
       </header>

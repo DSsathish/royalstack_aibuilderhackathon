@@ -3,7 +3,7 @@ import { API, Order, Session } from "./api";
 import { authed } from "./authed";
 import { useApp } from "./store";
 
-export type Profile = { uid: string; store_id: string; phone_last4: string; name: string; language: "auto" | "en" | "ta" | "hi"; dietary: string[];
+export type Profile = { uid: string; store_id: string; phone_last4: string; name: string; language: string; dietary: string[];
   favourite_categories: string[]; usual_items: string[]; substitution: "ask" | "same_brand" | "any"; consent_at: string;
   visits: number; spend: number; points: number; last_seen: string };
 

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.agent import agent, live
 from app.config import settings
+from app.domain import languages
 from app.domain.models import Mode, Session
 from app.services import db, gemini, sessions
 from app.services.ratelimit import Limiter
@@ -90,7 +91,7 @@ async def chat(session_id: str = Form(...), message: str = Form(min_length=1, ma
 
 
 @router.post("/agent/audio")
-async def audio(session_id: str = Form(...), audio: UploadFile = File(...), language: str = Form(default="auto", pattern=r"^(auto|en|ta|hi)$")):
+async def audio(session_id: str = Form(...), audio: UploadFile = File(...), language: str = Form(default="auto", pattern=languages.CODE_PATTERN)):
     s = _session(session_id)
     limit_chat(s.session_id)
     data, mime = await _read_upload(audio, "audio")
@@ -108,7 +109,7 @@ async def audio(session_id: str = Form(...), audio: UploadFile = File(...), lang
 
 @router.websocket("/agent/live")
 async def live_voice(ws: WebSocket, session_id: str = Query(pattern=r"^[a-f0-9]{32}$"),
-                     language: str = Query(default="auto", pattern=r"^(auto|en|ta|hi)$")):
+                     language: str = Query(default="auto", pattern=languages.CODE_PATTERN)):
     s = sessions.get(session_id)
     if s and language != "auto":
         s.language = language        # the language picked in the app, for this connection

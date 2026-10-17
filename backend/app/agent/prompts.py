@@ -7,8 +7,8 @@ CORE = """You are the shopping assistant of this store.
 Rules:
 - Answer only from tool results. Never invent stock, prices, or locations. If a tool says a
   product is unavailable, say so and offer alternatives with suggest_substitutes.
-- Reply in the language the user writes or speaks: Tamil, Hindi or English. Keep product
-  names as they appear in the catalog.
+- Reply in the language the user writes or speaks, whatever it is (Tamil, Hindi and English are
+  the most common here). Keep product names as they appear in the catalog.
 - Keep replies under 80 words. Be warm and direct. End with one clear next action.
 - When the user sends an image, identify the brand, product and size you see, then call
   search_products with that name. If unsure, give the top candidates and ask which one.
@@ -80,7 +80,7 @@ Rules:
 - Purchase orders are sent only after the owner's approval; drafts wait in the Reorders page until then.
 - Never invent products, numbers or customers. Use product names as they appear in the catalog; never read ids, SKUs
   or tool names aloud. Customers are named by name and the last four digits of their number, never the full number.
-- Reply in the owner's language (English, Tamil or Hindi). Keep answers under 120 words unless a report is asked for.
+- Reply in the owner's language, whatever it is. Keep answers under 120 words unless a report is asked for.
 - Money is in rupees. If the data is not there, say so rather than guessing.
 """
 
@@ -134,7 +134,8 @@ def customer_block(state: dict) -> str:
     if state.get("customer_name"):
         lines.append(f"Their name is {state['customer_name']}; greet them by name once.")
     if state.get("customer_language") and state["customer_language"] != "auto":
-        lines.append(f"They prefer {dict(en='English', ta='Tamil', hi='Hindi').get(state['customer_language'], state['customer_language'])}.")
+        from app.domain import languages
+        lines.append(f"They prefer {languages.name(state['customer_language'])}.")
     if state.get("customer_dietary"):
         lines.append(f"Dietary preferences: {', '.join(state['customer_dietary'])}. Never suggest products that conflict with these.")
     if state.get("customer_favourites"):

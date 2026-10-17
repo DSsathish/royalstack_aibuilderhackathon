@@ -1,4 +1,5 @@
 "use client";
+import { LANGUAGES } from "@/lib/languages";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -10,7 +11,6 @@ import PhoneSignIn from "@/components/PhoneSignIn";
 
 const DIETARY = ["Vegetarian", "Vegan", "Jain", "Halal", "No sugar", "Gluten-free", "Lactose-free", "Nut allergy"];
 const CATEGORIES = ["Dairy", "Staples", "Snacks", "Beverages", "Fruits & Vegetables", "Bakery", "Personal care", "Household", "Baby"];
-const LANGS = [["auto", "Auto"], ["en", "English"], ["ta", "தமிழ்"], ["hi", "हिन्दी"]] as const;
 const SUBS = [["ask", "Ask me first"], ["same_brand", "Same brand, another size"], ["any", "Any equivalent"]] as const;
 const LEDGER: Record<LedgerEntry["kind"], string> = { earn: "Earned on a purchase", redeem: "Used at checkout", release: "Returned from an unpaid checkout", adjust: "Adjusted by the store", expire: "Expired" };
 
@@ -115,7 +115,7 @@ export default function MePage() {
       <section className="card p-4 space-y-3">
         <div className="eyebrow">Preferences</div>
         <label className="block text-sm">Name<input value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} className="field mt-1" /></label>
-        <label className="block text-sm">Language<select value={form.language ?? "auto"} onChange={(e) => setForm({ ...form, language: e.target.value as Profile["language"] })} className="field mt-1">{LANGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+        <label className="block text-sm">Language<select value={form.language ?? "auto"} onChange={(e) => setForm({ ...form, language: e.target.value })} className="field mt-1">{LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}</select></label>
         <div className="text-sm">Dietary{chips("dietary", DIETARY)}</div>
         <div className="text-sm">Favourite categories{chips("favourite_categories", CATEGORIES)}</div>
         <div className="text-sm">When something is out of stock

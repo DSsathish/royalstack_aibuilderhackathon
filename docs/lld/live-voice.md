@@ -121,3 +121,16 @@ Bridge (`agent/live.py`)
 
 Not done: no server-side echo cancellation; the guard holds the mic for the first 650 ms of every reply until it has
 measured a headphone setup; on a loudspeaker the shopper interrupts by tapping, not by talking over.
+
+
+## Addendum 18 Oct: languages
+The model understands and speaks far more than three languages; the limits were ours. One table, `app/domain/languages.py`
+(mirrored in `lib/languages.ts`), now drives the selector in the chat header, the profile and the store setup, the request
+validation pattern (`CODE_PATTERN`), the prompt line "The shopper chose Telugu ...", the push-to-talk transcription hint, and
+the live transcription hints. Each BCP-47 tag was checked against the live model: nine Indian languages plus Arabic,
+German, Spanish, French, Indonesian, Italian, Japanese, Korean, Dutch, Polish, Portuguese, Russian, Thai, Turkish,
+Vietnamese and Mandarin (`cmn-CN`; `zh-CN` is refused). Punjabi, Urdu and Odia are refused by the model and left out.
+"Auto" remains the default: the prompt says to reply in whatever language the shopper uses, and the transcript hint is the
+store's first regional language plus English. The read-aloud voice for text replies is picked from the script of the text.
+A deliberate "End conversation" now also drops the session's resumption handle, so the next conversation starts with a
+fresh model context (the saved transcript memory still carries over); reconnects after a network drop still resume.

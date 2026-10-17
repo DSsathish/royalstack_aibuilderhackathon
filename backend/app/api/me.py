@@ -1,5 +1,6 @@
 """Signed-in shopper: link a session, profile, history, export, delete."""
 
+from app.domain import languages
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
@@ -42,7 +43,7 @@ def profile(store_id: str = Query(pattern=r"^[a-z0-9-]{3,40}$"), uid: str = Depe
 class ProfilePatch(BaseModel):
     store_id: str = Field(pattern=r"^[a-z0-9-]{3,40}$")
     name: str | None = Field(default=None, max_length=60)
-    language: str | None = Field(default=None, pattern=r"^(auto|en|ta|hi)$")
+    language: str | None = Field(default=None, pattern=languages.CODE_PATTERN)
     dietary: list[str] | None = Field(default=None, max_length=8)
     favourite_categories: list[str] | None = Field(default=None, max_length=12)
     substitution: str | None = Field(default=None, pattern=r"^(ask|same_brand|any)$")

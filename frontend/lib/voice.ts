@@ -1,3 +1,4 @@
+import { scriptLanguage } from "./languages";
 /** Hands-free voice loop: record until the shopper stops talking, hand the audio over, speak the reply, repeat. */
 
 export type ListenResult = { blob: Blob; mime: string } | null;
@@ -65,6 +66,5 @@ export function speak(text: string, langCode: string): Promise<void> {
 }
 
 export function languageOf(text: string, preferred: string): string {
-  if (preferred !== "auto") return preferred;
-  return /[஀-௿]/.test(text) ? "ta" : /[ऀ-ॿ]/.test(text) ? "hi" : "en";
+  return preferred !== "auto" ? preferred : scriptLanguage(text);
 }

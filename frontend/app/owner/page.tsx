@@ -1,4 +1,5 @@
 "use client";
+import { LANGUAGES } from "@/lib/languages";
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { User } from "firebase/auth";
@@ -289,7 +290,7 @@ function RegisterForm({ email, error, onDone }: { email: string; error: string; 
       </div>
       <label className="block text-sm font-medium">Shop name<input id="reg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sri Murugan Stores" className="field mt-1" /><span className="label block mt-1">Shoppers see this name in the app; it also becomes your store’s web address.</span></label>
       <label className="block text-sm font-medium">City<input id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Chennai" className="field mt-1" /></label>
-      <div className="text-sm font-medium">Languages your shoppers use<div className="flex gap-2 mt-1.5">{[["en", "English"], ["ta", "தமிழ்"], ["hi", "हिन्दी"]].map(([k, l]) => <button key={k} type="button" onClick={() => toggle(k)} className={`chip px-3 py-1.5 ${langs.includes(k) ? "bg-ink text-bg" : "chip-muted"}`}>{l}</button>)}</div><span className="label block mt-1">The assistant answers in whichever of these a shopper speaks.</span></div>
+      <div className="text-sm font-medium">Languages your shoppers use<div className="flex flex-wrap gap-2 mt-1.5">{LANGUAGES.filter((l) => l.code !== "auto").map((l) => <button key={l.code} type="button" onClick={() => toggle(l.code)} className={`chip px-3 py-1.5 ${langs.includes(l.code) ? "bg-ink text-bg" : "chip-muted"}`}>{l.label}</button>)}</div><span className="label block mt-1">The assistant answers in whatever language a shopper speaks; the first regional language here guides the voice transcript.</span></div>
       {err && <p className="chip chip-bad whitespace-normal">{err}</p>}
       <button onClick={submit} disabled={busy || name.trim().length < 3} className="btn btn-primary w-full py-3">{busy ? "Creating your shop" : "Create my shop"}</button>
       <p className="text-xs text-muted">Already own a store with a different account? <button type="button" onClick={() => signOutOwner()} className="underline">Switch account</button>.</p>
