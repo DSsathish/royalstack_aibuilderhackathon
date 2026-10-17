@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import type { User } from "firebase/auth";
 import { money } from "@/lib/api";
 import { createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
@@ -205,7 +206,7 @@ function RegisterForm({ email, error, onDone }: { email: string; error: string; 
         <p className="text-muted text-sm mt-1">Signed in as {email}. Takes a minute; you can change everything later.</p>
         <p className="text-sm mt-2 flex flex-wrap gap-3">
           <button type="button" onClick={() => signOutOwner()} className="text-accent font-semibold underline">Not you? Sign out</button>
-          <a href="/" className="text-muted underline">Back to the shopper app</a>
+          <Link href="/" className="text-muted underline">Back to the shopper app</Link>
         </p>
       </div>
       <label className="text-sm">Shop name<input id="reg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sri Murugan Stores" className="field mt-1" /></label>
