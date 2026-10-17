@@ -118,3 +118,14 @@ def test_owner_draws_a_floor_map(monkeypatch):
     assert client.patch(f"/owner/{sid}/store", json={"floor_map": [{"aisle": "A", "x": 950, "y": 60, "w": 100, "h": 100}]}, headers=h).status_code == 422   # off the floor
     assert client.patch(f"/owner/{sid}/store", json={"floor_map": [{"aisle": "A", "x": 0, "y": 0, "w": 50, "h": 50}, {"aisle": "a", "x": 100, "y": 0, "w": 50, "h": 50}]}, headers=h).status_code == 422   # duplicate names
     assert client.get(f"/stores/{sid}").json()["floor_map"][1]["aisle"] == "Snacks"
+
+
+def test_floor_map_accepts_floors_and_kinds(monkeypatch):
+    h = bearer(monkeypatch, "u-floors", "floors@example.com")
+    sid = register(h).json()["store"]["store_id"]
+    layout = [{"aisle": "Rice", "x": 60, "y": 60, "w": 120, "h": 300, "floor": 1}, {"aisle": "Chiller", "x": 880, "y": 80, "w": 90, "h": 200, "kind": "chiller"},
+              {"aisle": "Kids", "x": 60, "y": 60, "w": 120, "h": 300, "floor": 2}]
+    res = client.patch(f"/owner/{sid}/store", json={"floor_map": layout}, headers=h)
+    assert res.status_code == 200, res.text
+    assert [(a["aisle"], a["floor"], a["kind"]) for a in res.json()["floor_map"]] == [("Rice", 1, "aisle"), ("Chiller", 1, "chiller"), ("Kids", 2, "aisle")]
+    assert client.patch(f"/owner/{sid}/store", json={"floor_map": [{"aisle": "X", "x": 0, "y": 0, "w": 50, "h": 50, "floor": 9}]}, headers=h).status_code == 422

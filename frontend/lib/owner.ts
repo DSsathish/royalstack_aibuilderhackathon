@@ -29,14 +29,14 @@ export type SyncView = {
   outbox: { pending: number; dead: number } };
 
 export type StoreDoc = { store_id: string; name: string; city: string; currency: string; languages: string[]; self_checkout_item_limit: number;
-  brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string; x: number; y: number; w: number; h: number }[] };
+  brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string; x: number; y: number; w: number; h: number; floor?: number; kind?: "aisle" | "chiller" | "freezer" | "counter" }[] };
 
 export const owner = {
   me: () => call<{ uid: string; stores: string[]; roles: Record<string, "owner" | "staff"> }>("/owner/me"),
   register: (body: { name: string; city: string; languages: string[]; currency: string }) =>
     call<{ store: StoreDoc; kiosk_pin: string }>("/owner/register", { method: "POST", body: JSON.stringify(body) }),
   store: (s: string) => call<StoreDoc>(`/stores/${s}`),
-  patchStore: (s: string, body: Partial<{ name: string; city: string; tagline: string; greeting: string; accent: string; languages: string[]; currency: string; aisles: string[]; floor_map: { aisle: string; x: number; y: number; w: number; h: number }[] }>) =>
+  patchStore: (s: string, body: Partial<{ name: string; city: string; tagline: string; greeting: string; accent: string; languages: string[]; currency: string; aisles: string[]; floor_map: { aisle: string; x: number; y: number; w: number; h: number; floor?: number; kind?: "aisle" | "chiller" | "freezer" | "counter" }[] }>) =>
     call<StoreDoc>(`/owner/${s}/store`, { method: "PATCH", body: JSON.stringify(body) }),
   setLocation: (s: string, pid: string, body: { aisle: string; bay?: number; shelf?: number; side?: "left" | "right" }) =>
     call<{ aisle: string; bay: number }>(`/owner/${s}/products/${pid}/location`, { method: "PATCH", body: JSON.stringify(body) }),

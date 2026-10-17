@@ -84,7 +84,7 @@ def test_live_config_has_voice_vad_resumption_compression_and_history(store_id):
     cfg = live._config(s)
     assert cfg.speech_config.voice_config.prebuilt_voice_config.voice_name == "Kore"
     vad = cfg.realtime_input_config.automatic_activity_detection
-    assert vad.silence_duration_ms == 900 and vad.prefix_padding_ms == 300
+    assert vad.silence_duration_ms == 1100 and vad.prefix_padding_ms == 400
     assert vad.end_of_speech_sensitivity == types.EndSensitivity.END_SENSITIVITY_LOW
     assert cfg.session_resumption is not None and cfg.context_window_compression is not None
     assert cfg.enable_affective_dialog is True

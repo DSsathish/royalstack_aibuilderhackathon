@@ -28,6 +28,14 @@ export async function startLive(sessionId: string, h: LiveHandlers): Promise<() 
   const playback = new AudioContext({ sampleRate: 24000 });
   h.onState("connecting");
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  // iOS suspends the audio graph when another app takes the output or the screen locks; resume it instead of dropping the session
+  const keepAlive = () => {
+    if (document.visibilityState !== "visible") return;
+    for (const c of [capture, playback]) if (c.state !== "running") c.resume().catch(() => {});
+  };
+  capture.addEventListener("statechange", keepAlive);
+  playback.addEventListener("statechange", keepAlive);
+  document.addEventListener("visibilitychange", keepAlive);
   await capture.audioWorklet.addModule("/pcm-worklet.js");
   await Promise.all([capture.resume(), playback.resume()]);
   const source = capture.createMediaStreamSource(stream);

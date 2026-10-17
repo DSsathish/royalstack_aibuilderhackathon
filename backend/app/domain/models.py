@@ -15,12 +15,18 @@ def now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+BlockKind = Literal["aisle", "chiller", "freezer", "counter"]
+
+
 class Aisle(BaseModel):
+    """One block on a floor: a shelf aisle, a chiller, a freezer or a service counter. Names are unique across floors."""
     aisle: str
     x: float
     y: float
     w: float
     h: float
+    floor: int = 1
+    kind: BlockKind = "aisle"
 
 
 class Brand(BaseModel):
@@ -80,10 +86,17 @@ class Product(BaseModel):
     tags: list[str] = []
     substitutes: list[str] = []
     is_high_value: bool = False
+    storage: Literal["ambient", "chilled", "frozen"] = "ambient"           # where it lives: aisle, chiller or freezer
+    use: Literal["human", "pet", "household", "personal_care"] = "human"   # who it is for; keeps pet food out of people's searches
     embedding: list[float] = []
 
     @classmethod
     def from_row(cls, *, store_id: str, sku: str, name: str, price: float, threshold: float, **extra) -> "Product":
+        """Every product is born classified: storage (aisle, chiller, freezer) and use (people, pets, home, personal care)
+        come from the name and category unless the row says otherwise."""
+        from app.domain import classify
+        extra.setdefault("storage", classify.storage_of(name, extra.get("category", ""), extra.get("subcategory", ""), extra.get("tags")))
+        extra.setdefault("use", classify.use_of(name, extra.get("category", ""), extra.get("subcategory", ""), extra.get("tags")))
         return cls(
             product_id=f"{store_id}-{slug(sku)}",
             store_id=store_id,

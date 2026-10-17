@@ -12,10 +12,11 @@ declare global { interface Window { BarcodeDetector?: new (o?: { formats: string
 export default function Scanner({ onPhoto }: { onPhoto: (f: File) => void }) {
   const { session, updateSession, setCart } = useApp();
   const video = useRef<HTMLVideoElement>(null);
-  const [found, setFound] = useState<Product | null>(null);
-  const [qty, setQty] = useState(1);
+  const [found, setFound] = useState<Product | null>(null);          // the last product added, shown with its line quantity
+  const [added, setAdded] = useState<{ name: string; qty: number; count: number } | null>(null);
   const [error, setError] = useState("");
   const [manual, setManual] = useState("");
+  const [busy, setBusy] = useState(false);
   const lastCode = useRef<{ code: string; at: number }>({ code: "", at: 0 });
 
   useEffect(() => {
@@ -43,22 +44,42 @@ export default function Scanner({ onPhoto }: { onPhoto: (f: File) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.session_id]);
 
+  /** Scan → identify → add one to the cart → show it. The same barcode within 2.5 s is one scan; after that it adds another unit. */
   async function onCode(code: string) {
     const now = Date.now();
-    if (code === lastCode.current.code && now - lastCode.current.at < 2500) return;
+    if (busy || (code === lastCode.current.code && now - lastCode.current.at < 2500)) return;
     lastCode.current = { code, at: now };
     if (!session) return;
     const aisle = /[?&]aisle=([A-Za-z0-9]+)/.exec(code)?.[1];
     if (aisle) { updateSession(await api.setAisle(session, aisle)); setError(`You are at aisle ${aisle}`); return; }
     if (!/^\d{8,14}$/.test(code)) return;
-    try { setFound(await api.byBarcode(session.store_id, code)); setQty(1); setError(""); navigator.vibrate?.(60); }
-    catch { setError(`Barcode ${code} is not in this store's catalog.`); }
+    setBusy(true); setError("");
+    try {
+      const p = await api.byBarcode(session.store_id, code);
+      const cart = await api.addItem(session, p.product_id, 1, "scan");
+      setCart(cart);
+      const line = cart.items.find((i) => i.product_id === p.product_id);
+      setFound(p); setAdded({ name: p.name, qty: line?.qty ?? 1, count: cart.count });
+      navigator.vibrate?.([40, 40, 40]);
+    } catch (e) {
+      const m = (e as Error).message;
+      if (m === "product not found" || m === "Not Found") setError(`Barcode ${code} is not in this store's catalog. Ask staff, or photograph the product below.`);
+      else if (m === "out_of_stock") setError("That item shows no stock in the system. Ask staff to check.");
+      else if (m === "item_limit") setError("Self-checkout item limit reached. Please use a counter for more items.");
+      else setError(`Could not add it: ${m}`);
+      setFound(null); setAdded(null);
+    }
+    setBusy(false);
   }
 
-  async function add() {
+  async function changeQty(delta: number) {
     if (!session || !found) return;
-    try { setCart(await api.addItem(session, found.product_id, qty, "scan")); setFound(null); navigator.vibrate?.([40, 40, 40]); }
-    catch (e) { setError((e as Error).message === "item_limit" ? "Self-checkout item limit reached. Please use a counter for more items." : `Could not add: ${(e as Error).message}`); }
+    try {
+      const cart = delta > 0 ? await api.addItem(session, found.product_id, 1, "scan") : await api.removeItem(session, found.product_id);
+      setCart(cart);
+      const line = cart.items.find((i) => i.product_id === found.product_id);
+      if (!line) { setFound(null); setAdded(null); } else setAdded({ name: found.name, qty: line.qty, count: cart.count });
+    } catch (e) { setError(`Could not change it: ${(e as Error).message}`); }
   }
 
   return (
@@ -70,14 +91,14 @@ export default function Scanner({ onPhoto }: { onPhoto: (f: File) => void }) {
         <div className="absolute inset-8 border-2 border-surface/60 rounded-[14px] pointer-events-none" />
       </div>
       {error && <div className="text-sm text-warn">{error}</div>}
-      {found && (
-        <div className="card p-3 flex flex-col gap-3 border-accent">
+      {found && added && (
+        <div className="card p-3 flex flex-col gap-3 border-accent reveal" aria-live="polite">
+          <div className="chip chip-good self-start">Added to your cart · {added.count} item{added.count === 1 ? "" : "s"} in total</div>
           <ProductCard p={found} />
           <div className="flex items-center gap-3">
-            <button onClick={() => setQty(Math.max(1, qty - 1))} className="btn btn-ghost w-10 h-10 p-0 rounded-full" aria-label="Less"><IconMinus className="w-4 h-4" /></button>
-            <span className="mono text-lg w-6 text-center">{qty}</span>
-            <button onClick={() => setQty(qty + 1)} className="btn btn-ghost w-10 h-10 p-0 rounded-full" aria-label="More"><IconPlus className="w-4 h-4" /></button>
-            <button onClick={add} className="btn btn-primary flex-1">Add to cart</button>
+            <span className="text-sm text-muted flex-1">{added.name} × {added.qty}. Scan it again for one more.</span>
+            <button onClick={() => changeQty(-1)} className="btn btn-ghost w-10 h-10 p-0 rounded-full" aria-label="Remove this line"><IconMinus className="w-4 h-4" /></button>
+            <button onClick={() => changeQty(1)} className="btn btn-ghost w-10 h-10 p-0 rounded-full" aria-label="One more"><IconPlus className="w-4 h-4" /></button>
           </div>
         </div>
       )}

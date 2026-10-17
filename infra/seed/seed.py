@@ -22,7 +22,8 @@ from app.domain.models import Aisle, Store, Supplier  # noqa: E402
 from app.services import db, gemini  # noqa: E402
 
 MAPPING = {h: h for h in csvc.REQUIRED + csvc.OPTIONAL}
-FLOOR_MAP = [Aisle(aisle=f"A{i}", x=80 + (i - 1) * 150, y=80, w=90, h=420) for i in range(1, 7)]
+FLOOR_MAP = [Aisle(aisle=f"A{i}", x=80 + (i - 1) * 130, y=80, w=90, h=420) for i in range(1, 7)] + [
+    Aisle(aisle="Chiller", x=880, y=80, w=90, h=200, kind="chiller"), Aisle(aisle="Freezer", x=880, y=320, w=90, h=180, kind="freezer")]
 SUPPLIERS = [
     ("sup-metro-cash", "Metro Cash & Carry", "orders@metro.example", 3),
     ("sup-aavin", "Aavin Dairy Depot", "depot@aavin.example", 1),

@@ -8,6 +8,7 @@ import uuid
 from pydantic import BaseModel
 
 from app.domain.models import DemandSignal, Location, Product
+from app.domain import classify
 from app.services import db, gemini, inventory
 
 CACHE_TTL_S = 60
@@ -55,6 +56,12 @@ def _load(store_id: str) -> tuple[list[Product], dict[str, Location]]:
 def _view(store_id: str, p: Product, locations: dict[str, Location]) -> ProductView:
     return ProductView(**p.model_dump(), available=inventory.available(store_id, p.product_id),
                        location=locations.get(p.product_id))
+
+
+def blocks(store_id: str) -> dict[str, dict]:
+    """Floor-map blocks by name (kind and floor), read fresh: the owner edits them rarely, the assistant reads them often."""
+    doc = db.store_ref(store_id).get().to_dict() or {}
+    return {b["aisle"]: b for b in doc.get("floor_map", [])}
 
 
 def product_map(store_id: str) -> tuple[dict[str, Product], dict[str, Location]]:
@@ -109,8 +116,13 @@ def search(store_id: str, query: str, k: int = 6) -> list[ProductView]:
     q = _tokens(query)
     qvec = (gemini.embed_texts([query], for_query=True) or [[]])[0]
 
+    wanted = classify.query_use(query)
     scored = []
     for p in products:
+        if wanted and p.use != wanted:
+            continue                      # "dog biscuits" means pet products only
+        if not wanted and p.use == "pet":
+            continue                      # nobody asked for pets: pet products never answer a people's query
         kw = _keyword_score(q, p)
         sem = _cosine(qvec, p.embedding)
         if kw > 0 or sem > 0.6:

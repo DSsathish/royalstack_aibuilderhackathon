@@ -13,7 +13,7 @@ Scan the entrance QR (see `docs/plan/00-overview.md` or the owner dashboard's Co
 
 ## What it does
 
-**Shopper, in the store.** Scan the entrance QR, no install. Talk to the assistant by voice (real-time speech-to-speech on Gemini Live, interruptible) or text, in English, Tamil or Hindi. Ask where things are and the floor map lights up. Scan barcodes or photograph a product, see a running receipt, pay in sandbox, get an exit QR.
+**Shopper, in the store.** Scan the entrance QR, no install. Talk to the assistant by voice (real-time speech-to-speech on Gemini Live, interruptible) or text, in English, Tamil or Hindi. Ask where things are and the floor map lights up. Scan a barcode and it is in the cart, or photograph a product; see a running receipt, pay in sandbox, get an exit QR. Ask where something is and the map lights the aisle, chiller or freezer on the right floor.
 
 **Exit.** A kiosk scans the receipt, takes a bag photo, and runs seven verification layers. Deterministic rules decide; Gemini vision only adjusts confidence and never blocks an exit. Photos are never stored.
 

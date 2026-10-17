@@ -90,11 +90,11 @@ async def chat(session_id: str = Form(...), message: str = Form(min_length=1, ma
 
 
 @router.post("/agent/audio")
-async def audio(session_id: str = Form(...), audio: UploadFile = File(...)):
+async def audio(session_id: str = Form(...), audio: UploadFile = File(...), language: str = Form(default="auto", pattern=r"^(auto|en|ta|hi)$")):
     s = _session(session_id)
     limit_chat(s.session_id)
     data, mime = await _read_upload(audio, "audio")
-    transcript = gemini.transcribe(data, mime)
+    transcript = gemini.transcribe(data, mime, language)
     if not transcript:
         raise HTTPException(422, "Could not transcribe audio. The assistant may be temporarily unavailable.")
 

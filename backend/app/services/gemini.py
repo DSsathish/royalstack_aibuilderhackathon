@@ -54,15 +54,22 @@ def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float
         return []
 
 
-def transcribe(audio: bytes, mime_type: str) -> str:
-    """Speech to text with Gemini Flash. Keeps the spoken language. Returns "" on failure."""
+LANG_NAMES = {"en": "English", "ta": "Tamil", "hi": "Hindi"}
+
+
+def transcribe(audio: bytes, mime_type: str, language: str = "auto") -> str:
+    """Speech to text with Gemini Flash. The transcript stays in the language and script that was spoken: Tamil in Tamil
+    script, Hindi in Devanagari, English in Latin letters; never translated or transliterated. Returns "" on failure."""
     if not configured():
         return ""
+    hint = f" The speaker is speaking {LANG_NAMES[language]}." if language in LANG_NAMES else ""
     try:
         res = client().models.generate_content(
             model=settings.gemini_flash_model,
             contents=[types.Part.from_bytes(data=audio, mime_type=mime_type),
-                      "Transcribe this audio exactly, in the language spoken. Output only the transcript."],
+                      "Transcribe this audio word for word in the language and script the speaker used (Tamil in Tamil script, "
+                      "Hindi in Devanagari, English in Latin letters). Do not translate or transliterate; keep mixed-language "
+                      "words as spoken. Output only the transcript." + hint],
             config=FAST,
         )
         return (res.text or "").strip()

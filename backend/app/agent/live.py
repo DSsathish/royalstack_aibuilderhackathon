@@ -129,7 +129,7 @@ def _config(s: Session) -> types.LiveConnectConfig:
         realtime_input_config=types.RealtimeInputConfig(automatic_activity_detection=types.AutomaticActivityDetection(
             start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
             end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
-            prefix_padding_ms=300, silence_duration_ms=900)),
+            prefix_padding_ms=400, silence_duration_ms=1100)),
         enable_affective_dialog=True,
         context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
         session_resumption=types.SessionResumptionConfig(handle=_resume_handles.get(s.session_id)),

@@ -103,3 +103,11 @@ def test_parse_rejects_non_utf8_as_import_error():
 def test_parse_infinity_is_row_error():
     rows, errors = csvc.parse(b"sku,name,price,on_hand\nA1,Salt,Infinity,10\n", CANON)
     assert rows == [] and errors[0].line == 2
+
+
+def test_upsert_classifies_storage_and_use(store_id):
+    rows, _ = csvc.parse(b"sku,name,price,on_hand,category\nM1,Toned Milk 500ml,28,10,Dairy\nD1,Pedigree Dog Food,500,3,Pets\nF1,Frozen Peas,90,4,\n", {**CANON, "category": "category"})
+    csvc.upsert(store_id, rows, high_value_threshold=500)
+    got = {d.id: d.to_dict() for d in db.products(store_id).stream()}
+    assert got[f"{store_id}-m1"]["storage"] == "chilled" and got[f"{store_id}-m1"]["use"] == "human"
+    assert got[f"{store_id}-d1"]["use"] == "pet" and got[f"{store_id}-f1"]["storage"] == "frozen"

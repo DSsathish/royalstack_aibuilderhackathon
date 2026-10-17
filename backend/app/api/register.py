@@ -1,6 +1,7 @@
 """Self-service: register a shop, set it up, manage staff and payment keys."""
 
 import re
+from typing import Literal
 import secrets
 import uuid
 
@@ -71,6 +72,8 @@ class AisleIn(BaseModel):
     y: float = Field(ge=0, le=540)
     w: float = Field(ge=40, le=1000)
     h: float = Field(ge=40, le=540)
+    floor: int = Field(default=1, ge=1, le=6)
+    kind: Literal["aisle", "chiller", "freezer", "counter"] = "aisle"
 
 
 class StorePatch(BaseModel):
@@ -108,7 +111,7 @@ def patch_store(body: StorePatch, store_id: str = STORE_ID, uid: str = Depends(c
             raise HTTPException(422, "aisle names must be unique")
         if any(a.x + a.w > 1000 or a.y + a.h > 540 for a in body.floor_map):
             raise HTTPException(422, "an aisle sticks out of the floor")
-        changes["floor_map"] = [Aisle(aisle=n, x=a.x, y=a.y, w=a.w, h=a.h).model_dump() for n, a in zip(names, body.floor_map)]
+        changes["floor_map"] = [Aisle(aisle=n, x=a.x, y=a.y, w=a.w, h=a.h, floor=a.floor, kind=a.kind).model_dump() for n, a in zip(names, body.floor_map)]
     ref.update(changes)
     catalog.invalidate(store_id)
     return ref.get().to_dict()

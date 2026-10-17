@@ -49,18 +49,33 @@ def _row(v: ProductView) -> dict:
 
 def _alternatives(store_id: str, v: ProductView, limit: int = 4) -> list[ProductView]:
     """In-stock stand-ins for a product: its listed substitutes, then the same subcategory, then the same category."""
-    found = [s for s in (catalog.get_product(store_id, sid) for sid in v.substitutes) if s and s.available > 0]
+    found = [s for s in (catalog.get_product(store_id, sid) for sid in v.substitutes) if s and s.available > 0 and s.use == v.use]
     products, _ = catalog.product_map(store_id)
     for attr in ("subcategory", "category"):          # exact matches, not keyword hits: soya milk never falls back to dairy
         key = getattr(v, attr)
         if len(found) >= 3 or not key:
             continue
         for p in sorted(products.values(), key=lambda p: p.name):
-            if p.product_id != v.product_id and getattr(p, attr) == key and p.product_id not in {f.product_id for f in found}:
+            if (p.product_id != v.product_id and getattr(p, attr) == key and p.use == v.use      # never pet food for a person
+                    and p.product_id not in {f.product_id for f in found}):
                 alt = catalog.get_product(store_id, p.product_id)
                 if alt and alt.available > 0:
                     found.append(alt)
     return found[:limit]
+
+
+FLOOR_NAMES = {1: "ground floor", 2: "first floor", 3: "second floor", 4: "third floor", 5: "fourth floor", 6: "fifth floor"}
+KIND_LABEL = {"aisle": "Aisle", "chiller": "Chiller", "freezer": "Freezer", "counter": "Counter"}
+
+
+def directions_for(store_id: str, loc) -> dict:
+    """Spoken directions from a location and the floor map: "Chiller Dairy, bay 2, left side, first floor"."""
+    block = catalog.blocks(store_id).get(loc.aisle, {})
+    kind, floor = block.get("kind", "aisle"), int(block.get("floor", 1))
+    label = KIND_LABEL.get(kind, "Aisle")
+    where = f"{label} {loc.aisle}" if not loc.aisle.lower().startswith(label.lower()) else loc.aisle
+    text = f"{where}, bay {loc.bay}, shelf {loc.shelf}, {loc.side} side" + (f", {FLOOR_NAMES.get(floor, f'floor {floor}')}" if floor > 1 else "")
+    return {"kind": kind, "floor": floor, "directions": text}
 
 
 def _brief(v: ProductView) -> dict:
@@ -133,8 +148,7 @@ def navigate_to(product_id: str, tool_context: ToolContext) -> dict:
     if not v or not v.location:
         return {"error": "no_location"}
     loc = v.location
-    return {**loc.model_dump(), "product_id": product_id, "name": v.name,
-            "directions": f"Aisle {loc.aisle}, bay {loc.bay}, shelf {loc.shelf}, {loc.side} side"}
+    return {**loc.model_dump(), "product_id": product_id, "name": v.name, **directions_for(tool_context.state["store_id"], loc)}
 
 
 def add_to_cart(product_id: str, qty: int, tool_context: ToolContext) -> dict:

@@ -9,7 +9,8 @@ export type Session = {
   session_id: string; store_id: string; mode: "instore" | "online" | "owner";
   cart_id: string; aisle_hint: string | null; language: string; customer_id?: string | null;
 };
-export type Aisle = { aisle: string; x: number; y: number; w: number; h: number };
+export type BlockKind = "aisle" | "chiller" | "freezer" | "counter";
+export type Aisle = { aisle: string; x: number; y: number; w: number; h: number; floor?: number; kind?: BlockKind };
 export type Store = { store_id: string; name: string; currency: string; languages: string[];
   self_checkout_item_limit: number; floor_map: Aisle[]; brand?: { accent: string; tagline: string; greeting: string }; city?: string };
 export type Location = { aisle: string; bay: number; shelf: number; side: string; x: number; y: number };
@@ -111,10 +112,11 @@ export const api = {
     if (!res.ok || !res.body) throw await toError(res);
     yield* readSse(res.body);
   },
-  async *audio(s: Session, audio: Blob): AsyncGenerator<UiEvent> {
+  async *audio(s: Session, audio: Blob, language = "auto"): AsyncGenerator<UiEvent> {
     const form = new FormData();
     form.set("session_id", s.session_id);
     form.set("audio", audio, "voice.webm");
+    form.set("language", language);            // the transcript stays in the spoken script; this is only a hint
     const res = await fetch(`${API}/agent/audio`, { method: "POST", body: form });
     if (!res.ok || !res.body) throw await toError(res);
     yield* readSse(res.body);

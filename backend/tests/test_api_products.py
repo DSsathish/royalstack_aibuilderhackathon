@@ -59,3 +59,12 @@ def test_owner_moves_a_product_to_an_aisle(shop):
     assert client.patch(f"/owner/{owned}/products/{pid}/location", json={"aisle": "Nowhere"}, headers=h).status_code == 422
     assert client.patch(f"/owner/{owned}/products/{pid}/location", json={"aisle": aisle}, headers={"X-Test-Uid": "stranger"}).status_code == 403
     assert any(e.to_dict()["action"] == "product_moved" for e in db.audit(owned).stream())
+
+
+def test_add_by_scan_places_cold_products_in_the_chiller(shop):
+    h = {"X-Test-Uid": "owner-1"}
+    client.patch(f"/owner/{shop}/store", json={"floor_map": [{"aisle": "A1", "x": 80, "y": 80, "w": 90, "h": 420}, {"aisle": "Chiller", "x": 880, "y": 80, "w": 90, "h": 200, "kind": "chiller"}]}, headers=h)
+    milk = client.post(f"/owner/{shop}/products", json={"barcode": "8901234567891", "name": "Toned Milk 500ml", "category": "Dairy", "price": 28, "on_hand": 10}, headers=h).json()
+    assert milk["location"]["aisle"] == "Chiller" and milk["storage"] == "chilled"
+    rice = client.post(f"/owner/{shop}/products", json={"barcode": "8901234567892", "name": "Ponni Rice 5kg", "price": 400, "on_hand": 5}, headers=h).json()
+    assert rice.get("location") is None and rice["storage"] == "ambient"

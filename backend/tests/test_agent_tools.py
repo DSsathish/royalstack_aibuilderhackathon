@@ -192,3 +192,27 @@ def test_suggest_substitutes_falls_back_to_the_category(shop):
     catalog.invalidate(shop)
     out = tools.suggest_substitutes(f"{shop}-ghee", tool_context=ctx(shop))
     assert [p["name"] for p in out["products"]] == ["Butter 100 g"]
+
+
+def test_pet_products_only_answer_pet_queries(shop):
+    put(shop, "parleg", "Parle-G Biscuits", 10, 20, subcategory="Biscuits")
+    put(shop, "dogbis", "Pedigree Dog Biscuits", 120, 8, subcategory="Pet Food")
+    put(shop, "petmilk", "Pet Milk Replacer", 300, 5, subcategory="Pet Food")
+    catalog.invalidate(shop)
+    names = lambda q: [p["name"] for p in tools.search_products(q, tool_context=ctx(shop))["products"]]
+    assert names("biscuits") == ["Parle-G Biscuits"]
+    assert names("dog biscuits") == ["Pedigree Dog Biscuits"]
+    assert "Pet Milk Replacer" not in names("milk")
+    out = tools.search_products("soya milk", tool_context=ctx(shop))["products"][0]      # out of stock: alternatives stay with people's products
+    assert out["name"] == "Soya Milk" and all(a["name"] != "Pet Milk Replacer" for a in out["alternatives"])
+
+
+def test_navigate_speaks_block_kind_and_floor(shop):
+    db.store_ref(shop).update({"floor_map": [{"aisle": "A2", "x": 80, "y": 80, "w": 90, "h": 420, "floor": 1, "kind": "aisle"},
+                                             {"aisle": "Dairy", "x": 880, "y": 80, "w": 90, "h": 200, "floor": 2, "kind": "chiller"}]})
+    db.locations(shop).document(f"{shop}-milk").update({"aisle": "Dairy", "bay": 2})
+    catalog.invalidate(shop)
+    out = tools.navigate_to(f"{shop}-milk", tool_context=ctx(shop))
+    assert out["kind"] == "chiller" and out["floor"] == 2 and out["directions"].startswith("Chiller Dairy, bay 2") and "first floor" in out["directions"]
+    out = tools.navigate_to(f"{shop}-salt", tool_context=ctx(shop))
+    assert out["directions"].startswith("Aisle A1") and "floor" not in out["directions"]

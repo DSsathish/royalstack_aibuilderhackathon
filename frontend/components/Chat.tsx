@@ -156,7 +156,7 @@ export default function Chat() {
       if (!heard) continue;
       setBusy(true);
       const userId = push({ role: "user", text: "…" });
-      if (session) await consume(api.audio(session, heard.blob), userId);
+      if (session) await consume(api.audio(session, heard.blob, language), userId);
       setBusy(false);
     }
   }

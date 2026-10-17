@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.connectors import csv_connector as csvc
 from app.domain.models import Location, now
+from app.domain import classify
 from app.services import barcode, catalog, db
 from app.services.auth import STORE_ID, current_uid, require_owner
 
@@ -63,9 +64,12 @@ def create_product(body: ProductIn, store_id: str = STORE_ID, uid: str = Depends
     store = db.store_ref(store_id).get()
     if not store.exists:
         raise HTTPException(404, "store not found")
+    aisle = (body.aisle or "").strip()
+    if not aisle:                       # cold products default to the chiller or freezer block when the map has one
+        aisle = classify.block_for(store.to_dict().get("floor_map", []), classify.storage_of(body.name, body.category)) or ""
     row = csvc.Row(line=0, sku=body.sku or body.barcode, name=body.name.strip(), price=body.price, on_hand=body.on_hand,
                    barcode=body.barcode, brand=body.brand.strip(), category=body.category.strip(), mrp=body.mrp or body.price,
-                   aisle=(body.aisle or "").strip())
+                   aisle=aisle)
     csvc.upsert(store_id, [row], high_value_threshold=store.to_dict().get("high_value_threshold", 500))
     catalog.bump(store_id)
     db.audit(store_id).document(uuid.uuid4().hex).set({"actor": uid, "action": "product_saved", "created_at": now(),
