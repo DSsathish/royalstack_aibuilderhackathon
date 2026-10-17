@@ -67,3 +67,57 @@ Cloud Run: websockets are supported; request timeout raised to 3600 s for the se
 - `gemini-3.8-live` rejects `enable_affective_dialog`; `GEMINI_LIVE_AFFECTIVE=false` leaves it out. Everything else in the session config (voice, transcription, turn detection, compression, resumption, tools) works unchanged, and the three live scenarios pass on it.
 
 - Reverted 18 Oct to `gemini-live-2.5-flash` on Vertex at the owner's request; the AI Studio path stays available behind `GEMINI_LIVE_API_KEY`.
+
+
+## Addendum 18 Oct: echo, interruptions and transcript language
+Field report: on a phone loudspeaker the assistant interrupted itself after its first reply, and the shopper's bubbles
+showed the assistant's own words and `{background}`. Cause: the mic hears the loudspeaker; the browser's echo canceller
+leaves a residue that the server-side turn detector takes for speech, so every reply became the next "question". Tamil
+speech was transcribed in Devanagari because the input transcription had no language hint. Measured on the live model:
+hint `ta-IN` fixes Tamil and leaves English and Hindi speech intact; a three-code hint that includes `hi-IN` tips Tamil
+into Devanagari; the output `language_code` does not affect the transcript at all.
+
+Browser (`lib/live.ts`, `lib/echoGuard.ts`)
+- One AudioContext for both directions. Playback goes through a MediaStreamDestination into an `<audio>` element, created
+  and started inside the tap, which is the output path browser echo cancellers track; falls back to the plain destination
+  if media playback is refused.
+- Jitter buffer: a reply starts 150 ms ahead, chunks append to the play head, a late chunk restarts with the same margin.
+- EchoGuard, a pure class with unit tests. Per 100 ms mic chunk it gets the mic level, the loudest playback level of the
+  last 350 ms, and whether playback (plus a 300 ms tail) is active. In the 150 to 650 ms window of each reply it measures
+  mic against playback: mic under 0.012 means no echo path ("duplex", headphones: talk over freely); otherwise "speaker"
+  with gain = mic / playback, and a chunk passes only when louder than 2.5 x the expected echo and 0.02 absolute. Held
+  chunks are sent as silence so the model's timeline stays continuous; one chunk of look-ahead keeps word onsets (100 ms
+  uplink delay). The mode drives the caption ("Speaking. Tap to interrupt").
+- Tap to interrupt: flushes playback and discards the rest of that reply (audio and transcript) until the next
+  `interrupted` or `turn_complete`; the shopper's speech then interrupts the model server-side as before.
+
+Bridge (`agent/live.py`)
+- Transcriber sound markers such as `{background}` and `<noise>` are removed; empty results are neither shown nor saved.
+- Echo detection by text: a user transcript of three or more words that matches one of the last three assistant texts,
+  either from the start (same first word, near-identical after dropping spaces and symbols, since the transcriber writes
+  "5 kg" and "Rs 265" where the reply said "5kg" and "265 rupees") or as a long stretch (30+ characters, 85% covered) from
+  anywhere in it, because the browser guard holds the first part of every reply so a leak starts later. A shopper repeating
+  a short product name or rephrasing a command ("Add" after "Added") does not match.
+- Echo detection by timing: a reply interrupted within 1.5 s of its first audio, twice in a row, is echo whatever the
+  transcriber made of it (`CutCounter`); a completed reply resets the count.
+- On either signal the client gets `{"type":"echo"}` once, the rest of that turn is not shown, and neither the echo nor the
+  reply to it is saved. The client switches the guard to speaker mode, which is sticky for the session (a later quiet
+  measurement never turns it back into headphones), and relabels the bubble "(echo from the speaker)". Detections are
+  logged with the session prefix only.
+- A line under the orb shows the guard's verdict: "Checking for speaker echo", "Headphones: talk over any time",
+  "Loudspeaker: tap the orb to interrupt".
+- Hosting serves pages with `Cache-Control: no-cache` (scripts stay immutable), so a deploy reaches phones on the next
+  load instead of up to an hour later; the first field test of this work ran on the cached old client.
+- Guest-session memory polluted by the loop (373 turns) was cleared; junk history had primed later replies
+  ("I'm having trouble understanding you, please speak English").
+- Replies cut by an interruption are saved with " [interrupted]".
+- Language: `?language=` on the websocket (validated `auto|en|ta|hi`) sets the session language for the connection; the
+  prompt gets "The shopper chose Tamil ..."; the input transcription gets `language_codes`: the chosen language alone, or
+  in auto mode the store's regional language plus English (`["ta-IN", "en-IN"]` for the demo stores). Changing the
+  language in the app restarts the live session.
+- Verified with unit tests (clean, is_echo, recorder, config), the EchoGuard tests, the live scenarios, and two scripts
+  against the deployed API: the spoken reply fed back as mic input produces an `echo` frame; the Tamil clip is shown in
+  Tamil script.
+
+Not done: no server-side echo cancellation; the guard holds the mic for the first 650 ms of every reply until it has
+measured a headphone setup; on a loudspeaker the shopper interrupts by tapping, not by talking over.

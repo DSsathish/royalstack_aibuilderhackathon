@@ -1,9 +1,12 @@
 """Bridge one browser websocket to one Gemini Live session: audio both ways, tools run locally."""
 
 import asyncio
+import difflib
 import inspect
 import json
 import logging
+import re
+import time
 from types import SimpleNamespace
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -23,6 +26,9 @@ MAX_AUDIO_FRAME = 32_000     # 1 s of PCM16 at 16 kHz; the worklet sends 3.2 KB 
 _active: set[str] = set()    # session ids with an open live socket (one Vertex session each)
 _resume_handles: dict[str, str] = {}   # session id -> latest Live resumption handle (reconnects continue the conversation)
 VOICE_NAME = "Kore"
+LANG = {"en": "English", "ta": "Tamil", "hi": "Hindi"}
+BCP47 = {"en": "en-IN", "ta": "ta-IN", "hi": "hi-IN"}
+NOISE = re.compile(r"\s*[\[{<][^\]}>]{0,40}[\]}>]")   # transcriber markers such as {background} or <noise>: sounds, not words
 
 
 class SessionBusy(Exception):
@@ -39,30 +45,101 @@ to what was just discussed; call search_products to get its product_id before ad
 """
 
 
+def clean(text: str) -> str:
+    """Transcript text without the transcriber's sound markers."""
+    return NOISE.sub("", text)
+
+
+def _norm(text: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", "", text.lower()).split())
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"[^\w]", "", text.lower())   # letters and digits only: "5 kg" and "5kg", "Rs 265" and "₹265" line up
+
+
+def is_echo(heard: str, said: str) -> bool:
+    """What the mic heard is the assistant's own words back through the loudspeaker: either the start of the reply
+    (same first word, near-identical text) or a long stretch from anywhere in it (the browser guard holds the first
+    part, so a leak starts later). Spacing and symbols are ignored; a shopper repeating a short product name or
+    rephrasing a command ("Add" after "Added") does not match."""
+    hw, sw = _norm(heard).split(), _norm(said).split()
+    if len(hw) < 3 or not sw:
+        return False
+    h, s = _squash(heard), _squash(said)
+    n = min(len(h), len(s)) + 2
+    if hw[0] == sw[0] and difflib.SequenceMatcher(None, h[:n], s[:n], autojunk=False).ratio() >= 0.8:
+        return True
+    if len(h) >= 30:
+        covered = sum(b.size for b in difflib.SequenceMatcher(None, h, s, autojunk=False).get_matching_blocks())
+        return covered / len(h) >= 0.85
+    return False
+
+
+class CutCounter:
+    """Echo without words: a reply that is interrupted within moments of starting, twice in a row, is the loudspeaker
+    talking to the mic, whatever the transcriber made of it."""
+
+    EARLY_S = 1.5
+    STRIKES = 2
+
+    def __init__(self, clock=time.monotonic) -> None:
+        self._clock, self._started, self._early = clock, None, 0
+
+    def reply_started(self) -> None:
+        if self._started is None:
+            self._started = self._clock()
+
+    def completed(self) -> None:
+        self._started, self._early = None, 0
+
+    def interrupted(self) -> bool:
+        """True when this interruption makes it echo."""
+        early = self._started is not None and self._clock() - self._started < self.EARLY_S
+        self._started = None
+        self._early = self._early + 1 if early else 0
+        if self._early >= self.STRIKES:
+            self._early = 0
+            return True
+        return False
+
+
 class TurnRecorder:
-    """Accumulates live transcription chunks and saves whole turns through the callback."""
+    """Accumulates live transcription chunks and saves whole turns through the callback. Turns that are the assistant's
+    own voice echoed back are dropped, and a reply the shopper cut short is marked so memory does not claim it was said."""
+
+    KEEP_SAID = 3
 
     def __init__(self, save) -> None:
         self._save, self._user, self._ai = save, "", ""
+        self._said: list[str] = []      # recent assistant texts, to recognise echo
+        self.echo = False               # the current user turn is echo
 
-    def user(self, chunk: str) -> None:
+    def user(self, chunk: str) -> bool:
+        """Adds a chunk of what the model heard. True the moment the turn turns out to be echo (reported once)."""
+        if self.echo:
+            return False
         self._user += chunk
+        self.echo = any(is_echo(self._user, t) for t in self._said + [self._ai])
+        return self.echo
 
     def assistant(self, chunk: str) -> None:
         self._ai += chunk
 
-    def _flush(self) -> None:
-        if self._user.strip():
+    def _flush(self, note: str = "") -> None:
+        if self._user.strip() and not self.echo:
             self._save("user", self._user.strip())
         if self._ai.strip():
-            self._save("assistant", self._ai.strip())
-        self._user, self._ai = "", ""
+            self._said = (self._said + [self._ai])[-self.KEEP_SAID:]
+            if not self.echo:
+                self._save("assistant", self._ai.strip() + note)
+        self._user, self._ai, self.echo = "", "", False
 
     def turn_complete(self) -> None:
         self._flush()
 
     def interrupted(self) -> None:
-        self._flush()
+        self._flush(" [interrupted]")
 
 
 def declarations(mode: Mode) -> list[types.FunctionDeclaration]:
@@ -117,13 +194,31 @@ def dispatch(name: str, args: dict, state: dict) -> dict:
         return {"error": str(exc)[:200]}
 
 
+def _language_block(s: Session) -> str:
+    if s.language not in LANG:
+        return ""
+    who = "owner" if s.mode == "owner" else "shopper"
+    return f"\nThe {who} chose {LANG[s.language]} in the app. Speak {LANG[s.language]} unless they clearly speak another language.\n"
+
+
+def _transcription(s: Session, store_languages: list[str]) -> types.AudioTranscriptionConfig:
+    """Language hints for the live transcript. The model understands Tamil speech but writes it in another script unless
+    hinted; a Tamil hint leaves English and Hindi speech intact (measured), while a hint that also lists Hindi tips
+    Tamil into Devanagari. So: the chosen language alone, or the store's regional language plus English."""
+    if s.language in BCP47:
+        return types.AudioTranscriptionConfig(language_codes=[BCP47[s.language]])
+    regional = next((l for l in store_languages if l in BCP47 and l != "en"), None)
+    return types.AudioTranscriptionConfig(language_codes=[BCP47[regional], "en-IN"] if regional else ["en-IN"])
+
+
 def _config(s: Session) -> types.LiveConnectConfig:
     history = conversation.history_text(s)
+    store = prompts.store_state(s.store_id)
     return types.LiveConnectConfig(
         response_modalities=["AUDIO"],
-        system_instruction=prompts.for_mode(s.mode) + prompts.store_block(prompts.store_state(s.store_id)) + prompts.customer_block(prompts.customer_state(s)) + VOICE_BLOCK + (f"\n{history}\n" if history else ""),
+        system_instruction=prompts.for_mode(s.mode) + prompts.store_block(store) + prompts.customer_block(prompts.customer_state(s)) + VOICE_BLOCK + _language_block(s) + (f"\n{history}\n" if history else ""),
         tools=[types.Tool(function_declarations=declarations(s.mode))],
-        input_audio_transcription=types.AudioTranscriptionConfig(),
+        input_audio_transcription=_transcription(s, store.get("languages") or []),
         output_audio_transcription=types.AudioTranscriptionConfig(),
         speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE_NAME))),
         realtime_input_config=types.RealtimeInputConfig(automatic_activity_detection=types.AutomaticActivityDetection(
@@ -149,6 +244,7 @@ async def run(ws: WebSocket, s: Session) -> None:
 async def _run(ws: WebSocket, s: Session) -> None:
     state = {"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "language": s.language, "customer_id": s.customer_id, "user_id": s.user_id}
     recorder = TurnRecorder(lambda role, text: conversation.add_turn(s, role, text))
+    cuts = CutCounter()
     try:
         cm = gemini.live_client().aio.live.connect(model=settings.gemini_live_model, config=_config(s))
         live = await cm.__aenter__()
@@ -195,18 +291,27 @@ async def _run(ws: WebSocket, s: Session) -> None:
                       if sc.interrupted:
                           recorder.interrupted()
                           await ws.send_text(json.dumps({"type": "interrupted"}))
-                      if sc.input_transcription and sc.input_transcription.text:
-                          recorder.user(sc.input_transcription.text)
-                          await ws.send_text(json.dumps({"type": "transcript", "role": "user", "text": sc.input_transcription.text}))
+                          if cuts.interrupted():
+                              log.info("live echo by timing session=%s", s.session_id[:8])
+                              await ws.send_text(json.dumps({"type": "echo"}))
+                      if sc.input_transcription and sc.input_transcription.text and not recorder.echo:
+                          heard = clean(sc.input_transcription.text)
+                          if heard.strip() and recorder.user(heard):       # the assistant's own voice came back: tell the client, show nothing more of it
+                              log.info("live echo by text session=%s words=%d", s.session_id[:8], len(heard.split()))
+                              await ws.send_text(json.dumps({"type": "echo"}))
+                          elif heard.strip():
+                              await ws.send_text(json.dumps({"type": "transcript", "role": "user", "text": heard}))
                       if sc.output_transcription and sc.output_transcription.text:
                           recorder.assistant(sc.output_transcription.text)
                           await ws.send_text(json.dumps({"type": "transcript", "role": "assistant", "text": sc.output_transcription.text}))
                       if sc.model_turn:
                           for part in sc.model_turn.parts:
                               if part.inline_data and part.inline_data.data:
+                                  cuts.reply_started()
                                   await ws.send_bytes(part.inline_data.data)
                       if sc.turn_complete:
                           recorder.turn_complete()
+                          cuts.completed()
                           await ws.send_text(json.dumps({"type": "turn_complete"}))
                   if msg.tool_call:
                       responses = []

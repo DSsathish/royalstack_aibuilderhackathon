@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Offer, Product, api } from "@/lib/api";
-import { LiveFrame, LiveState, liveSupported, startLive } from "@/lib/live";
+import { GuardMode, LiveFrame, LiveState, liveSupported, startLive } from "@/lib/live";
 import { UiEvent } from "@/lib/sse";
 import { Msg, sayAloud, useApp } from "@/lib/store";
 import { listenOnce } from "@/lib/voice";
@@ -35,9 +35,11 @@ export default function Chat() {
   const voiceRef = useRef(false);
   const media = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
   const [live, setLive] = useState<LiveState>("closed");       // speech-to-speech
+  const [guard, setGuard] = useState<GuardMode>("unknown");    // loudspeaker or headphones, as measured by the echo guard
   const [canLive, setCanLive] = useState(false);
   useEffect(() => { setTimeout(() => setCanLive(liveSupported()), 0); }, []);
   const liveStop = useRef<(() => void) | null>(null);
+  const liveInterrupt = useRef<(() => void) | null>(null);
   const liveConnecting = useRef(false);
   const liveMsg = useRef<{ user: number | null; assistant: number | null }>({ user: null, assistant: null });
   const bottom = useRef<HTMLDivElement>(null);
@@ -116,13 +118,14 @@ export default function Chat() {
     liveConnecting.current = true;
     let closedEarly = false;
     try {
-      const stop = await startLive(session.session_id, {
+      const ctl = await startLive(session.session_id, language, {
         onLevel: (l) => setLevel(l),
+        onGuard: setGuard,
         onState: (st) => {
           setLive(st);
           setOrb(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" || st === "reconnecting" ? "connecting" : "idle");
           setAvatar(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "closed" ? "idle" : "thinking");
-          if (st === "closed") { closedEarly = true; liveStop.current = null; liveMsg.current = { user: null, assistant: null }; setLevel(0); }
+          if (st === "closed") { closedEarly = true; liveStop.current = null; liveInterrupt.current = null; liveMsg.current = { user: null, assistant: null }; setLevel(0); setGuard("unknown"); }
         },
         onFrame: (f: LiveFrame) => {
           if (f.type === "transcript") {
@@ -131,12 +134,13 @@ export default function Chat() {
             else patch(cur, { text: (useApp.getState().messages.find((m) => m.id === cur)?.text ?? "") + f.text });
             if (slot === "user") liveMsg.current.assistant = null;
           } else if (f.type === "turn_complete") liveMsg.current = { user: null, assistant: null };
+          else if (f.type === "echo") { const cur = liveMsg.current.user; if (cur !== null) patch(cur, { text: "(echo from the speaker)" }); liveMsg.current.user = null; }
           else if (f.type === "status") setOrb("thinking");      // a tool is running; the voice resumes when audio arrives
           else if (f.type === "action") { const id = liveMsg.current.assistant ?? (liveMsg.current.assistant = push({ role: "assistant", text: "" })); handleAction(f.name, f.data, id); }
           else if (f.type === "error") push({ role: "assistant", text: f.text });
         },
       });
-      if (closedEarly) stop(); else liveStop.current = stop;
+      if (closedEarly) ctl.stop(); else { liveStop.current = ctl.stop; liveInterrupt.current = ctl.interrupt; }
     } catch (e) { push({ role: "assistant", text: `Live voice could not start: ${(e as Error).message}` }); liveStop.current = null; setLive("closed"); setOrb("idle"); }
     liveConnecting.current = false;
   }
@@ -170,8 +174,17 @@ export default function Chat() {
   function toggleTalk() { if (canLive) toggleLive(); else toggleVoice(); }
   function endTalk() { if (liveStop.current) liveStop.current(); if (voiceRef.current) stopVoice(); }
   useEffect(() => () => { if (voiceRef.current) stopVoice(); liveStop.current?.(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  const liveLang = useRef(language);
+  useEffect(() => {                                                 // the live session's language is fixed when it connects: restart it
+    if (liveLang.current === language) return;
+    liveLang.current = language;
+    if (liveStop.current) { liveStop.current(); setTimeout(() => { void toggleLive(); }, 400); }
+  }, [language]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const orbCaption = live === "reconnecting" ? "Reconnecting, keep talking" : live === "connecting" ? "Connecting" : orb === "listening" ? "Listening. Just talk, interrupt any time" : orb === "speaking" ? "Speaking" : orb === "thinking" ? "Checking" : "Tap to talk";
+  const onSpeaker = guard === "speaker";                       // on a loudspeaker, interruptions are by tap, not by talking over
+  const orbCaption = live === "reconnecting" ? "Reconnecting, keep talking" : live === "connecting" ? "Connecting"
+    : orb === "listening" ? (onSpeaker ? "Listening. Just talk" : "Listening. Just talk, interrupt any time")
+    : orb === "speaking" ? (onSpeaker ? "Speaking. Tap to interrupt" : "Speaking") : orb === "thinking" ? "Checking" : "Tap to talk";
 
   return (
     <div className="flex flex-col h-full">
@@ -189,10 +202,12 @@ export default function Chat() {
 
       {/* voice stage: the orb is the centrepiece while talking, a compact tap target otherwise */}
       <div className={`flex flex-col items-center transition-all ${talking ? "py-2" : "py-0.5"}`}>
-        <button onClick={talking ? undefined : toggleTalk} className="rounded-full" aria-label="Start voice conversation" disabled={talking}>
+        <button onClick={live !== "closed" ? () => liveInterrupt.current?.() : talking ? undefined : toggleTalk} className="rounded-full"
+          aria-label={live !== "closed" ? "Interrupt the assistant" : "Start voice conversation"} disabled={talking && live === "closed"}>
           <VoiceOrb state={orb} level={level} size={talking ? 150 : 72} label={talking ? orbCaption : "Tap to talk"} />
         </button>
         {talking && <button onClick={endTalk} className="btn btn-ink mt-3"><IconStop className="w-4 h-4" /> End conversation</button>}
+        {live !== "closed" && <p className="text-xs text-muted mt-2">{guard === "speaker" ? "Loudspeaker: tap the orb to interrupt" : guard === "duplex" ? "Headphones: talk over any time" : "Checking for speaker echo"}</p>}
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-3">

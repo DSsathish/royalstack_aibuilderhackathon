@@ -94,7 +94,8 @@ def store_state(store_id: str) -> dict:
     from app.services import db
     doc = db.store_ref(store_id).get().to_dict() or {}
     brand = doc.get("brand") or {}
-    return {"store_name": doc.get("name", ""), "store_tagline": brand.get("tagline", ""), "store_greeting": brand.get("greeting", "")}
+    return {"store_name": doc.get("name", ""), "store_tagline": brand.get("tagline", ""), "store_greeting": brand.get("greeting", ""),
+            "languages": doc.get("languages") or ["en"]}
 
 
 def store_block(state: dict) -> str:
