@@ -51,6 +51,7 @@ def test_owner_moves_a_product_to_an_aisle(shop):
     owned = shop
     created = client.post(f"/owner/{owned}/products", json={"barcode": "8901234567890", "name": "Rice 5kg", "price": 400, "on_hand": 5}, headers=h).json()
     pid = created["product_id"]
+    client.patch(f"/owner/{owned}/store", json={"aisles": ["Rice", "Oil"]}, headers=h)      # the fixture store has no map yet
     aisle = db.store_ref(owned).get().to_dict()["floor_map"][0]["aisle"]
     res = client.patch(f"/owner/{owned}/products/{pid}/location", json={"aisle": aisle, "bay": 3, "side": "right"}, headers=h)
     assert res.status_code == 200, res.text
