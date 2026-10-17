@@ -216,3 +216,15 @@ def test_navigate_speaks_block_kind_and_floor(shop):
     assert out["kind"] == "chiller" and out["floor"] == 2 and out["directions"].startswith("Chiller Dairy, bay 2") and "first floor" in out["directions"]
     out = tools.navigate_to(f"{shop}-salt", tool_context=ctx(shop))
     assert out["directions"].startswith("Aisle A1") and "floor" not in out["directions"]
+
+
+def test_product_facts_tool_resolves_the_product_and_passes_language(shop, monkeypatch):
+    from app.agent import tools
+    from app.services import facts
+    seen = {}
+    monkeypatch.setattr(facts, "lookup", lambda store_id, session_id, q, product, language: seen.update(q=q, product=product, language=language) or {"ok": True})
+    c = ctx(shop); c.state["language"] = "ta"
+    assert tools.product_facts("What is in it?", "Toned Milk", tool_context=c) == {"ok": True}
+    assert seen["product"].name == "Toned Milk" and seen["language"] == "ta"
+    tools.product_facts("What is A2 milk?", "", tool_context=c)
+    assert seen["product"] is None

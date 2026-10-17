@@ -12,7 +12,7 @@ from google.adk.tools import ToolContext
 
 from app.domain.models import DemandSignal
 from app.services import cart as cart_svc
-from app.services import catalog, db, forecast as forecast_svc, insights, reorder, verification
+from app.services import catalog, db, facts, forecast as forecast_svc, insights, reorder, verification
 from app.services.catalog import ProductView
 
 
@@ -264,11 +264,30 @@ def get_anomalies(tool_context: ToolContext, days: int = 7) -> dict:
             "asked_but_not_carried": insights.signals(store_id, days)["not_carried"][:10]}
 
 
+def _find(store_id: str, ref: str) -> ProductView | None:
+    """A catalog product by id, SKU, barcode or name, or None."""
+    view = catalog.get_product(store_id, ref) or catalog.get_by_sku(store_id, ref)
+    if view:
+        return view
+    hits = catalog.search(store_id, ref.replace("-", " ").replace("_", " "), k=1)
+    return hits[0] if hits else None
+
+
+def product_facts(question: str, product_id: str = "", tool_context: ToolContext = None) -> dict:
+    """What the catalog does not say about a product or ingredient: ingredients, nutrition, allergens, material, how to
+    use or store it, where it comes from, or what a term such as "A2 milk" means. Looked up in public sources and cited.
+    Pass product_id (or the exact product name) when the question is about a catalog product; leave it empty for a
+    general question. The result's note must be repeated when health or allergies are involved."""
+    s = tool_context.state
+    product = _find(s["store_id"], product_id) if product_id else None
+    return facts.lookup(s["store_id"], s["session_id"], question, product, s.get("language") or "auto")
+
+
 TOOLS_BY_MODE = {
     "instore": [search_products, get_product, suggest_substitutes, navigate_to, record_demand_signal,
-                remove_from_cart, view_cart, start_checkout, get_offers],      # items enter the cart only by scanning
+                remove_from_cart, view_cart, start_checkout, get_offers, product_facts],      # items enter the cart only by scanning
     "online": [search_products, get_product, suggest_substitutes, record_demand_signal,
-               add_to_cart, remove_from_cart, view_cart, start_checkout, get_offers],
+               add_to_cart, remove_from_cart, view_cart, start_checkout, get_offers, product_facts],
     "owner": [],      # filled below from owner_tools: a separate agent with full access to the store
 }
 
@@ -277,7 +296,7 @@ from app.agent import owner_tools as _ot  # noqa: E402
 TOOLS_BY_MODE["owner"] = [
     _ot.store_snapshot, _ot.stock_report, _ot.find_products, get_low_stock, _ot.sales_report, forecast_demand, _ot.reorder_drafts, draft_purchase_order,
     _ot.demand_signals, _ot.customers_overview, _ot.list_offers, _ot.exit_summary, get_anomalies, _ot.sync_status, _ot.floor_map_summary,
-    search_products, get_product,
+    search_products, get_product, product_facts,
     _ot.set_reorder_rule, _ot.adjust_stock, _ot.record_shelf_count, _ot.update_price, _ot.move_product, _ot.create_offer,
     _ot.set_offer_active, _ot.adjust_points, _ot.approve_purchase_order,
 ]

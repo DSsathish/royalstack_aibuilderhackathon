@@ -7,7 +7,9 @@ export type Msg = { id: number; role: "user" | "assistant"; text: string; produc
   drafts?: { po_id: string; supplier: string; lines: number; summary: string }[];
   offers?: { name: string; detail: string }[];
   snapshot?: { today: { revenue: number; orders: number; avg_basket: number }; low_stock: number; out_of_stock: number; open_drafts: number; open_flags: number; signed_in_customers: number; live_offers: number; attention: string[] };
-  rows?: { columns: string[]; rows: Record<string, unknown>[] } };
+  rows?: { columns: string[]; rows: Record<string, unknown>[] };
+  facts?: { summary: string; sources: { title: string; url: string }[]; note: string;
+    label?: { ingredients?: string | null; allergens?: string[]; nutrition_per_100g?: Record<string, number> | null; nutriscore?: string | null } | null } };
 
 type State = {
   session: Session | null;

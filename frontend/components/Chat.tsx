@@ -91,6 +91,7 @@ export default function Chat() {
     else if (name === "show_offers") patch(id, { offers: (data.offers as Msg["offers"]) ?? [] });
     else if (name === "show_snapshot" && data.today) patch(id, { snapshot: data as unknown as Msg["snapshot"] });
     else if (name === "show_rows" && Array.isArray(data.rows) && Array.isArray(data.columns)) patch(id, { rows: { columns: data.columns as string[], rows: data.rows as Record<string, unknown>[] } });
+    else if (name === "show_facts" && data.ok) patch(id, { facts: { summary: String(data.summary ?? ""), sources: (data.sources as { title: string; url: string }[]) ?? [], note: String(data.note ?? ""), label: (data.label as NonNullable<Msg["facts"]>["label"]) ?? null } });
   }
   async function refreshCart() { if (session) setCart(await api.cart(session)); }
 
@@ -257,6 +258,16 @@ export default function Chat() {
                 <div className="eyebrow mb-1">Offers for you</div>
                 {m.offers.length === 0 ? <span className="text-muted">No offers running right now.</span>
                   : m.offers.map((o) => <div key={o.name} className="py-0.5"><b>{o.name}</b> <span className="text-muted">· {o.detail}</span></div>)}
+              </div>
+            )}
+            {m.facts && (
+              <div className="mt-2 border border-line rounded-xl p-3 text-sm space-y-1.5 reveal">
+                <div className="eyebrow">From public sources</div>
+                {m.facts.label?.ingredients && <div><span className="text-muted">Ingredients: </span>{m.facts.label.ingredients}</div>}
+                {m.facts.label?.allergens && m.facts.label.allergens.length > 0 && <div><span className="text-muted">Allergens: </span>{m.facts.label.allergens.join(", ")}</div>}
+                {m.facts.label?.nutrition_per_100g && <div className="text-muted">Per 100 g: {Object.entries(m.facts.label.nutrition_per_100g).map(([k, v]) => `${k.replace("-", " ")} ${v}`).join(" · ")}{m.facts.label.nutriscore ? ` · Nutri-Score ${m.facts.label.nutriscore}` : ""}</div>}
+                <div className="flex flex-wrap gap-x-3 gap-y-1">{m.facts.sources.map((s) => <a key={s.url} href={s.url} target="_blank" rel="noreferrer" className="underline text-muted">{s.title}</a>)}</div>
+                <div className="text-xs text-muted">{m.facts.note}</div>
               </div>
             )}
             {m.snapshot && (
