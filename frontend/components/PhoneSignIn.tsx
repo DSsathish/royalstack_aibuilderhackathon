@@ -11,8 +11,10 @@ export default function PhoneSignIn({ onDone, onSkip, reverify }: { onDone: () =
   const [pending, setPending] = useState<ConfirmationResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const digits = phone.replace(/\D/g, "");
+  const digits = normaliseIndianMobile(phone);
+  const phoneProblem = phone.trim() ? validateIndianMobile(digits) : "";
   const full = reverify ? (phoneUser()?.phoneNumber ?? "") : "+91" + digits;
+  const codeDigits = code.replace(/\D/g, "");
 
   async function send() {
     setBusy(true); setError("");
@@ -39,29 +41,52 @@ export default function PhoneSignIn({ onDone, onSkip, reverify }: { onDone: () =
           <label className="block text-sm font-medium">Mobile number
             <div className="flex gap-2 mt-1">
               <span className="field w-auto text-muted select-none">+91</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel-national" placeholder="98765 43210" className="field" />
+              <input value={phone} onChange={(e) => { setPhone(e.target.value); setError(""); }} inputMode="tel" autoComplete="tel-national" placeholder="98765 43210" maxLength={16}
+                aria-invalid={!!phoneProblem} className={`field ${phoneProblem ? "border-bad" : ""}`} />
             </div>
+            {phoneProblem ? <span className="block text-xs text-bad mt-1">{phoneProblem}</span> : digits.length === 10 ? <span className="block text-xs text-muted mt-1">We will send a code to +91 {digits.slice(0, 5)} {digits.slice(5)}</span> : <span className="block text-xs text-muted mt-1">10-digit Indian mobile number, with or without +91.</span>}
           </label>
           <div className="flex gap-2">
-            <button onClick={send} disabled={busy || digits.length !== 10} className="btn btn-primary">{busy ? "Sending" : "Send code"}</button>
+            <button onClick={send} disabled={busy || !!phoneProblem || digits.length !== 10} className="btn btn-primary">{busy ? "Sending" : "Send code"}</button>
             {onSkip && <button onClick={onSkip} className="btn btn-ghost">Skip for now</button>}
           </div>
         </>
       ) : (
         <>
           <label className="block text-sm font-medium">Code sent to {reverify ? "your number ending in " + full.slice(-4) : full}
-            <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" className="field mt-1 mono tracking-widest" />
+            <input value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(""); }} inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" maxLength={6} className="field mt-1 mono tracking-widest" />
+            <span className="block text-xs text-muted mt-1">{codeDigits.length}/6 digits</span>
           </label>
           <div className="flex gap-2">
-            <button onClick={confirm} disabled={busy || code.trim().length < 6} className="btn btn-primary">{busy ? "Checking" : "Verify"}</button>
+            <button onClick={confirm} disabled={busy || codeDigits.length !== 6} className="btn btn-primary">{busy ? "Checking" : "Verify"}</button>
             <button onClick={() => { setPending(null); setCode(""); }} className="btn btn-ghost">{reverify ? "Back" : "Change number"}</button>
           </div>
         </>
       )}
-      {error && <p className="chip chip-bad">{error}</p>}
+      {error && <p className="chip chip-bad whitespace-normal">{error}</p>}
       <div id="recaptcha-slot" />
+      <p className="text-[11px] text-muted leading-snug">This form is protected by reCAPTCHA; the Google <a href="https://policies.google.com/privacy" className="underline" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" className="underline" target="_blank" rel="noreferrer">Terms of Service</a> apply.</p>
     </div>
   );
+}
+
+/** Accepts "98765 43210", "+91 98765 43210", "091…", "9198765…"; returns the 10 subscriber digits. */
+export function normaliseIndianMobile(raw: string): string {
+  let d = raw.replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return d;
+}
+
+/** "" when valid; otherwise what to fix. Indian mobile numbers are ten digits and start with 6, 7, 8 or 9. */
+export function validateIndianMobile(digits: string): string {
+  if (!digits) return "";
+  if (!/^\d+$/.test(digits)) return "Digits only, please.";
+  if (digits.length < 10) return `${10 - digits.length} more digit${10 - digits.length === 1 ? "" : "s"} needed.`;
+  if (digits.length > 10) return "That is more than 10 digits. Enter the mobile number without the country code.";
+  if (!/^[6-9]/.test(digits)) return "Indian mobile numbers start with 6, 7, 8 or 9.";
+  if (/^(\d)\1{9}$/.test(digits)) return "That does not look like a real number.";
+  return "";
 }
 
 function friendly(e: unknown): string {
@@ -70,6 +95,9 @@ function friendly(e: unknown): string {
   if (m.includes("code-expired")) return "That code has expired. Send a new one.";
   if (m.includes("too-many-requests")) return "Too many attempts. Please wait a few minutes.";
   if (m.includes("invalid-phone-number")) return "Enter a valid 10-digit mobile number.";
-  if (m.includes("operation-not-allowed")) return "Phone sign-in is not enabled for this store yet.";
+  if (m.includes("operation-not-allowed")) return "Text messages cannot be sent to this number's region right now. You can skip sign-in and continue shopping.";
+  if (m.includes("captcha-check-failed") || m.includes("invalid-app-credential") || m.includes("missing-app-credential")) return "The security check did not complete. Reload the page and try again.";
+  if (m.includes("quota-exceeded")) return "Too many codes were sent today. Please try again later or skip sign-in.";
+  if (m.includes("network-request-failed")) return "No connection. Check your network and try again.";
   return "Could not sign in. Please try again.";
 }

@@ -135,3 +135,7 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em
 .btn, .chip, .rail-link, .card { transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .08s ease; }
 .card:hover { border-color: #cfd6d0; }
 .table tbody tr td { transition: background-color .12s ease; }
+
+/* The reCAPTCHA badge is hidden; the required disclosure is printed under the phone form instead. */
+.grecaptcha-badge { visibility: hidden; }
+.border-bad { border-color: var(--bad) !important; }
