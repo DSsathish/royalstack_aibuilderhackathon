@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import { Order, api, money } from "@/lib/api";
+import { ApiError, Order, api, money } from "@/lib/api";
 import { freshIdToken } from "@/lib/firebase";
 import { useApp } from "@/lib/store";
 import { IconCheck } from "@/components/Icons";
@@ -25,7 +25,7 @@ export default function Checkout() {
   const balance = cart?.points_balance ?? 0;
   const maxPoints = Math.min(balance, Math.floor(cart?.total ?? 0));
   const canUsePoints = balance >= 50 && maxPoints >= 50;
-  const pointsApplied = token ? Math.min(Math.max(usePoints, 0), maxPoints) : 0;
+  const pointsApplied = token && usePoints >= 50 ? Math.min(usePoints, maxPoints) : 0;   // under 50 applies nothing, and shows nothing
   const due = Math.max(0, (cart?.total ?? 0) - pointsApplied);
 
   async function pay() {
@@ -50,7 +50,11 @@ export default function Checkout() {
         return;  // busy stays true until the modal's handler or ondismiss runs
       }
       setCart(await api.cart(session));
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) {
+      const err = e as ApiError;
+      if (err.status === 403 && token) { setToken(null); setUsePoints(0); setError("Your verification expired. Tap Use points to verify again."); }
+      else setError(err.message);
+    }
     setBusy(false);
   }
 
@@ -86,6 +90,7 @@ export default function Checkout() {
         <label className="card p-3 text-sm flex items-center gap-3">
           <span className="flex-1">Points to use (50 to {maxPoints})</span>
           <input type="number" min={50} max={maxPoints} value={usePoints} onChange={(e) => setUsePoints(Number(e.target.value))} className="field w-28 py-1.5 mono" />
+          {usePoints > 0 && usePoints < 50 && <span className="text-xs text-warn">Minimum 50</span>}
           <button onClick={() => { setToken(null); setUsePoints(0); }} className="btn btn-ghost py-1.5 text-xs">Remove</button>
         </label>
       )}

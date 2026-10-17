@@ -146,3 +146,10 @@ def test_instore_tools_cannot_add_to_cart_but_online_can():
     names = {m: {t.__name__ for t in ts} for m, ts in tools.TOOLS_BY_MODE.items()}
     assert "add_to_cart" not in names["instore"] and "add_to_cart" in names["online"]
     assert "navigate_to" in names["instore"]
+
+
+def test_add_to_cart_accepts_snake_case_and_sku(shop):
+    out = tools.add_to_cart("toned_milk", 1, tool_context=ctx(shop))                 # snake_case guess at an id
+    assert out["ok"] and out["cart"]["items"][0]["product_id"] == f"{shop}-milk"
+    out = tools.add_to_cart("MILK", 1, tool_context=ctx(shop, cart_id="c2"))         # the SKU echoed back
+    assert out["ok"] and out["resolved_from"] == "MILK"

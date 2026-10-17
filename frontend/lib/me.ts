@@ -1,5 +1,5 @@
 /** Signed-in shopper calls (phone OTP token) and the link step that ties the visit to the person. */
-import { Order, Session } from "./api";
+import { API, Order, Session } from "./api";
 import { authed } from "./authed";
 import { useApp } from "./store";
 
@@ -15,6 +15,7 @@ export const me = {
   patch: (body: Partial<Profile> & { store_id: string }) => authed<Profile>("/me/profile", { method: "PATCH", body: JSON.stringify(body) }),
   orders: (store_id: string) => authed<Order[]>(`/me/orders?store_id=${store_id}`),
   points: (store_id: string) => authed<{ balance: number; min_redeem: number; entries: LedgerEntry[] }>(`/me/points?store_id=${store_id}`),
+  unlink: (s: Session) => fetch(`${API}/sessions/${s.session_id}/link`, { method: "DELETE" }),
   exportAll: () => authed<unknown>("/me/export"),
   deleteAll: () => authed<{ deleted: boolean }>("/me", { method: "DELETE" }),
 };

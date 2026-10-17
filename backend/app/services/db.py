@@ -73,6 +73,15 @@ def counts(store_id: str) -> firestore.CollectionReference:
     return store_ref(store_id).collection("counts")
 
 
+def batched(refs: list, op, size: int = 400) -> None:
+    """Firestore batches hold 500 writes; apply op(batch, ref) in chunks."""
+    for i in range(0, len(refs), size):
+        batch = client().batch()
+        for ref in refs[i:i + size]:
+            op(batch, ref)
+        batch.commit()
+
+
 def customers(store_id: str) -> firestore.CollectionReference:
     """Per-store customer records: stores/{store_id}/customers/{uid}."""
     return store_ref(store_id).collection("customers")

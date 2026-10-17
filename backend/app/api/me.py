@@ -20,6 +20,16 @@ def link(session_id: str = Path(pattern=HEX), uid: str = Depends(current_uid)):
     return {"customer_id": uid, "store_id": s.store_id, "name": c.name, "visits": c.visits}
 
 
+@router.delete("/sessions/{session_id}/link")
+def unlink(session_id: str = Path(pattern=HEX)):
+    """Sign out on this device. The session id is the credential, as for the cart."""
+    s = sessions.get(session_id)
+    if not s:
+        raise HTTPException(404, "session not found")
+    customers.unlink(s)
+    return {"customer_id": None}
+
+
 @router.get("/me/profile")
 def profile(store_id: str = Query(pattern=r"^[a-z0-9-]{3,40}$"), uid: str = Depends(current_uid)):
     require_phone(uid)
@@ -35,7 +45,6 @@ class ProfilePatch(BaseModel):
     language: str | None = Field(default=None, pattern=r"^(auto|en|ta|hi)$")
     dietary: list[str] | None = Field(default=None, max_length=8)
     favourite_categories: list[str] | None = Field(default=None, max_length=12)
-    usual_items: list[str] | None = Field(default=None, max_length=30)
     substitution: str | None = Field(default=None, pattern=r"^(ask|same_brand|any)$")
 
 
@@ -43,7 +52,7 @@ class ProfilePatch(BaseModel):
 def patch_profile(body: ProfilePatch, uid: str = Depends(current_uid)):
     require_phone(uid)
     fields = body.model_dump(exclude={"store_id"})
-    for key in ("dietary", "favourite_categories", "usual_items"):
+    for key in ("dietary", "favourite_categories"):
         if fields.get(key) is not None:
             if any(len(x) > 32 for x in fields[key]):
                 raise HTTPException(422, f"{key} entries must be 32 characters or fewer")

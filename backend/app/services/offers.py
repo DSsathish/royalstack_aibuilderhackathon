@@ -24,7 +24,7 @@ def update(store_id: str, offer_id: str, fields: dict) -> Offer | None:
     cur = get(store_id, offer_id)
     if not cur:
         return None
-    o = Offer(**{**cur.model_dump(), **{k: v for k, v in fields.items() if v is not None}})
+    o = Offer(**{**cur.model_dump(), **fields})      # callers pass only the fields they set; None clears a date
     db.offers(store_id).document(offer_id).set(o.model_dump())
     return o
 

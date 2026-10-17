@@ -13,6 +13,11 @@ from app.services import conversation, db, segments
 PROFILE_FIELDS = ("name", "language", "dietary", "favourite_categories", "usual_items", "substitution")
 
 
+def unlink(s: Session) -> None:
+    """Sign out on this device: later purchases in the visit are anonymous again."""
+    db.sessions().document(s.session_id).update({"customer_id": None})
+
+
 def link(s: Session, uid: str, phone: str) -> Customer:
     """Attach a signed-in shopper to a session; create the store's customer record on first visit."""
     ref = db.customers(s.store_id).document(uid)
@@ -87,29 +92,24 @@ def stores_for(uid: str) -> list[str]:
 def export(uid: str) -> dict:
     profiles = [c.model_dump() for sid in stores_for(uid) if (c := get(sid, uid))]
     orders = [Order(**d.to_dict()).model_dump() for d in db.orders().where(filter=FieldFilter("customer_id", "==", uid)).stream()]
-    turns = [d.to_dict() for d in db.client().collection("conversations").document(uid).collection("turns").order_by("at").stream()]
+    turns = [d.to_dict() | {"store_id": sid} for sid in stores_for(uid)
+             for d in conversation.turns_ref(conversation.shopper_key(uid, sid)).order_by("at").stream()]
     return {"uid": uid, "profiles": profiles, "orders": orders, "turns": turns}
 
 
 def delete(uid: str) -> dict:
     """Remove the person: profiles, conversation turns and the index. Orders and sessions are anonymised, not deleted."""
     stores = stores_for(uid)
+    to_delete = [db.people().document(uid)]
     for sid in stores:
-        db.customers(sid).document(uid).delete()
+        cust = db.customers(sid).document(uid)
+        to_delete += [d.reference for d in cust.collection("ledger").stream()]       # subcollections do not go with the parent
+        to_delete += [d.reference for d in conversation.turns_ref(conversation.shopper_key(uid, sid)).stream()]
+        to_delete.append(cust)
         db.audit(sid).document(uuid.uuid4().hex).set({"actor": uid, "action": "customer_deleted", "created_at": now(), "payload": {}})
     by_uid = FieldFilter("customer_id", "==", uid)
     orders = [d.reference for d in db.orders().where(filter=by_uid).stream()]
     open_sessions = [d.reference for d in db.sessions().where(filter=by_uid).stream()]
-    turns = [d.reference for d in db.client().collection("conversations").document(uid).collection("turns").stream()]
-    _batched(orders + open_sessions, lambda b, ref: b.update(ref, {"customer_id": None}))
-    _batched(turns + [db.people().document(uid)], lambda b, ref: b.delete(ref))
+    db.batched(orders + open_sessions, lambda b, ref: b.update(ref, {"customer_id": None}))
+    db.batched(to_delete, lambda b, ref: b.delete(ref))
     return {"deleted": True, "stores": stores, "orders_anonymised": len(orders)}
-
-
-def _batched(refs: list, op, size: int = 400) -> None:
-    """Firestore batches hold 500 writes; apply op(batch, ref) in chunks."""
-    for i in range(0, len(refs), size):
-        batch = db.client().batch()
-        for ref in refs[i:i + size]:
-            op(batch, ref)
-        batch.commit()

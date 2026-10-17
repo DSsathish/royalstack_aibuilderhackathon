@@ -49,10 +49,20 @@ async def inventory_in(request: Request, store_id: str = STORE_ID):
     data = _parse(InventoryIn, await _signed_body(request, store_id))
     if sync.seen(store_id, data.event_id):
         return {"ok": True, "duplicate": True}
-    out = sync.apply_inventory(store_id, [r.model_dump() for r in data.rows])
+    try:
+        out = sync.apply_inventory(store_id, [r.model_dump() for r in data.rows])
+    except Exception as exc:
+        _failed(store_id, "inventory", data.event_id, exc)
     sync.record(store_id, direction="in", kind="inventory", rows=len(data.rows), changed=out["updated"], unknown=out["unknown"],
                 event_id=data.event_id, ok=True)
     return {"ok": True, "duplicate": False, **out}
+
+
+def _failed(store_id: str, kind: str, event_id: str, exc: Exception) -> None:
+    """An apply that blew up must not count as processed: the sender's retry has to land."""
+    sync.unsee(store_id, event_id)
+    sync.record(store_id, direction="in", kind=kind, rows=0, changed=0, event_id=event_id, ok=False, error=str(exc)[:200])
+    raise HTTPException(500, "could not apply the update, please retry")
 
 
 @router.post("/{store_id}/products")
@@ -60,7 +70,10 @@ async def products_in(request: Request, store_id: str = STORE_ID):
     data = _parse(ProductsIn, await _signed_body(request, store_id))
     if sync.seen(store_id, data.event_id):
         return {"ok": True, "duplicate": True}
-    result = sync.apply_products(store_id, data.rows)
+    try:
+        result = sync.apply_products(store_id, data.rows)
+    except Exception as exc:
+        _failed(store_id, "products", data.event_id, exc)
     sync.record(store_id, direction="in", kind="products", rows=len(data.rows), changed=result.created + result.updated,
                 errors=len(result.errors), event_id=data.event_id, ok=True)
     return {"ok": True, "duplicate": False, **result.model_dump()}

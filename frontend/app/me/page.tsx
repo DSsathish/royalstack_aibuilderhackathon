@@ -77,7 +77,10 @@ export default function MePage() {
     if (session) updateSession({ ...session, customer_id: null });
     router.replace("/shop");
   }
-  async function signOut() { await signOutShopper(); setCustomer(null); router.replace("/shop"); }
+  async function signOut() {
+    if (session) { await me.unlink(session).catch(() => {}); updateSession({ ...session, customer_id: null }); }   // the visit continues as a guest
+    await signOutShopper(); setCustomer(null); router.replace("/shop");
+  }
 
   if (!session) return <main className="p-6 text-center space-y-3"><p className="text-muted">Open a store first.</p><Link href="/" className="btn btn-ghost">Home</Link></main>;
   if (signedIn === null) return <main className="p-6 text-muted">Loading</main>;

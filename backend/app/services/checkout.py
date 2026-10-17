@@ -70,6 +70,23 @@ def intent(s: Session, points: int = 0) -> Order:
     return o
 
 
+def _claim(order_id: str, payment_id: str):
+    """Flip pending -> paid inside a transaction. Returns paid_at for the winner, None when it was no longer pending."""
+    from google.cloud import firestore
+    ref = db.orders().document(order_id)
+
+    @firestore.transactional
+    def run(tx):
+        snap = ref.get(transaction=tx)
+        if not snap.exists or snap.to_dict().get("status") != "pending":
+            return None
+        t = now()
+        tx.update(ref, {"status": "paid", "payment_id": payment_id, "paid_at": t})
+        return t
+
+    return run(db.client().transaction())
+
+
 def _release_held_points(cart_id: str) -> None:
     """A retry on the same cart cancels earlier pending orders that hold points and gives the points back."""
     from google.cloud.firestore_v1 import FieldFilter
@@ -104,18 +121,21 @@ def confirm(order_id: str, *, payment_id: str, signature: str) -> Order:
     if o.status != "pending":
         return o  # already paid: idempotent
     if o.payment_provider == "mock":
-        ok = signature == "mock" and settings.env != "prod"
+        ok = signature == "mock" and (settings.env != "prod" or o.total <= 0)    # free orders (all points) settle anywhere
     else:
         ok = razorpay_signature_ok(o.payment_ref, payment_id, signature, _keys(o.store_id)[2])
     if not ok:
         raise CheckoutError("payment signature invalid")
     if cart_svc.get(o.store_id, o.cart_id).status != "open":
         raise CheckoutError("cart already checked out")
+    paid_at = _claim(o.order_id, payment_id)
+    if paid_at is None:
+        return get(order_id) or o        # a concurrent confirm won; its side effects happen exactly once
 
     for item in o.items:
         inventory.commit(o.store_id, item.product_id, item.qty)
     db.carts().document(o.cart_id).update({"status": "checked_out"})
-    o.status, o.payment_id, o.paid_at = "paid", payment_id, now()
+    o.status, o.payment_id, o.paid_at = "paid", payment_id, paid_at
     o.receipt_token = qr.receipt_token(o.order_id, o.store_id, sum(i.qty for i in o.items))
     if o.customer_id:
         o.points_earned = points_svc.earn(o.store_id, o.customer_id, o.total, o.order_id)

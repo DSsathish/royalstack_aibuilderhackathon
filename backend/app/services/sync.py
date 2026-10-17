@@ -10,6 +10,9 @@ import threading
 import time
 from datetime import timedelta
 
+from decimal import InvalidOperation
+from urllib.parse import urljoin, urlparse
+
 import httpx
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
@@ -77,6 +80,11 @@ def seen(store_id: str, event_id: str) -> bool:
         return True
 
 
+def unsee(store_id: str, event_id: str) -> None:
+    """Forget an event whose apply failed, so the sender's retry is processed instead of answered as a duplicate."""
+    db.sync_events(store_id).document(hashlib.sha256(event_id.encode()).hexdigest()[:32]).delete()
+
+
 # --- inbound -------------------------------------------------------------------
 
 def apply_inventory(store_id: str, rows: list[dict]) -> dict:
@@ -111,8 +119,8 @@ def apply_products(store_id: str, rows: list[dict]) -> csvc.ImportResult:
     parsed, errors = [], []
     for i, r in enumerate(rows, start=1):
         try:
-            parsed.append(csvc.Row(line=i, **{k: v for k, v in r.items() if k in csvc.Row.model_fields}))
-        except ValueError as exc:
+            parsed.append(csvc.from_record(i, r))          # same bounds as a CSV import: no negatives, numbers parsed
+        except (ValueError, InvalidOperation, OverflowError) as exc:
             errors.append(csvc.RowError(line=i, message=str(exc)[:200]))
     result = csvc.upsert(store_id, parsed, high_value_threshold=threshold)
     result.errors = errors
@@ -216,8 +224,7 @@ def pull_feed(store_id: str) -> dict:
     if not cfg.feed_url:
         return {"skipped": "no feed_url"}
     try:
-        res = httpx.get(cfg.feed_url, timeout=20, follow_redirects=True)
-        res.raise_for_status()
+        res = _fetch_https(cfg.feed_url)
         if len(res.content) > csvc.MAX_BYTES:
             raise ValueError("feed larger than 5 MB")
         rows, errors = csvc.parse(res.content, cfg.feed_mapping)
@@ -231,6 +238,20 @@ def pull_feed(store_id: str) -> dict:
     except Exception as exc:
         record(store_id, direction="in", kind="feed", rows=0, changed=0, ok=False, error=str(exc)[:200])
         return {"error": str(exc)[:200]}
+
+
+def _fetch_https(url: str, hops: int = 5):
+    """Follow redirects by hand so every hop stays on https (a Sheet's publish link redirects once)."""
+    for _ in range(hops):
+        if urlparse(url).scheme != "https":
+            raise ValueError("feed must stay on https")
+        res = httpx.get(url, timeout=20, follow_redirects=False)
+        if res.status_code in (301, 302, 303, 307, 308) and res.headers.get("location"):
+            url = urljoin(url, res.headers["location"])
+            continue
+        res.raise_for_status()
+        return res
+    raise ValueError("too many redirects")
 
 
 def run_scheduled() -> dict:

@@ -6,6 +6,7 @@ consume the oldest unexpired credits first. Nothing sets a balance directly."""
 import uuid
 from datetime import timedelta
 
+from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -32,8 +33,8 @@ def ledger(store_id: str, uid: str, limit: int = 50) -> list[dict]:
     return [d.to_dict() for d in docs]
 
 
-def _entry(kind: str, delta: int, *, reason: str = "", order_id: str = "", by: str = "", credit: bool = False) -> dict:
-    return {"entry_id": uuid.uuid4().hex, "kind": kind, "delta": delta, "remaining": delta if credit else 0,
+def _entry(kind: str, delta: int, *, reason: str = "", order_id: str = "", by: str = "", credit: bool = False, entry_id: str = "") -> dict:
+    return {"entry_id": entry_id or uuid.uuid4().hex, "kind": kind, "delta": delta, "remaining": delta if credit else 0,
             "reason": reason, "order_id": order_id, "by": by,
             "expires_at": now() + timedelta(days=EXPIRY_DAYS) if credit else None, "created_at": now()}
 
@@ -56,8 +57,9 @@ def _consume(tx, credits: list, pts: int) -> None:
         left -= take
 
 
-def _move(store_id: str, uid: str, delta: int, entry: dict) -> int:
-    """Apply one ledger entry transactionally. Returns the new balance; ValueError if it would go below zero."""
+def _move(store_id: str, uid: str, delta: int, entry: dict, *, once: bool = False) -> int:
+    """Apply one ledger entry transactionally. Returns the new balance; ValueError if it would go below zero.
+    With `once`, the entry id must not exist yet (AlreadyExists otherwise), so two racing callers cannot both credit."""
     cust = db.customers(store_id).document(uid)
 
     @firestore.transactional
@@ -71,8 +73,12 @@ def _move(store_id: str, uid: str, delta: int, entry: dict) -> int:
             if available + delta < 0:
                 raise ValueError("not enough points")
             _consume(tx, credits, -delta)
-        tx.set(cust.collection("ledger").document(entry["entry_id"]), entry)
-        tx.update(cust, {"points": available + delta})      # absolute: self-heals if expiry has not run yet
+        ref = cust.collection("ledger").document(entry["entry_id"])
+        if once:
+            tx.create(ref, entry)
+        else:
+            tx.set(ref, entry)
+        tx.update(cust, {"points": available + delta})      # absolute: expired credits never count, whether or not the nightly job ran
         return available + delta
 
     return run(db.client().transaction())
@@ -101,7 +107,10 @@ def release(store_id: str, uid: str, order_id: str) -> int:
     held = next((-e["delta"] for e in entries if e["kind"] == "redeem"), 0)
     if not held or any(e["kind"] == "release" for e in entries):
         return 0
-    _move(store_id, uid, held, _entry("release", held, order_id=order_id, credit=True))
+    try:
+        _move(store_id, uid, held, _entry("release", held, order_id=order_id, credit=True, entry_id=f"release-{order_id}"), once=True)
+    except AlreadyExists:
+        return 0            # a concurrent release (job and retry at once) already credited it
     return held
 
 
@@ -113,22 +122,21 @@ def adjust(store_id: str, uid: str, delta: int, reason: str, *, by: str) -> int:
 
 
 def expire(store_id: str) -> int:
-    """Nightly: zero out credits past their expiry and lower balances. Returns points expired."""
+    """Nightly: zero out credits past their expiry and set balances to what is left. Returns points expired."""
     total, t = 0, now()
     for cdoc in db.customers(store_id).stream():
         cust = cdoc.reference
-        expired = [s for s in cust.collection("ledger").where(filter=FieldFilter("remaining", ">", 0)).stream()
-                   if s.get("expires_at") and s.get("expires_at") < t]
+        credits = list(cust.collection("ledger").where(filter=FieldFilter("remaining", ">", 0)).stream())
+        expired = [s for s in credits if s.get("expires_at") and s.get("expires_at") < t]
         if not expired:
             continue
         pts = sum(int(s.get("remaining")) for s in expired)
-        batch = db.client().batch()
-        for s in expired:
-            batch.update(s.reference, {"remaining": 0})
+        gone = {s.id for s in expired}
+        left = sum(int(s.get("remaining")) for s in credits if s.id not in gone)
+        db.batched([s.reference for s in expired], lambda b, ref: b.update(ref, {"remaining": 0}))
         e = _entry("expire", -pts)
-        batch.set(cust.collection("ledger").document(e["entry_id"]), e)
-        batch.update(cust, {"points": firestore.Increment(-pts)})
-        batch.commit()
+        cust.collection("ledger").document(e["entry_id"]).set(e)
+        cust.update({"points": left})      # absolute, like _move: a move since the expiry already excluded these credits
         total += pts
     return total
 

@@ -98,3 +98,59 @@ def test_stale_pending_redemptions_are_released_by_the_job(shop):
     db.orders().document(o.order_id).update({"created_at": now() - timedelta(days=2)})
     assert points.release_stale(shop) == 1
     assert points.balance(shop, "cust-1") == 100 and checkout.get(o.order_id).status == "cancelled"
+
+
+def test_expiry_after_a_move_does_not_subtract_twice(shop):
+    s = signed_session(shop)
+    points.adjust(shop, "cust-1", 100, "old", by="owner-1")
+    for d in points.ledger_ref(shop, "cust-1").stream():
+        d.reference.update({"expires_at": now() - timedelta(hours=1)})
+    assert points.adjust(shop, "cust-1", 5, "new", by="owner-1") == 5       # the expired credit no longer counts
+    assert points.expire(shop) == 100
+    assert points.balance(shop, "cust-1") == 5
+
+
+def test_release_credits_an_order_once_even_when_racing(shop):
+    signed_session(shop)
+    e = points._entry("release", 10, order_id="o1", credit=True, entry_id="release-o1")
+    points._move(shop, "cust-1", 10, e, once=True)
+    from google.api_core.exceptions import AlreadyExists
+    with pytest.raises(AlreadyExists):
+        points._move(shop, "cust-1", 10, e, once=True)
+    assert points.balance(shop, "cust-1") == 10
+
+
+def test_cancelled_order_cannot_be_confirmed(shop):
+    s = signed_session(shop)
+    points.adjust(shop, "cust-1", 100, "welcome", by="owner-1")
+    cart.add(shop, s.cart_id, f"{shop}-rice", 1, via="chat")
+    o1 = checkout.intent(s, points=60)
+    checkout.intent(s, points=60)                             # retry cancels o1
+    with pytest.raises(checkout.CheckoutError, match="cancelled"):
+        checkout.confirm(o1.order_id, payment_id="p", signature="mock")
+
+
+def test_zero_total_order_settles_even_in_prod(shop, monkeypatch):
+    s = signed_session(shop)
+    points.adjust(shop, "cust-1", 400, "welcome", by="owner-1")
+    cart.add(shop, s.cart_id, f"{shop}-rice", 1, via="chat")
+    o = checkout.intent(s, points=300)
+    assert o.total == 0 and o.payment_provider == "mock"
+    monkeypatch.setattr(checkout.settings, "env", "prod")
+    assert checkout.confirm(o.order_id, payment_id="free", signature="mock").status == "paid"
+    s2 = signed_session(shop)
+    cart.add(shop, s2.cart_id, f"{shop}-rice", 1, via="chat")
+    with pytest.raises(checkout.CheckoutError):                # a real amount still needs a real payment in prod
+        checkout.confirm(checkout.intent(s2).order_id, payment_id="p", signature="mock")
+
+
+def test_concurrent_confirms_apply_side_effects_once(shop):
+    from concurrent.futures import ThreadPoolExecutor
+    s = signed_session(shop)
+    cart.add(shop, s.cart_id, f"{shop}-rice", 1, via="chat")
+    o = checkout.intent(s)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(lambda _: checkout.confirm(o.order_id, payment_id="p", signature="mock"), range(3)))
+    assert all(r.status == "paid" for r in results)
+    assert db.inventory(shop).document(f"{shop}-rice").get().to_dict()["on_hand"] == 49
+    assert points.balance(shop, "cust-1") == 3 and customers.get(shop, "cust-1").visits == 1

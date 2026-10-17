@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.domain.models import Inventory, Product, Store
 from app.main import app
-from app.services import cart, catalog, checkout, conversation, db, sessions
+from app.services import cart, catalog, checkout, conversation, db, points, sessions
 
 client = TestClient(app)
 
@@ -86,6 +86,7 @@ def test_export_and_delete(shop, monkeypatch):
     conversation.add_turn(sess, "user", "hello")
     cart.add(shop, sess.cart_id, f"{shop}-milk", 1, via="chat")
     o = checkout.confirm(checkout.intent(sess).order_id, payment_id="p", signature="mock")
+    points.adjust(shop, "cust-del", 100, "welcome", by="owner-1")
     exp = client.get("/me/export", headers=h).json()
     assert exp["profiles"][0]["store_id"] == shop and exp["orders"][0]["order_id"] == o.order_id and exp["turns"][0]["text"] == "hello"
     assert client.delete("/me", headers=h).status_code == 200
@@ -96,6 +97,25 @@ def test_export_and_delete(shop, monkeypatch):
     s3 = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()
     client.post(f"/sessions/{s3['session_id']}/link", headers=h)      # a fresh record, nothing resurrected
     assert client.get(f"/me/profile?store_id={shop}", headers=h).json()["visits"] == 0
+    assert points.balance(shop, "cust-del") == 0 and points.ledger(shop, "cust-del") == []   # old credits went with the account
+
+
+def test_unlink_makes_the_visit_anonymous_again(shop, monkeypatch):
+    h = phone_bearer(monkeypatch, uid="cust-out", phone="+919999900005")
+    s = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()
+    client.post(f"/sessions/{s['session_id']}/link", headers=h)
+    assert client.get(f"/carts/{s['cart_id']}", headers={"X-Session-Id": s["session_id"]}).json()["points_balance"] == 0
+    assert client.delete(f"/sessions/{s['session_id']}/link").status_code == 200
+    view = client.get(f"/carts/{s['cart_id']}", headers={"X-Session-Id": s["session_id"]}).json()
+    assert view["points_balance"] is None and view["segment"] == "guest" and sessions.get(s["session_id"]).customer_id is None
+
+
+def test_memory_is_per_shopper_and_store():
+    from app.domain.models import Session, now
+    a = Session(session_id="a" * 32, store_id="shop-a", mode="online", cart_id="c", customer_id="u1", expires_at=now())
+    b = Session(session_id="b" * 32, store_id="shop-b", mode="online", cart_id="c", customer_id="u1", expires_at=now())
+    g = Session(session_id="g" * 32, store_id="shop-a", mode="online", cart_id="c", expires_at=now())
+    assert conversation.key(a) != conversation.key(b) and conversation.key(g) == g.session_id
 
 
 def test_owner_customers_listing(shop, monkeypatch):

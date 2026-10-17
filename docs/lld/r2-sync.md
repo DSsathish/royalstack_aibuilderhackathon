@@ -12,8 +12,8 @@ The agent must reflect the shop's own system of record. One generic adapter cove
 ## Inbound (`api/sync.py`, `services/sync.py`)
 - Signature: `X-Sync-Timestamp` (unix seconds) and `X-Sync-Signature: sha256=HMAC_SHA256(secret, timestamp + "." + raw_body)`; timestamps older than five minutes are refused; comparison is constant time; bodies above 1 MB and more than 5,000 rows are refused. A store without a secret refuses everything.
 - `POST /sync/{store}/inventory` `{event_id, rows: [{sku, on_hand, price?}]}`: `on_hand` is set absolutely and `reserved` is kept, so open carts stay consistent; `price` updates the product and bumps the catalog version; unknown SKUs are returned, not created.
-- `POST /sync/{store}/products` `{event_id, rows: [canonical columns]}`: the CSV connector's row shape, upserted through the same code as imports.
-- `event_id` is written to `stores/{id}/sync_events` with a create-only write, so a replayed event answers `duplicate: true` and changes nothing.
+- `POST /sync/{store}/products` `{event_id, rows: [canonical columns]}`: the CSV connector's row shape, validated by the same code as imports (`from_record`: no negative numbers, tolerant number parsing) and upserted through the same code. Bad rows come back as row errors.
+- `event_id` is written to `stores/{id}/sync_events` with a create-only write, so a replayed event answers `duplicate: true` and changes nothing. If the apply itself fails, the event id is forgotten again and the call answers 500, so the sender's retry is processed.
 - `GET /sync/{store}/inventory` with `Authorization: Bearer <secret>` returns `{sku, product_id, on_hand, reserved, available, price}` for the shop's system to pull.
 - Every call appends to `stores/{id}/sync_log` (`at, direction, kind, rows, changed, unknown, event_id, ok, error`).
 
@@ -22,7 +22,7 @@ The agent must reflect the shop's own system of record. One generic adapter cove
 - "Send test event" from the dashboard delivers `{event: "test"}` the same way and logs the result.
 
 ## Scheduled feed (`services/sync.py::pull_feed`, `run_scheduled`)
-- A Google Sheet published as CSV or any CSV URL the POS exports to, with the saved column mapping (proposed by the normalizer from a sample file). `pull_feed` downloads (5 MB cap), parses and upserts through the CSV connector, bumps the catalog, sets `last_pull_at` and logs. `run_scheduled` pulls every store whose feed is due and retries every outbox; Cloud Scheduler calls `POST /jobs/sync` every fifteen minutes with the job key.
+- A Google Sheet published as CSV or any CSV URL the POS exports to, with the saved column mapping (proposed by the normalizer from a sample file). `pull_feed` downloads (5 MB cap, redirects followed by hand so every hop stays on https), parses and upserts through the CSV connector, bumps the catalog, sets `last_pull_at` and logs. `run_scheduled` pulls every store whose feed is due and retries every outbox; Cloud Scheduler calls `POST /jobs/sync` every fifteen minutes with the job key.
 
 ## Owner API (`api/owner_sync.py`) and Connectors tab
 - `GET /owner/{id}/sync` (settings without secrets, last 30 log entries, outbox count); `PATCH /owner/{id}/sync`; `POST /owner/{id}/sync/secret` (new secret, shown once, audit); `POST /owner/{id}/sync/pull`; `POST /owner/{id}/sync/test`. Owner only.

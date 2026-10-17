@@ -5,7 +5,7 @@ Shoppers stay anonymous by default. Signing in with a phone number is optional a
 ## Identity
 - Firebase phone sign-in on the web (invisible reCAPTCHA; Indian numbers, `+91` prefixed by the client). The project has phone sign-in enabled with three test numbers (`+91 99999 00001/2/3`, code `123456`) that never send an SMS, for demos and CI. The client sends the ID token; the API verifies it with the existing `verify_id_token` and reads `phone_number` from the claims (`auth.require_phone`).
 - `POST /sessions/{id}/link` with the bearer token attaches `customer_id = uid` to the current session and records the store in `people/{uid}`. Anonymous sessions keep working unchanged.
-- Orders created by a linked session carry `customer_id`. Conversation memory for a signed-in shopper is keyed by uid (`conversation.key`), so it spans visits; guests keep per-visit memory.
+- Orders created by a linked session carry `customer_id`. Conversation memory for a signed-in shopper is keyed by uid and store (`conversation.shopper_key`), so it spans visits at the same shop without leaking one shop's conversation to another; guests keep per-visit memory. `DELETE /sessions/{id}/link` signs out on the device: the visit continues as a guest.
 - A later visit by the same signed-in shopper can reopen old receipts (`GET /orders/{id}` accepts the paying session or a session linked to the same customer).
 
 ## Customer record (`customers/{store_id}/people/{uid}`)
@@ -13,7 +13,7 @@ Shoppers stay anonymous by default. Signing in with a phone number is optional a
 - Created on first link with the shop; `visits`, `spend`, `last_seen` and `usual_items` (products in at least two of the last 20 paid orders, most frequent first) updated at checkout confirm by `customers.record_order`; `points` lives here for R5. A missing record (account deleted after linking) is ignored, the sale stays anonymous.
 - `GET /me/profile?store_id=` and `PATCH /me/profile` (bearer) read and update the profile.
 - `GET /me/orders?store_id=` lists the shopper's paid orders, newest first.
-- `GET /me/export` returns everything we hold (profiles per store, orders, turns); `DELETE /me` removes the profiles, turns and the `people` index, anonymises orders and open sessions (`customer_id` cleared, in batches of 400), and writes a `customer_deleted` audit entry per store. Receipts stay because they are the shop's sales records. Signing in again afterwards starts a fresh record.
+- `GET /me/export` returns everything we hold (profiles per store, orders, turns); `DELETE /me` removes the profiles, the points ledgers (a subcollection does not go with its parent document), the per-store turns and the `people` index, anonymises orders and open sessions (`customer_id` cleared, in batches of 400), and writes a `customer_deleted` audit entry per store. Receipts stay because they are the shop's sales records. Signing in again afterwards starts a fresh record.
 
 ## What the assistant sees
 - `prompts.customer_state(session)` reads the customer record once per turn (usual item ids resolved to names through the cached catalog); `prompts.customer_block` turns it into one short paragraph: greet by name once, preferred language, dietary limits never violated, favourite categories, usual items only when relevant, substitution preference. Text chat and live voice both include it. Guests see no change (empty block).

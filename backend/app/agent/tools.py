@@ -91,14 +91,15 @@ def add_to_cart(product_id: str, qty: int, tool_context: ToolContext) -> dict:
     s = tool_context.state
     resolved = None
     if not catalog.get_product(s["store_id"], product_id):
-        hits = [h for h in catalog.search(s["store_id"], product_id.replace("-", " "), k=3) if h.available > 0]
+        exact = catalog.get_by_sku(s["store_id"], product_id)
+        hits = [exact] if exact else [h for h in catalog.search(s["store_id"], product_id.replace("-", " ").replace("_", " "), k=3) if h.available > 0]
         if not hits:
             return {"ok": False, "error": "unknown_product"}
         resolved, product_id = product_id, hits[0].product_id
     res = cart_svc.add(s["store_id"], s["cart_id"], product_id, qty, via="chat", mode=s.get("mode", "online"))
     if isinstance(res, str):
         return {"ok": False, "error": res}
-    out = {"ok": True, "cart": _cart_summary(res)}
+    out = {"ok": True, "cart": _cart_summary(res, _segment(s))}
     if resolved:
         out["resolved_from"] = resolved
     return out
@@ -107,7 +108,7 @@ def add_to_cart(product_id: str, qty: int, tool_context: ToolContext) -> dict:
 def remove_from_cart(product_id: str, tool_context: ToolContext) -> dict:
     """Remove a product line from the cart."""
     s = tool_context.state
-    return {"ok": True, "cart": _cart_summary(cart_svc.remove(s["store_id"], s["cart_id"], product_id))}
+    return {"ok": True, "cart": _cart_summary(cart_svc.remove(s["store_id"], s["cart_id"], product_id), _segment(s))}
 
 
 def view_cart(tool_context: ToolContext) -> dict:

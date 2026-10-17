@@ -179,3 +179,48 @@ def test_owner_test_event_and_pull_now(shop, monkeypatch):
     res = client.post(f"/owner/{shop}/sync/test", headers=OWNER)
     assert res.status_code == 200 and res.json()["ok"] is True
     assert client.post(f"/owner/{shop}/sync/pull", headers=OWNER).json()["skipped"] == "no feed_url"
+
+
+def test_products_webhook_applies_csv_bounds(shop):
+    secret = sync.new_secret(shop)
+    res = signed(f"/sync/{shop}/products", {"event_id": "neg", "rows": [{"sku": "bad", "name": "Bad", "price": -50, "on_hand": -3}, {"name": "No sku", "price": 5, "on_hand": 1}]}, secret)
+    assert res.status_code == 200 and res.json()["created"] == 0 and len(res.json()["errors"]) == 2
+    assert catalog.get_product(shop, f"{shop}-bad") is None
+
+
+def test_failed_apply_is_not_remembered_as_processed(shop, monkeypatch):
+    secret = sync.new_secret(shop)
+    body = {"event_id": "flaky", "rows": [{"sku": "salt", "on_hand": 9}]}
+    real = sync.apply_inventory
+    monkeypatch.setattr(sync, "apply_inventory", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("firestore hiccup")))
+    assert signed(f"/sync/{shop}/inventory", body, secret).status_code == 500
+    monkeypatch.setattr(sync, "apply_inventory", real)
+    res = signed(f"/sync/{shop}/inventory", body, secret)                        # the sender's retry lands
+    assert res.status_code == 200 and res.json()["duplicate"] is False and res.json()["updated"] == 1
+    assert any(e["ok"] is False for e in (d.to_dict() for d in db.sync_log(shop).stream()))
+
+
+def test_rows_cap_is_enforced(shop):
+    secret = sync.new_secret(shop)
+    body = {"event_id": "big", "rows": [{"sku": "salt", "on_hand": 1}] * (sync.MAX_ROWS + 1)}
+    assert signed(f"/sync/{shop}/inventory", body, secret).status_code == 422
+
+
+def test_feed_redirect_off_https_is_refused(shop, monkeypatch):
+    db.store_ref(shop).update({"sync.feed_url": "https://docs.example/pub", "sync.feed_mapping": {"sku": "SKU", "name": "Item", "price": "Rate", "on_hand": "Stock"}})
+
+    class Redirect(Resp):
+        headers = {"location": "http://10.0.0.5/internal.csv"}
+    monkeypatch.setattr(sync.httpx, "get", lambda url, timeout, follow_redirects: Redirect(302))
+    assert "https" in sync.pull_feed(shop)["error"]
+
+
+def test_outbox_gives_up_after_six_attempts(shop, monkeypatch):
+    sync.new_secret(shop)
+    db.sync_outbox(shop).document("o9").set({"key": "o9", "url": "https://shop.example/hook", "payload": "{}", "attempts": 5,
+                                             "next_at": now() - timedelta(minutes=1), "created_at": now(), "last_error": "", "dead": False})
+    monkeypatch.setattr(sync.httpx, "post", lambda url, content, headers, timeout: Resp(503))
+    assert sync.retry_outbox(shop) == 0
+    e = db.sync_outbox(shop).document("o9").get().to_dict()
+    assert e["attempts"] == 6 and e["dead"] is True
+    assert sync.retry_outbox(shop) == 0                                            # dead entries are left alone

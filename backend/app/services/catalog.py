@@ -69,6 +69,14 @@ def get_product(store_id: str, product_id: str) -> ProductView | None:
     return _view(store_id, p, locations) if p else None
 
 
+def get_by_sku(store_id: str, sku: str) -> ProductView | None:
+    """Exact SKU or barcode match, case-insensitive: what a model echoes back from an earlier result."""
+    products, locations = _load(store_id)
+    key = sku.strip().lower()
+    p = next((p for p in products if p.sku.lower() == key or (p.barcode and p.barcode == key)), None)
+    return _view(store_id, p, locations) if p else None
+
+
 def get_by_barcode(store_id: str, barcode: str) -> ProductView | None:
     products, locations = _load(store_id)
     p = next((p for p in products if p.barcode == barcode), None)
@@ -81,7 +89,7 @@ _TOKEN = re.compile(r"[\w஀-௿ऀ-ॿ]+")  # latin, tamil, devanagari
 
 
 def _tokens(text: str) -> set[str]:
-    return set(_TOKEN.findall(text.lower()))
+    return set(_TOKEN.findall(text.lower().replace("_", " ")))    # models often write snake_case ids
 
 
 def _keyword_score(q: set[str], p: Product) -> float:

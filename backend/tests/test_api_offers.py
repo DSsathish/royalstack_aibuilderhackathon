@@ -31,6 +31,8 @@ def test_owner_crud_and_audit(shop):
     assert client.post(f"/owner/{shop}/offers", json={**body, "percent_off": 95}, headers=OWNER).status_code == 422
     assert client.get(f"/owner/{shop}/offers", headers=OWNER).json()[0]["offer_id"] == oid
     assert client.patch(f"/owner/{shop}/offers/{oid}", json={"active": False}, headers=OWNER).json()["active"] is False
+    assert client.patch(f"/owner/{shop}/offers/{oid}", json={"ends_at": "2030-01-01T00:00:00Z"}, headers=OWNER).json()["ends_at"]
+    assert client.patch(f"/owner/{shop}/offers/{oid}", json={"ends_at": None}, headers=OWNER).json()["ends_at"] is None
     assert client.get(f"/stores/{shop}/offers").json() == []
     client.patch(f"/owner/{shop}/offers/{oid}", json={"active": True}, headers=OWNER)
     assert [o["name"] for o in client.get(f"/stores/{shop}/offers").json()] == ["Dairy week"]
@@ -97,3 +99,4 @@ def test_owner_points_adjust_and_me_points(shop, monkeypatch):
     assert body["balance"] == 25 and body["entries"][0]["reason"] == "birthday"
     rows = client.get(f"/owner/{shop}/customers", headers=OWNER).json()
     assert rows[0]["points"] == 25 and rows[0]["segment"] == "new"
+    assert any(e.to_dict()["action"] == "points_adjusted" and e.to_dict()["payload"]["delta"] == 25 for e in db.audit(shop).stream())

@@ -108,6 +108,12 @@ def parse(data: bytes, mapping: dict[str, str]) -> tuple[list[Row], list[RowErro
     return rows, errors
 
 
+def from_record(line: int, rec: dict) -> Row:
+    """A JSON object with canonical column names (sync webhooks) through the same checks as a CSV row."""
+    text = {k: ("" if v is None else str(v)) for k, v in rec.items() if isinstance(k, str)}
+    return _row(line, text, {k: k for k in text if k in REQUIRED + OPTIONAL})
+
+
 def _row(line: int, rec: dict, mapping: dict[str, str]) -> Row:
     get = lambda f: (rec.get(mapping[f]) or "").strip() if f in mapping else ""
     if not get("sku"):

@@ -10,11 +10,21 @@ LINE_CHARS = 160
 def key(s: Session) -> str:
     if s.mode == "owner" and s.user_id:
         return s.user_id
-    return s.customer_id or s.session_id      # signed-in shoppers keep memory across visits; guests per visit
+    if s.customer_id:
+        return shopper_key(s.customer_id, s.store_id)   # signed-in shoppers keep memory across visits, per store
+    return s.session_id                                  # guests: per visit
+
+
+def shopper_key(uid: str, store_id: str) -> str:
+    return f"{uid}-{store_id}"
+
+
+def turns_ref(key_: str):
+    return db.client().collection("conversations").document(key_).collection("turns")
 
 
 def _turns(s: Session):
-    return db.client().collection("conversations").document(key(s)).collection("turns")
+    return turns_ref(key(s))
 
 
 def add_turn(s: Session, role: str, text: str) -> None:
