@@ -160,7 +160,7 @@ export default function Chat() {
     <div className="flex flex-col h-full">
       <header className="flex items-center gap-3 px-4 pt-3 pb-2">
         <div className="flex-1 min-w-0">
-          <div className="eyebrow">{owner ? "Owner assistant" : session?.mode === "instore" ? "In-store assistant" : "Shopping assistant"}</div>
+          <div className="eyebrow">{owner ? "Owner assistant" : store?.brand?.tagline || (session?.mode === "instore" ? "In-store assistant" : "Shopping assistant")}</div>
           <h1 className="text-lg font-semibold leading-tight truncate">{store?.name ?? "Store"}</h1>
         </div>
         <select id="lang" value={language} onChange={(e) => setLanguage(e.target.value as never)} className="chip chip-muted bg-surface border border-line" aria-label="Language">

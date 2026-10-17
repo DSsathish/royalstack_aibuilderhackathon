@@ -11,7 +11,7 @@ export type Session = {
 };
 export type Aisle = { aisle: string; x: number; y: number; w: number; h: number };
 export type Store = { store_id: string; name: string; currency: string; languages: string[];
-  self_checkout_item_limit: number; floor_map: Aisle[] };
+  self_checkout_item_limit: number; floor_map: Aisle[]; brand?: { accent: string; tagline: string; greeting: string }; city?: string };
 export type Location = { aisle: string; bay: number; shelf: number; side: string; x: number; y: number };
 export type Product = { product_id: string; name: string; brand: string; price: number; mrp: number;
   unit: string; available: number; aisle?: string; bay?: number; image_url?: string; location?: Location | null;

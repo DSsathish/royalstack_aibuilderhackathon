@@ -111,3 +111,18 @@ def test_second_intent_cannot_double_commit(session_with_cart):
     with pytest.raises(checkout.CheckoutError, match="cart"):
         checkout.confirm(second.order_id, payment_id="p2", signature="mock")
     assert db.inventory(shop).document(f"{shop}-salt").get().to_dict()["on_hand"] == 3
+
+
+def test_provider_comes_from_store_payments(shop, monkeypatch):
+    from app.services import payments
+    monkeypatch.setattr(payments, "secret_for", lambda store_id: "sek")
+    db.store_ref(shop).update({"payments": {"provider": "razorpay", "key_id": "rzp_x"}})
+    s = sessions.create(shop, "online")
+    cart.add(shop, s.cart_id, f"{shop}-salt", 1, via="chat")
+    calls = {}
+    monkeypatch.setattr(checkout, "_razorpay_order", lambda o, key_id, key_secret: calls.setdefault("auth", (key_id, key_secret)) and "order_ref1")
+    o = checkout.intent(s)
+    assert o.payment_provider == "razorpay" and o.payment_ref == "order_ref1" and calls["auth"] == ("rzp_x", "sek")
+    import hashlib, hmac
+    sig = hmac.new(b"sek", b"order_ref1|pay_1", hashlib.sha256).hexdigest()
+    assert checkout.confirm(o.order_id, payment_id="pay_1", signature=sig).status == "paid"

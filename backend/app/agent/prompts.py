@@ -48,3 +48,23 @@ You are talking to the store owner or manager, not a shopper.
 
 def for_mode(mode: Mode) -> str:
     return CORE + MODES[mode]
+
+
+def store_state(store_id: str) -> dict:
+    """Store identity for the prompt: name, tagline, greeting line."""
+    from app.services import db
+    doc = db.store_ref(store_id).get().to_dict() or {}
+    brand = doc.get("brand") or {}
+    return {"store_name": doc.get("name", ""), "store_tagline": brand.get("tagline", ""), "store_greeting": brand.get("greeting", "")}
+
+
+def store_block(state: dict) -> str:
+    name = state.get("store_name")
+    if not name:
+        return ""
+    lines = [f"\nYou work at {name}."]
+    if state.get("store_tagline"):
+        lines.append(f"The store describes itself as: {state['store_tagline']}.")
+    if state.get("store_greeting"):
+        lines.append(f"When the conversation starts, greet with: \"{state['store_greeting']}\"")
+    return " ".join(lines) + "\n"

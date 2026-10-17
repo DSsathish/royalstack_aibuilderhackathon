@@ -9,15 +9,23 @@ import httpx
 from app.config import settings
 from app.domain.models import Order, Session, now
 from app.services import cart as cart_svc
-from app.services import db, inventory, qr
+from app.services import db, inventory, payments, qr
 
 
 class CheckoutError(ValueError):
     pass
 
 
-def _provider() -> str:
-    return "razorpay" if settings.razorpay_key_id and settings.razorpay_key_secret else "mock"
+def _keys(store_id: str) -> tuple[str, str, str]:
+    """(provider, key_id, key_secret) for a store: its own Razorpay keys, else the global ones, else mock."""
+    cfg = (db.store_ref(store_id).get().to_dict() or {}).get("payments") or {}
+    if cfg.get("provider") == "razorpay" and cfg.get("key_id"):
+        secret = payments.secret_for(store_id)
+        if secret:
+            return "razorpay", cfg["key_id"], secret
+    if settings.razorpay_key_id and settings.razorpay_key_secret:
+        return "razorpay", settings.razorpay_key_id, settings.razorpay_key_secret
+    return "mock", "", ""
 
 
 def get(order_id: str) -> Order | None:
@@ -36,27 +44,28 @@ def intent(s: Session) -> Order:
         if len(c.items) > limit:
             raise CheckoutError(f"self-checkout limit is {limit} items")
     subtotal, savings, total = cart_svc.totals(c)
+    provider, key_id, key_secret = _keys(s.store_id)
     o = Order(order_id=uuid.uuid4().hex, store_id=s.store_id, session_id=s.session_id, cart_id=c.cart_id,
               channel="store" if s.mode == "instore" else "online", items=c.items,
-              subtotal=subtotal, savings=savings, total=total, payment_provider=_provider())
+              subtotal=subtotal, savings=savings, total=total, payment_provider=provider)
     if o.payment_provider == "razorpay":
-        o.payment_ref = _razorpay_order(o)
+        o.payment_ref = _razorpay_order(o, key_id, key_secret)
     db.orders().document(o.order_id).set(o.model_dump())
     return o
 
 
-def _razorpay_order(o: Order) -> str:
+def _razorpay_order(o: Order, key_id: str, key_secret: str) -> str:
     res = httpx.post("https://api.razorpay.com/v1/orders",
-                     auth=(settings.razorpay_key_id, settings.razorpay_key_secret),
+                     auth=(key_id, key_secret),
                      json={"amount": int(round(o.total * 100)), "currency": "INR", "receipt": o.order_id},
                      timeout=10)
     res.raise_for_status()
     return res.json()["id"]
 
 
-def razorpay_signature_ok(order_ref: str, payment_id: str, signature: str) -> bool:
-    expected = hmac.new(settings.razorpay_key_secret.encode(), f"{order_ref}|{payment_id}".encode(),
-                        hashlib.sha256).hexdigest()
+def razorpay_signature_ok(order_ref: str, payment_id: str, signature: str, key_secret: str | None = None) -> bool:
+    secret = key_secret if key_secret is not None else settings.razorpay_key_secret
+    expected = hmac.new(secret.encode(), f"{order_ref}|{payment_id}".encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
 
 
@@ -69,7 +78,7 @@ def confirm(order_id: str, *, payment_id: str, signature: str) -> Order:
     if o.payment_provider == "mock":
         ok = signature == "mock" and settings.env != "prod"
     else:
-        ok = razorpay_signature_ok(o.payment_ref, payment_id, signature)
+        ok = razorpay_signature_ok(o.payment_ref, payment_id, signature, _keys(o.store_id)[2])
     if not ok:
         raise CheckoutError("payment signature invalid")
     if cart_svc.get(o.store_id, o.cart_id).status != "open":

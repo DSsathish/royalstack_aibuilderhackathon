@@ -25,6 +25,12 @@ export default function Shop() {
     api.cart(session).then(setCart).catch(expired);
   }, [session, router, setStore, setCart, setSession]);
 
+  useEffect(() => {   // per-store accent colour
+    const accent = (store as unknown as { brand?: { accent?: string } })?.brand?.accent;
+    if (accent) document.documentElement.style.setProperty("--accent", accent);
+    return () => { document.documentElement.style.removeProperty("--accent"); };
+  }, [store]);
+
   if (!session) return null;
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "chat", label: "Assistant", icon: <IconChat /> }, { id: "scan", label: "Scan", icon: <IconScan /> },

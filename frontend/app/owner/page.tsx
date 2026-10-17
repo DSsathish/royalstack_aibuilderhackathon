@@ -3,29 +3,36 @@ import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { money } from "@/lib/api";
 import { signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
-import { Draft, InvRow, Loss, Overview, Signals, owner } from "@/lib/owner";
+import { Draft, InvRow, Loss, Overview, Signals, StoreDoc, owner } from "@/lib/owner";
+import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import RevenueChart from "@/components/RevenueChart";
 
-type Tab = "overview" | "inventory" | "reorders" | "signals" | "loss" | "connectors" | "chat";
-const TABS: { id: Tab; label: string }[] = [
+type Tab = "overview" | "inventory" | "reorders" | "signals" | "loss" | "connectors" | "setup" | "exits" | "chat";
+const OWNER_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" }, { id: "inventory", label: "Inventory" }, { id: "reorders", label: "Reorders" },
-  { id: "signals", label: "Signals" }, { id: "loss", label: "Loss" }, { id: "connectors", label: "Connectors" }, { id: "chat", label: "Ask" },
+  { id: "signals", label: "Signals" }, { id: "loss", label: "Loss" }, { id: "connectors", label: "Connectors" }, { id: "setup", label: "Store" }, { id: "chat", label: "Ask" },
 ];
+const STAFF_TABS: { id: Tab; label: string }[] = [{ id: "inventory", label: "Shelf counts" }, { id: "exits", label: "Exits" }];
 
 export default function OwnerPage() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [stores, setStores] = useState<string[]>([]);
+  const [roles, setRoles] = useState<Record<string, "owner" | "staff">>({});
   const [store, setStore] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
   const [error, setError] = useState("");
+  const [loadedMe, setLoadedMe] = useState(false);
+  const [newPin, setNewPin] = useState("");
 
   useEffect(() => watchUser(setUser), []);
   useEffect(() => {
     if (!user) return;
-    owner.me().then((m) => { setStores(m.stores); setStore(m.stores[0] ?? ""); }).catch((e) => setError(e.message));
+    owner.me().then((m) => { setStores(m.stores); setRoles(m.roles); setStore(m.stores[0] ?? ""); setLoadedMe(true); if (m.roles[m.stores[0]] === "staff") setTab("inventory"); }).catch((e) => { setError(e.message); setLoadedMe(true); });
   }, [user]);
+  const role = roles[store] ?? "owner";
+  const TABS = role === "staff" ? STAFF_TABS : OWNER_TABS;
 
   if (user === undefined) return <main className="p-6 text-muted">Loading…</main>;
   if (!user) return (
@@ -36,7 +43,10 @@ export default function OwnerPage() {
       {error && <p className="chip chip-bad max-w-sm">{error.includes("operation-not-allowed") ? "Google sign-in is not enabled yet in the Firebase console (Authentication → Sign-in method → Google)." : error}</p>}
     </main>
   );
-  if (!store) return <main className="p-6 text-muted">{error || `No store is registered for ${user.email}. Ask the administrator to add your email to the store.`}</main>;
+  if (!store) {
+    if (!loadedMe) return <main className="p-6 text-muted">Loading</main>;
+    return <RegisterForm email={user.email ?? ""} error={error} onDone={(s, pin) => { setStores([s.store_id]); setRoles({ [s.store_id]: "owner" }); setStore(s.store_id); setNewPin(pin); setTab("setup"); }} />;
+  }
 
   return (
     <div className="flex flex-col h-dvh">
@@ -58,6 +68,8 @@ export default function OwnerPage() {
         {tab === "signals" && <SignalsTab store={store} />}
         {tab === "loss" && <LossTab store={store} />}
         {tab === "connectors" && <ConnectorsTab store={store} />}
+        {tab === "setup" && <SetupTab store={store} newPin={newPin} />}
+        {tab === "exits" && <ExitsTab store={store} />}
         {tab === "chat" && <OwnerChat store={store} />}
       </div>
     </div>
@@ -86,6 +98,116 @@ function OverviewTab({ store }: { store: string }) {
       </div>
       <RevenueChart series={o.series} />
       <div className="text-sm text-muted">By channel today: {Object.entries(o.today.by_channel).map(([k, v]) => `${k} ${money(v)}`).join(" · ") || "no sales yet"}</div>
+    </div>
+  );
+}
+
+function RegisterForm({ email, error, onDone }: { email: string; error: string; onDone: (s: StoreDoc, pin: string) => void }) {
+  const [name, setName] = useState(""); const [city, setCity] = useState(""); const [langs, setLangs] = useState<string[]>(["en"]);
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState(error);
+  const toggle = (l: string) => setLangs(langs.includes(l) ? langs.filter((x) => x !== l) : [...langs, l]);
+  async function submit() {
+    setBusy(true); setErr("");
+    try { const r = await owner.register({ name, city, languages: langs.length ? langs : ["en"], currency: "INR" }); onDone(r.store, r.kiosk_pin); }
+    catch (e) { setErr((e as Error).message); }
+    setBusy(false);
+  }
+  return (
+    <main className="flex-1 flex flex-col gap-4 p-6 max-w-md mx-auto w-full justify-center">
+      <div><div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Register your shop</h1><p className="text-muted text-sm mt-1">Signed in as {email}. Takes a minute; you can change everything later.</p></div>
+      <label className="text-sm">Shop name<input id="reg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sri Murugan Stores" className="field mt-1" /></label>
+      <label className="text-sm">City<input id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Chennai" className="field mt-1" /></label>
+      <div className="text-sm">Languages your shoppers use<div className="flex gap-2 mt-1">{[["en", "English"], ["ta", "தமிழ்"], ["hi", "हिन्दी"]].map(([k, l]) => <button key={k} onClick={() => toggle(k)} className={`chip ${langs.includes(k) ? "bg-ink text-bg" : "chip-muted"}`}>{l}</button>)}</div></div>
+      {err && <p className="chip chip-bad">{err}</p>}
+      <button onClick={submit} disabled={busy || name.trim().length < 3} className="btn btn-primary py-3">{busy ? "Creating" : "Create my shop"}</button>
+    </main>
+  );
+}
+
+function SetupTab({ store, newPin }: { store: string; newPin: string }) {
+  const [doc, setDoc] = useState<StoreDoc | null>(null);
+  const [aisles, setAisles] = useState<string[]>([]);
+  const [brand, setBrand] = useState({ tagline: "", greeting: "", accent: "#27a36e" });
+  const [team, setTeam] = useState<{ owner_emails: string[]; staff_emails: string[] } | null>(null);
+  const [staffEmail, setStaffEmail] = useState("");
+  const [pay, setPay] = useState({ key_id: "", key_secret: "" });
+  const [qr, setQr] = useState<{ entrance_url: string; aisles: { aisle: string; url: string }[] } | null>(null);
+  const [msg, setMsg] = useState("");
+  const load = () => owner.store(store).then((d) => { setDoc(d); setAisles(d.floor_map.map((a) => a.aisle)); setBrand({ tagline: d.brand.tagline, greeting: d.brand.greeting, accent: d.brand.accent }); });
+  useEffect(() => { load(); owner.team(store).then(setTeam).catch(() => {}); owner.qr(store).then(setQr).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  async function save(body: Parameters<typeof owner.patchStore>[1], note: string) { await owner.patchStore(store, body); setMsg(note); load(); owner.qr(store).then(setQr).catch(() => {}); }
+  if (!doc) return <p className="p-4 text-muted">Loading</p>;
+  return (
+    <div className="p-4 space-y-6 max-w-3xl">
+      {newPin && <div className="card border-accent p-3 text-sm"><b>Your exit kiosk PIN is {newPin}.</b> It is also shown in the Loss tab under Controls. Enter it once on the tablet at the exit.</div>}
+      {msg && <div className="chip chip-good">{msg}</div>}
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">1. Products</h2>
+        <p className="text-sm text-muted">Import a CSV from your billing software in the Connectors tab, or add products one by one from the Inventory tab by scanning their barcodes.</p>
+      </section>
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">2. Aisles</h2>
+        <p className="text-sm text-muted">Name your aisles in order from the entrance. The map and the assistant use these.</p>
+        <div className="flex flex-wrap gap-2">{aisles.map((a, i) => <input key={i} value={a} onChange={(e) => setAisles(aisles.map((x, j) => (j === i ? e.target.value : x)))} className="field w-32 py-1.5 text-sm" />)}
+          {aisles.length < 12 && <button onClick={() => setAisles([...aisles, `A${aisles.length + 1}`])} className="btn btn-ghost py-1.5 text-sm">Add aisle</button>}
+          {aisles.length > 1 && <button onClick={() => setAisles(aisles.slice(0, -1))} className="btn btn-ghost py-1.5 text-sm">Remove last</button>}</div>
+        <button onClick={() => save({ aisles }, "Aisles saved")} className="btn btn-primary py-2">Save aisles</button>
+      </section>
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">3. Brand</h2>
+        <div className="grid sm:grid-cols-2 gap-3 text-sm">
+          <label>Tagline<input value={brand.tagline} onChange={(e) => setBrand({ ...brand, tagline: e.target.value })} placeholder="Fresh every day" className="field mt-1" /></label>
+          <label>Accent colour<div className="flex items-center gap-2 mt-1"><input type="color" value={brand.accent} onChange={(e) => setBrand({ ...brand, accent: e.target.value })} className="h-10 w-14 rounded border border-line bg-transparent" /><span className="mono text-xs">{brand.accent}</span></div></label>
+          <label className="sm:col-span-2">Assistant greeting<input value={brand.greeting} onChange={(e) => setBrand({ ...brand, greeting: e.target.value })} placeholder="Vanakkam! Welcome to Sri Murugan Stores." className="field mt-1" /></label>
+        </div>
+        <button onClick={() => save(brand, "Brand saved")} className="btn btn-primary py-2">Save brand</button>
+      </section>
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">4. QR codes</h2>
+        <p className="text-sm text-muted">Print the entrance code for the door and one code per aisle. Shoppers scan with their phone camera; no app needed.</p>
+        {qr && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:grid-cols-3">
+            {[{ aisle: "Entrance", url: qr.entrance_url }, ...qr.aisles].map((q) => (
+              <div key={q.aisle} className="card p-3 flex flex-col items-center gap-2 text-center">
+                <div className="bg-white p-1 rounded"><QRCodeSVG value={q.url} size={120} /></div>
+                <div className="text-xs font-semibold">{doc.name}</div><div className="eyebrow">{q.aisle}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <button onClick={() => window.print()} className="btn btn-ghost py-2">Print this page</button>
+      </section>
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">Team</h2>
+        <p className="text-sm text-muted">Staff can run the exit kiosk and record shelf counts. They cannot approve orders, change settings or see customers.</p>
+        {team && <ul className="text-sm">{team.owner_emails.map((e) => <li key={e} className="flex justify-between py-1 border-t border-line"><span>{e}</span><span className="chip chip-accent">owner</span></li>)}
+          {team.staff_emails.map((e) => <li key={e} className="flex justify-between py-1 border-t border-line"><span>{e}</span><button onClick={async () => setTeam({ ...team, ...(await owner.removeStaff(store, e)) })} className="text-xs text-bad underline">remove</button></li>)}</ul>}
+        <div className="flex gap-2"><input value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} placeholder="staff@gmail.com" className="field flex-1" /><button onClick={async () => { if (team) setTeam({ ...team, ...(await owner.addStaff(store, staffEmail)) }); setStaffEmail(""); }} className="btn btn-primary py-2">Add staff</button></div>
+      </section>
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">Payments</h2>
+        <p className="text-sm text-muted">Status: <span className={`chip ${doc.payments.provider === "razorpay" ? "chip-good" : "chip-muted"}`}>{doc.payments.provider === "razorpay" ? `Razorpay · ${doc.payments.key_id}` : "sandbox (no real money)"}</span></p>
+        <div className="grid sm:grid-cols-2 gap-3 text-sm">
+          <label>Razorpay key id<input value={pay.key_id} onChange={(e) => setPay({ ...pay, key_id: e.target.value })} className="field mt-1" /></label>
+          <label>Razorpay key secret<input type="password" value={pay.key_secret} onChange={(e) => setPay({ ...pay, key_secret: e.target.value })} className="field mt-1" /></label>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={async () => { await owner.patchPayments(store, pay); setPay({ key_id: "", key_secret: "" }); setMsg("Payment keys saved"); load(); }} disabled={!pay.key_id || !pay.key_secret} className="btn btn-primary py-2">Save keys</button>
+          <button onClick={async () => { await owner.patchPayments(store, {}); setMsg("Back to sandbox"); load(); }} className="btn btn-ghost py-2">Use sandbox</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ExitsTab({ store }: { store: string }) {
+  const [data, setData] = useState<{ summary: Loss["summary"]; items: Loss["recent"] } | null>(null);
+  useEffect(() => { owner.verifications(store).then(setData); }, [store]);
+  if (!data) return <p className="p-4 text-muted">Loading</p>;
+  return (
+    <div className="p-4 space-y-3 max-w-3xl">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3"><Tile label="Exits (7d)" value={data.summary.total} /><Tile label="Clear" value={data.summary.clear} /><Tile label="Spot checks" value={data.summary.spot_check} tone="text-warn" /><Tile label="Flags" value={data.summary.flag} tone="text-bad" /></div>
+      <ul className="text-sm">{data.items.slice(0, 30).map((v) => <li key={v.verification_id} className="border-t border-line py-1.5"><span className={`chip ${v.verdict === "flag" ? "chip-bad" : v.verdict === "spot_check" ? "chip-warn" : "chip-good"}`}>{v.verdict}</span> · {new Date(v.created_at).toLocaleString()} {v.reasons.length > 0 && <span className="text-muted">· {v.reasons.join("; ")}</span>}</li>)}</ul>
     </div>
   );
 }
