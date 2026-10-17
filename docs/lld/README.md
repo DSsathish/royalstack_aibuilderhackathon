@@ -26,3 +26,4 @@ Rules we follow in code:
 | universal normalizer (column mapping agent), dataset import | [normalizer.md](normalizer.md) | done; dataset import awaits a Kaggle file |
 | conversation memory, voice tuning, reconnect, named voice | [voice-memory.md](voice-memory.md) | done |
 | R1 self-service shops: registration, setup, roles, per-store payments | [r1-self-service.md](r1-self-service.md) | done |
+| R3 scan-first cart, owner add-by-scan with barcode lookup | [r3-scan-first.md](r3-scan-first.md) | done |

@@ -5,6 +5,7 @@ import { money } from "@/lib/api";
 import { signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
 import { Draft, InvRow, Loss, Overview, Signals, StoreDoc, owner } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
+import BarcodeScan from "@/components/BarcodeScan";
 import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import RevenueChart from "@/components/RevenueChart";
@@ -212,10 +213,43 @@ function ExitsTab({ store }: { store: string }) {
   );
 }
 
+function AddByScan({ store, onSaved }: { store: string; onSaved: () => void }) {
+  const [code, setCode] = useState("");
+  const [form, setForm] = useState({ name: "", brand: "", category: "", price: "", mrp: "", on_hand: "", aisle: "" });
+  const [looking, setLooking] = useState(false);
+  const [found, setFound] = useState<boolean | null>(null);
+  const [msg, setMsg] = useState("");
+  async function onCode(c: string) {
+    setCode(c); setLooking(true); setFound(null);
+    try { const r = await owner.lookup(store, c); setFound(r.found); if (r.found) setForm((f) => ({ ...f, name: r.name ?? "", brand: r.brand ?? "", category: r.category ?? "" })); }
+    catch { setFound(false); }
+    setLooking(false);
+  }
+  async function save() {
+    try {
+      await owner.createProduct(store, { barcode: code, name: form.name, brand: form.brand, category: form.category, price: Number(form.price), mrp: form.mrp ? Number(form.mrp) : undefined, on_hand: Number(form.on_hand), aisle: form.aisle || undefined });
+      setMsg(`Saved ${form.name}.`); setCode(""); setForm({ name: "", brand: "", category: "", price: "", mrp: "", on_hand: "", aisle: "" }); onSaved();
+    } catch (e) { setMsg(`Could not save: ${(e as Error).message}`); }
+  }
+  if (!code) return <div className="space-y-2">{msg && <div className="chip chip-good">{msg}</div>}<BarcodeScan onCode={onCode} onClose={onSaved} /></div>;
+  return (
+    <div className="card p-3 space-y-2 text-sm">
+      <div className="flex items-center gap-2"><span className="mono">{code}</span>{looking ? <span className="chip chip-muted">Looking up</span> : found ? <span className="chip chip-good">Found in barcode database</span> : found === false ? <span className="chip chip-warn">Unknown barcode, fill in the details</span> : null}</div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        {([["name", "Product name"], ["brand", "Brand"], ["category", "Category"], ["price", "Selling price (₹)"], ["mrp", "MRP (₹)"], ["on_hand", "Stock on shelf"], ["aisle", "Aisle"]] as const).map(([k, l]) => (
+          <label key={k} className="text-xs">{l}<input value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} inputMode={["price", "mrp", "on_hand"].includes(k) ? "decimal" : undefined} className="field mt-1 py-1.5 text-sm" /></label>
+        ))}
+      </div>
+      <div className="flex gap-2"><button onClick={save} disabled={!form.name || !form.price || form.on_hand === ""} className="btn btn-primary py-2">Save product</button><button onClick={() => setCode("")} className="btn btn-ghost py-2">Scan another</button></div>
+    </div>
+  );
+}
+
 function InventoryTab({ store }: { store: string }) {
   const [rows, setRows] = useState<InvRow[]>([]);
   const [filter, setFilter] = useState<"all" | InvRow["status"]>("all");
   const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
   const load = () => owner.inventory(store).then(setRows);
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shown = rows.filter((r) => (filter === "all" || r.status === filter) && r.name.toLowerCase().includes(q.toLowerCase()));
@@ -233,7 +267,9 @@ function InventoryTab({ store }: { store: string }) {
       <div className="flex flex-wrap gap-2 items-center">
         {(["all", "low", "out", "dead", "overstock", "ok"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`chip ${filter === f ? "bg-ink text-bg" : "chip-muted"}`}>{f}</button>)}
         <input id="inv-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="field ml-auto w-auto py-1.5 text-sm" />
+        <button onClick={() => setAdding(!adding)} className="btn btn-primary py-1.5 text-sm">{adding ? "Close" : "Add by scan"}</button>
       </div>
+      {adding && <AddByScan store={store} onSaved={() => { load(); }} />}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="text-left eyebrow"><tr><th className="py-1">Product</th><th>Status</th><th className="text-right">Available</th><th className="text-right">Avg/day</th><th className="text-right">Days cover</th><th className="text-right">Reorder pt</th><th className="text-right">Reorder qty</th><th>Aisle</th><th></th></tr></thead>

@@ -33,6 +33,9 @@ export const owner = {
   store: (s: string) => call<StoreDoc>(`/stores/${s}`),
   patchStore: (s: string, body: Partial<{ name: string; city: string; tagline: string; greeting: string; accent: string; languages: string[]; currency: string; aisles: string[] }>) =>
     call<StoreDoc>(`/owner/${s}/store`, { method: "PATCH", body: JSON.stringify(body) }),
+  lookup: (s: string, code: string) => call<{ found: boolean; name?: string; brand?: string; category?: string; image_url?: string }>(`/owner/${s}/lookup/${code}`),
+  createProduct: (s: string, body: { barcode: string; sku?: string; name: string; brand?: string; category?: string; price: number; mrp?: number; on_hand: number; aisle?: string }) =>
+    call<{ product_id: string; name: string }>(`/owner/${s}/products`, { method: "POST", body: JSON.stringify(body) }),
   team: (s: string) => call<{ owner_emails: string[]; staff_emails: string[] }>(`/owner/${s}/team`),
   verifications: (s: string, days = 7) => call<{ summary: Loss["summary"]; items: Loss["recent"] }>(`/owner/${s}/verifications?days=${days}`),
   addStaff: (s: string, email: string) => call<{ staff_emails: string[] }>(`/owner/${s}/staff`, { method: "POST", body: JSON.stringify({ email }) }),

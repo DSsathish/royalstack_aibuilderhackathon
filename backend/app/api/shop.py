@@ -95,6 +95,8 @@ def get_cart(cart_id: str = Path(pattern=HEX_ID), s: Session = Depends(session_h
 @router.post("/carts/{cart_id}/items")
 def add_item(body: CartItemIn, cart_id: str = Path(pattern=HEX_ID), s: Session = Depends(session_header)):
     _own_cart(cart_id, s)
+    if s.mode == "instore" and body.via == "chat":
+        raise HTTPException(409, "scan_required")       # in store, only a scan or a confirmed photo adds an item
     res = cart_svc.add(s.store_id, cart_id, body.product_id, body.qty, via=body.via, mode=s.mode)
     if isinstance(res, str):
         raise HTTPException(409, res)

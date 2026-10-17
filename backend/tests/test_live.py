@@ -10,7 +10,8 @@ from app.services import catalog, db
 def test_declarations_match_mode_tools():
     decls = live.declarations("instore")
     names = {d.name for d in decls}
-    assert "navigate_to" in names and "add_to_cart" in names and "get_low_stock" not in names
+    assert "navigate_to" in names and "add_to_cart" not in names and "get_low_stock" not in names
+    decls = live.declarations("online")
     add = next(d for d in decls if d.name == "add_to_cart")
     props = add.parameters.properties
     assert "tool_context" not in props

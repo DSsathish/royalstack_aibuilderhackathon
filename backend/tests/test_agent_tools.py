@@ -140,3 +140,9 @@ def test_add_to_cart_resolves_a_name_when_the_id_is_unknown(shop):
     assert out["ok"] and out["cart"]["items"][0]["product_id"] == f"{shop}-milk" and out["resolved_from"] == "toned milk"
     out = tools.add_to_cart("india-gate-basmati-rice-5kg", 1, tool_context=ctx(shop))
     assert out == {"ok": False, "error": "unknown_product"}      # nothing matches: still an honest error
+
+
+def test_instore_tools_cannot_add_to_cart_but_online_can():
+    names = {m: {t.__name__ for t in ts} for m, ts in tools.TOOLS_BY_MODE.items()}
+    assert "add_to_cart" not in names["instore"] and "add_to_cart" in names["online"]
+    assert "navigate_to" in names["instore"]
