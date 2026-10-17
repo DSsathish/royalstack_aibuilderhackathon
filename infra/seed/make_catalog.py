@@ -102,7 +102,8 @@ def expand(main: str, sub: str, entry: str, meta: tuple, seen: set, counter: Cou
         raise SystemExit(f"{main}/{sub}: sizes and prices differ for {entry!r}")
     rows = []
     for size, price in zip(sizes, prices):
-        full = f"{brand} {name} {size}".strip() if brand not in ("Local", "Unbranded") else f"{name} {size}".strip()
+        shown = "" if size in ("1 pc", "1 set", "1 pair") else size            # "Pressure Cooker 3 L", not "Pressure Cooker 3 L 1 pc"
+        full = f"{brand} {name} {shown}".strip() if brand not in ("Local", "Unbranded") else f"{name} {shown}".strip()
         full = re.sub(r"\s+", " ", full)
         key = (brand.lower(), name.lower(), size.lower())
         if key in seen:
