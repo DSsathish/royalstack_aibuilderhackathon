@@ -1,0 +1,48 @@
+<section id="architecture" data-transition="fade" style="background:#f6f8f3;color:#12291f;font-family:'Domine', Georgia, serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<h2 style="font-family:'Rubik', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1">Built on Google Cloud, end to end</h2>
+<div style="display:flex;align-items:center;gap:20px;background:#12291f;border-radius:20px;padding:28px 40px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600;color:#f6f8f3">Phone or laptop</p>
+<x-shape kind="arrow-right" style="width:64px;height:32px;background:#5fd39a"></x-shape>
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600;color:#f6f8f3">Firebase Hosting PWA</p>
+<x-shape kind="arrow-right" style="width:64px;height:32px;background:#5fd39a"></x-shape>
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600;color:#f6f8f3">Cloud Run API, SSE and websockets</p>
+<x-shape kind="arrow-right" style="width:64px;height:32px;background:#5fd39a"></x-shape>
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600;color:#f6f8f3">Firestore · BigQuery · Vertex AI</p>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px;background:#fdfefb;border:1px solid #dde5df;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600">Cloud Run</h3>
+<p style="font-size:24px;line-height:1.4;color:#425a4e">FastAPI, Google ADK agent runtime, Gemini Live bridge. One warm instance, scales to three.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#fdfefb;border:1px solid #dde5df;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600">Vertex AI Gemini</h3>
+<p style="font-size:24px;line-height:1.4;color:#425a4e">gemini-3.5-flash for tools and vision, gemini-live-2.5-flash for voice, gemini-embedding-001 for search.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#fdfefb;border:1px solid #dde5df;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600">Firestore</h3>
+<p style="font-size:24px;line-height:1.4;color:#425a4e">Canonical models, transactional stock reservation, points ledger, sync log. Deny-all client rules.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#fdfefb;border:1px solid #dde5df;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600">BigQuery ML</h3>
+<p style="font-size:24px;line-height:1.4;color:#425a4e">Sales history and ARIMA_PLUS forecasts per product and store, retrained nightly.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#fdfefb;border:1px solid #dde5df;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600">Firebase Hosting and Auth</h3>
+<p style="font-size:24px;line-height:1.4;color:#425a4e">Static Next.js PWA. Google sign-in for owners and staff, phone OTP for shoppers who opt in.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#fdfefb;border:1px solid #dde5df;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600">Cloud Scheduler</h3>
+<p style="font-size:24px;line-height:1.4;color:#425a4e">Nightly forecasts and customer jobs for every store; sync feeds and outbox every fifteen minutes.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#fdfefb;border:1px solid #dde5df;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600">Secret Manager</h3>
+<p style="font-size:24px;line-height:1.4;color:#425a4e">QR signing key, job key, and per-store payment and sync secrets, never in code or responses.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#fdfefb;border:1px solid #dde5df;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600">Cloud Build and CI</h3>
+<p style="font-size:24px;line-height:1.4;color:#425a4e">Source deploys to Cloud Run; GitHub Actions run the full test suite under the Firestore emulator.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-family:'Rubik', Arial, sans-serif;font-size:24px;color:#6f8a7c">Architecture · docs/hld.md</p>
+<aside>Every box is in use today, not planned. The HLD in the repo has the component and trust-boundary diagrams.</aside>
+</section>

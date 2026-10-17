@@ -29,7 +29,7 @@ Owner: whole team. Estimated time: full day.
 - Manual script = the demo script below, run three times end to end. Fix anything that fails twice.
 - Reset script `infra/scripts/reset_demo.py` (done): restores seed stock, clears sessions, carts, orders, verifications, counts, signals and optionally drafts.
 
-## 7.4 Demo script (also `docs/demo-script.md`)
+## 7.4 Demo script (written: `docs/demo-script.md`)
 
 Target 2 min 45 s. Record on a phone screen plus a face camera for the in-store part if possible, otherwise screen recordings with voiceover.
 
@@ -49,7 +49,7 @@ Target 2 min 45 s. Record on a phone screen plus a face camera for the in-store 
 
 Recording tips: record each scene separately, stitch in CapCut or iMovie, add captions for the Tamil parts, keep the Google Cloud services on screen in the architecture scene, upload to YouTube as unlisted, test the link in an incognito window.
 
-## 7.5 Deck (PDF, 10 to 12 slides)
+## 7.5 Deck (PDF, 10 to 12 slides) — written: 11 slides, source in `docs/deck/`, export to PDF from the slides artifact
 
 1. Title, team, theme.
 2. Problem: shrink and stockout figures with sources (ECR Retail Loss 2026 report, Amazon and Walmart retreats, Redseer on kirana digitization).
@@ -74,7 +74,7 @@ Export to PDF. Keep text short; judges skim.
 - Remove dead code, run formatters (`ruff`, `prettier`), make CI green.
 - Tag `v1.0-submission`.
 
-## 7.7 Submission checklist (Hack2skill portal)
+## 7.7 Submission checklist (Hack2skill portal) — see `docs/submission-checklist.md`
 
 - [ ] Live deployed link: the Firebase Hosting URL, verified in incognito on a phone
 - [ ] Demo video under 3 minutes, public or unlisted YouTube link, verified in incognito

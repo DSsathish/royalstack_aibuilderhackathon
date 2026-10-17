@@ -1,0 +1,27 @@
+<section id="exit" data-transition="fade" style="background:#f6f8f3;color:#12291f;font-family:'Domine', Georgia, serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<h2 style="font-family:'Rubik', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1">At the exit: seven layers, rules decide</h2>
+<div style="display:flex;gap:40px;align-items:start">
+<table style="width:1080px;font-family:'Rubik', Arial, sans-serif;font-size:26px;color:#12291f;background:#fdfefb;border:1px solid #dde5df;border-radius:16px">
+<tr style="background:#e3efe7"><th style="width:34%;text-align:left">Layer</th><th style="width:66%;text-align:left">What it checks</th></tr>
+<tr><td>Receipt token</td><td>HMAC-signed, single use, this store only</td></tr>
+<tr><td>Order</td><td>Paid, and not already used to leave</td></tr>
+<tr><td>Item count</td><td>Matches the kiosk count when one is given</td></tr>
+<tr><td>Line limit</td><td>Under the store’s self-checkout limit</td></tr>
+<tr><td>High-value items</td><td>Items above the threshold get a spot check</td></tr>
+<tr><td>Random audit</td><td>A share of clear exits, set by the owner</td></tr>
+<tr><td>Bag photo</td><td>Gemini vision adjusts confidence only</td></tr>
+</table>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#12291f;border-radius:20px;padding:36px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#5fd39a">Verdicts</p>
+<p style="font-size:28px;line-height:1.45;color:#e4ede7">Clear, spot check, or flag. Staff review flags on a tablet with a kiosk PIN that locks after failed attempts.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#e3efe7;border:1px solid #c6dccf;border-radius:20px;padding:36px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#1f7a52">Privacy by design</p>
+<p style="font-size:28px;line-height:1.45;color:#425a4e">The model never blocks an exit on its own. Photos are processed in memory; only a hash, a confidence and item names are kept.</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-family:'Rubik', Arial, sans-serif;font-size:24px;color:#6f8a7c">Exit verification · loss prevention without a guard at the door</p>
+<aside>Deterministic rules decide; Gemini vision only moves the confidence. That is the answer to the self-checkout shrink problem and to the privacy question in one design.</aside>
+</section>

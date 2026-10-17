@@ -4,12 +4,12 @@ Decisions recorded 17 Oct 2026 with the owner. Everything here is post-submissio
 
 | Release | Scope | Estimate |
 |---|---|---|
-| R1 | Self-service shops: registration, setup wizard, branding, QR tab, staff role, per-store payments | 2 days |
-| R2 | Data sync: webhook-first connector contract, Shopify, generic inventory webhook, Sheets and POS CSV schedules, cross-instance cache invalidation | 2 days |
-| R3 | Scan-first cart and owner product add by barcode | 1 day |
-| R4 | Shopper identity: optional phone OTP, profile, history, consent and deletion | 1.5 days |
-| R5 | Customers, segments, offers and reward points | 3 days |
-| R6 | Platform hygiene: multi-store jobs, GST, returns, retention | 1.5 days |
+| R1 | Self-service shops: registration, setup wizard, branding, QR tab, staff role, per-store payments | 2 days | done 17 Oct |
+| R2 | Data sync: webhook-first connector contract, Shopify, generic inventory webhook, Sheets and POS CSV schedules, cross-instance cache invalidation | 2 days | core done 17 Oct (generic webhooks, pull, sale events, CSV feed, catalog version); Shopify adapter open |
+| R3 | Scan-first cart and owner product add by barcode | 1 day | done 17 Oct |
+| R4 | Shopper identity: optional phone OTP, profile, history, consent and deletion | 1.5 days | done 17 Oct |
+| R5 | Customers, segments, offers and reward points | 3 days | done 17 Oct |
+| R6 | Platform hygiene: multi-store jobs, GST, returns, retention | 1.5 days | multi-store jobs done 17 Oct; GST, returns, retention open |
 
 ---
 

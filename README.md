@@ -19,11 +19,15 @@ Scan the entrance QR (see `docs/plan/00-overview.md` or the owner dashboard's Co
 
 **Shopper, online.** The same app and the same agent in online mode, sharing the same stock.
 
-**Owner.** Google sign-in. Live sales, inventory with BigQuery ML forecasts and days of cover, reorder drafts with a Gemini-written rationale waiting for approval, "asked but not carried" signals captured from conversations, exit-loss view with controls, CSV import with column mapping, and the owner assistant by text or live voice.
+**Shopper identity, optional.** Phone OTP sign-in (Firebase) unlocks a profile the assistant uses (name, language, dietary limits, usual items learned from receipts, substitution preference), receipt history with "buy again", offers for their segment, reward points (one per ₹100, redeemed at checkout after a fresh code, twelve-month expiry, append-only ledger), and self-service export and delete. Guests lose nothing.
+
+**Owner.** Google sign-in, self-service registration, staff roles. Live sales, inventory with BigQuery ML forecasts and days of cover, reorder drafts with a Gemini-written rationale waiting for approval, "asked but not carried" signals captured from conversations, customers with segments (new, regular, VIP, at risk), offers that apply themselves (product, category, bill threshold, segment-targeted, best wins), points adjustments with audit, exit-loss view with controls, add products by scanning a barcode (Open Food Facts lookup), CSV import with AI column mapping, and the owner assistant by text or live voice.
+
+**Sync with the shop's own system.** Signed webhooks in (`/sync/{store}/inventory`, `/sync/{store}/products`, idempotent by event id), a bearer-protected pull, signed sale events out with retries, and a published CSV feed pulled every fifteen minutes. A catalog version counter makes every API instance reload within two seconds. See `infra/scripts/sync_example.py`.
 
 ## Google Cloud services
 
-Cloud Run (API and websocket bridge), Firebase Hosting (static PWA), Firebase Auth (owner sign-in), Firestore (operational data), BigQuery and BigQuery ML `ARIMA_PLUS` (sales history and forecasts), Vertex AI Gemini (`gemini-3.5-flash`, `gemini-live-2.5-flash`, `gemini-embedding-001`), Google ADK (agent runtime), Cloud Scheduler (nightly forecast), Secret Manager, Cloud Build, Artifact Registry.
+Cloud Run (API and websocket bridge), Firebase Hosting (static PWA), Firebase Auth (Google for owners and staff, phone OTP for shoppers), Firestore (operational data), BigQuery and BigQuery ML `ARIMA_PLUS` (sales history and forecasts), Vertex AI Gemini (`gemini-3.5-flash`, `gemini-live-2.5-flash`, `gemini-embedding-001`), Google ADK (agent runtime), Cloud Scheduler (nightly forecasts and customer jobs, sync every 15 minutes), Secret Manager (signing keys, per-store payment and sync secrets), Cloud Build, Artifact Registry.
 
 ## Codebase
 
@@ -32,22 +36,27 @@ backend/                 Python 3.12, FastAPI, Google ADK, google-genai
   app/main.py            app, routers, startup warm-up
   app/config.py          settings from env; refuses the default signing key outside dev/test
   app/domain/models.py   all Firestore models
-  app/services/          db paths, inventory (transactions), catalog (keyword + embeddings), cart, checkout,
-                         qr (signed tokens), sessions, verification (7 layers), vision, forecast, reorder,
-                         insights, auth, gemini
+  app/services/          db paths, inventory (transactions), catalog (keyword + embeddings, version-aware cache),
+                         cart (pricing with offers and points), checkout, qr (signed tokens), sessions,
+                         verification (7 layers), vision, forecast, reorder, insights, auth, gemini,
+                         customers, segments, offers, points (ledger), sync (webhooks, outbox, feed), secrets,
+                         barcode (Open Food Facts), conversation (memory)
   app/agent/             tools.py (plain functions, mode-gated), prompts.py, agent.py (ADK, SSE),
                          live.py (Gemini Live websocket bridge)
-  app/api/               catalog, shop, agent (chat, audio, live), exit (kiosk), owner, owner_import
-  app/jobs/forecast.py   sales sync -> ARIMA_PLUS -> forecasts in Firestore
-  app/connectors/        csv_connector (column mapping, caps, idempotent upsert)
-  tests/                 171 unit tests (Firestore emulator) + live tests gated by LIVE_GEMINI=1
+  app/api/               catalog, shop, agent (chat, audio, live), exit (kiosk), owner, owner_import, register,
+                         products, me (shopper), sync (inbound), owner_sync
+  app/jobs/              forecast.py (sales -> ARIMA_PLUS -> forecasts), customers.py (segments, points expiry)
+  app/connectors/        csv_connector (column mapping, caps, idempotent upsert), normalizer (mapping agent)
+  tests/                 257 unit tests (Firestore emulator) + live tests gated by LIVE_GEMINI=1
 frontend/                Next.js 16 static export, TypeScript, Tailwind
-  app/enter, shop, checkout, receipt, exit, kiosk, owner
-  components/            Chat (text, voice loop, live voice), Scanner, Cart, StoreMap, TotalBar, Avatar, RevenueChart
-  lib/                   api.ts, sse.ts, voice.ts, live.ts, store.ts, firebase.ts, owner.ts
+  app/enter, shop, checkout, receipt, exit, kiosk, owner, me
+  components/            Chat (text, voice loop, live voice), VoiceOrb, Scanner, BarcodeScan, PhoneSignIn, Cart,
+                         StoreMap, TotalBar, RevenueChart
+  lib/                   api.ts, sse.ts, voice.ts, live.ts, store.ts, firebase.ts, authed.ts, owner.ts, me.ts
   public/pcm-worklet.js  microphone -> 16 kHz PCM for live voice
 infra/seed/              demo store generator (170 products, 90 days of sales), seed script
-docs/                    hld.md, security.md, lld/ (one per module group), plan/ (phased plan)
+infra/scripts/           reset_demo.py, sync_example.py (how a billing system signs and pushes stock)
+docs/                    hld.md, security.md, demo-script.md, submission-checklist.md, lld/ (one per module group), plan/
 ```
 
 Design documents: `docs/hld.md` (components, flows, trust boundaries), `docs/security.md` (every control mapped to code and tests, plus known gaps), `docs/lld/` (low-level design per phase, written before the code, with the rulings made during implementation).

@@ -1,0 +1,26 @@
+<section id="engineering" data-transition="fade" style="background:#f6f8f3;color:#12291f;font-family:'Domine', Georgia, serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<h2 style="font-family:'Rubik', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1">Built like a product, not a demo</h2>
+<div style="display:flex;gap:28px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#fdfefb;border:1px solid #dde5df;border-radius:20px;padding:36px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:88px;font-weight:700;line-height:1;color:#1f7a52">257</p>
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:30px;font-weight:600">unit tests</h3>
+<p style="font-size:25px;line-height:1.4;color:#425a4e">Under the Firestore emulator on every push, plus live model tests behind a flag.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#fdfefb;border:1px solid #dde5df;border-radius:20px;padding:36px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:88px;font-weight:700;line-height:1;color:#1f7a52">14</p>
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:30px;font-weight:600">design notes before code</h3>
+<p style="font-size:25px;line-height:1.4;color:#425a4e">One low-level design per module or agent, with the rulings made during implementation.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#fdfefb;border:1px solid #dde5df;border-radius:20px;padding:36px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:88px;font-weight:700;line-height:1;color:#1f7a52">1</p>
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:30px;font-weight:600">control map</h3>
+<p style="font-size:25px;line-height:1.4;color:#425a4e">docs/security.md ties every control to the code path and the test that proves it, and lists the known gaps.</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#12291f;border-radius:20px;padding:36px 40px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#5fd39a">Security in the design</p>
+<p style="font-size:27px;line-height:1.45;color:#e4ede7">Signed entrance and receipt tokens, hex session ids as credentials, roles for owner, staff, shopper and guest, verified-email bootstrap, kiosk PIN lockout, rate limits, per-store secrets in Secret Manager, HMAC-signed sync with replay protection, phone re-verification before points are spent, self-service data export and deletion.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-family:'Rubik', Arial, sans-serif;font-size:24px;color:#6f8a7c">Engineering · docs/security.md, docs/lld/</p>
+<aside>Judges can open the repo and trace any control to its test. The known-gaps list is honest: cart adds outside a transaction, no retention job yet.</aside>
+</section>

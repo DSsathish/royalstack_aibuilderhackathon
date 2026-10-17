@@ -1,0 +1,29 @@
+<section id="genai" data-transition="fade" style="background:#fdfefb;color:#12291f;font-family:'Domine', Georgia, serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<h2 style="font-family:'Rubik', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1">Where Gemini works, and where code decides</h2>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#12291f;border-radius:20px;padding:40px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#5fd39a">Gemini</p>
+<ul style="font-size:27px;line-height:1.45;color:#e4ede7;padding:0 0 0 32px">
+<li>Live speech-to-speech conversation, interruptible, with memory across visits</li>
+<li>Tool-calling agent on Google ADK; tools are plain functions gated by mode</li>
+<li>Product photo identification and the bag check at the exit</li>
+<li>Multilingual search with embeddings over a keyword fallback</li>
+<li>The rationale on every purchase-order draft</li>
+<li>A normalizer agent that proposes how any CSV maps to the canonical schema</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#e3efe7;border:1px solid #c6dccf;border-radius:20px;padding:40px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#1f7a52">Code</p>
+<ul style="font-size:27px;line-height:1.45;color:#12291f;padding:0 0 0 32px">
+<li>Stock, prices and locations come only from tool results, never from the model’s memory</li>
+<li>The screen renders only tool results: products, map, cart, receipt</li>
+<li>Map highlights and cart adds are resolved deterministically after a search</li>
+<li>Exit verdicts, discounts and points are rules and arithmetic inside transactions</li>
+<li>Every stock change or order waits for the owner’s approval</li>
+<li>Retries, low thinking budgets and schema-free JSON keep the model fast and cheap</li>
+</ul>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-family:'Rubik', Arial, sans-serif;font-size:24px;color:#6f8a7c">Technical merit and Gen AI · docs/lld/phase-2-agent.md, live-voice.md, normalizer.md</p>
+<aside>The split is the design principle: the model talks, sees and proposes; code counts, decides and pays. That is what makes the agent trustworthy enough to run a shop’s stock.</aside>
+</section>

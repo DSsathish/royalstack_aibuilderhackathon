@@ -1,0 +1,39 @@
+<section id="sync" data-transition="fade" style="background:#12291f;color:#f6f8f3;font-family:'Domine', Georgia, serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<h2 style="font-family:'Rubik', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#f6f8f3">Keeps the software the shop already has</h2>
+<div style="display:flex;align-items:center;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#1d3a2d;border:1px solid #2f5a45;border-radius:20px;padding:36px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#5fd39a">Shop’s billing system</p>
+<p style="font-size:26px;line-height:1.4;color:#e4ede7">Tally, Marg, GoFrugal, a POS export, a Google Sheet, Shopify next.</p>
+</div>
+<x-shape kind="arrow-right" style="width:96px;height:48px;background:#5fd39a"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#27a36e;border-radius:20px;padding:36px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#12291f">Royal Stack API</p>
+<p style="font-size:26px;line-height:1.4;color:#12291f">One canonical schema in Firestore. A version counter makes every Cloud Run instance reload within two seconds.</p>
+</div>
+<x-shape kind="arrow-right" style="width:96px;height:48px;background:#5fd39a"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#1d3a2d;border:1px solid #2f5a45;border-radius:20px;padding:36px">
+<p style="font-family:'Rubik', Arial, sans-serif;font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#5fd39a">Shopper and owner apps</p>
+<p style="font-size:26px;line-height:1.4;color:#e4ede7">The assistant answers from the same stock the shop bills from.</p>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px;background:#1d3a2d;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600;color:#f6f8f3">Stock and catalog in</h3>
+<p style="font-size:24px;line-height:1.4;color:#c9dccf">Signed POSTs, HMAC over timestamp and body, replay-safe event ids.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#1d3a2d;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600;color:#f6f8f3">Stock out</h3>
+<p style="font-size:24px;line-height:1.4;color:#c9dccf">A pull endpoint with the per-store secret, reservations included.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#1d3a2d;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600;color:#f6f8f3">Sales out</h3>
+<p style="font-size:24px;line-height:1.4;color:#c9dccf">Every paid order posted and signed; failures retried with backoff from an outbox.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#1d3a2d;border-radius:16px;padding:28px">
+<h3 style="font-family:'Rubik', Arial, sans-serif;font-size:28px;font-weight:600;color:#f6f8f3">Scheduled feed</h3>
+<p style="font-size:24px;line-height:1.4;color:#c9dccf">A Sheet or POS CSV pulled every fifteen minutes with a mapping the AI proposed.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;font-family:'Rubik', Arial, sans-serif;font-size:24px;color:#8fb7a3">Sync · one canonical layer, many adapters</p>
+<aside>This is the answer to “how is it pluggable”. The shop keeps its system of record for counts; Firestore is the record for in-store sales. Secrets live in Secret Manager; every call is signed and logged.</aside>
+</section>
