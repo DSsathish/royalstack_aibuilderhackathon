@@ -83,6 +83,12 @@ def test_offers_points_and_counts(shop):
     assert ot.customers_overview(c, segment="vip")["rows"][0]["last4"] == "1234" and ot.customers_overview(c)["segments"] == {"vip": 1}
 
 
+def test_stock_report_totals(shop):
+    out = ot.stock_report(ctx(shop))
+    assert out["products"] == 3 and out["units_on_hand"] == 32 and out["stock_value"] == 2 * 28 + 30 * 420
+    assert out["by_status"]["out"] == 1 and {c["category"] for c in out["rows"]} == {"Dairy", "Staples"}
+
+
 def test_reports_and_status(shop):
     c = ctx(shop)
     assert ot.sales_report(c, days=7)["orders"] == 0

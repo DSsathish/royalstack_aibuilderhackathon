@@ -37,7 +37,7 @@ ACTION_FOR_TOOL = {
     "get_anomalies": "show_anomalies",
     "get_offers": "show_offers",
     "store_snapshot": "show_snapshot",
-    "find_products": "show_rows", "sales_report": "show_rows", "reorder_drafts": "show_rows", "demand_signals": "show_rows",
+    "stock_report": "show_rows", "find_products": "show_rows", "sales_report": "show_rows", "reorder_drafts": "show_rows", "demand_signals": "show_rows",
     "customers_overview": "show_rows", "list_offers": "show_rows", "exit_summary": "show_rows", "sync_status": "show_rows",
     "floor_map_summary": "show_rows",
 }

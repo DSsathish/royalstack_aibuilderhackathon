@@ -858,9 +858,9 @@ function OwnerChat({ store }: { store: string }) {
   const { session, setSession, setStore } = useApp();
   const [err, setErr] = useState("");
   useEffect(() => {
+    import("@/lib/api").then(({ api }) => api.store(store).then(setStore).catch(() => {}));   // the header needs the name even when the session is reused
     if (session?.mode === "owner" && session.store_id === store) return;
     owner.session(store).then((s) => { setSession(s); }).catch((e) => setErr(e.message));
-    import("@/lib/api").then(({ api }) => api.store(store).then(setStore).catch(() => {}));
   }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (err) return <p className="p-4 chip chip-bad">{err}</p>;
   if (session?.mode !== "owner") return <p className="px-4 lg:px-6 text-muted">Starting the owner assistant</p>;

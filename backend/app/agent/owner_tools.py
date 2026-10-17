@@ -75,6 +75,30 @@ def store_snapshot(tool_context: ToolContext) -> dict:
             "signed_in_customers": signed_in, "live_offers": live, "attention": attention}
 
 
+def stock_report(tool_context: ToolContext) -> dict:
+    """The full stock picture: how many products, units on hand, stock value at selling price, counts per status
+    (ok, low, out, dead, overstock) and the same per category. Use it for "all products" or "full stock" questions,
+    then offer to list one status or category with find_products."""
+    sid = _sid(tool_context)
+    rows = insights.inventory(sid)
+    by_status: dict[str, int] = {}
+    by_cat: dict[str, dict] = {}
+    units = value = 0.0
+    for r in rows:
+        by_status[r["status"]] = by_status.get(r["status"], 0) + 1
+        c = by_cat.setdefault(r.get("category") or "Uncategorised", {"category": r.get("category") or "Uncategorised", "products": 0, "units": 0, "value": 0.0, "out": 0, "low": 0})
+        c["products"] += 1
+        c["units"] += r["on_hand"]
+        c["value"] = round(c["value"] + r["on_hand"] * (r.get("price") or 0), 2)
+        c["out"] += r["status"] == "out"
+        c["low"] += r["status"] == "low"
+        units += r["on_hand"]
+        value += r["on_hand"] * (r.get("price") or 0)
+    cats = sorted(by_cat.values(), key=lambda c: -c["value"])
+    return {"products": len(rows), "units_on_hand": int(units), "stock_value": round(value, 2), "by_status": by_status,
+            **_rows(["category", "products", "units", "value", "out", "low"], cats)}
+
+
 def find_products(query: str, tool_context: ToolContext, status: str = "", limit: int = 15) -> dict:
     """Inventory rows matching a name fragment and/or a status: ok, low, out, dead (not selling) or overstock.
     Each row has stock, sales per day, days of cover, reorder rule, aisle and price. Empty query with a status lists that status."""

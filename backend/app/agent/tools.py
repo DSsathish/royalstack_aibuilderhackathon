@@ -261,7 +261,7 @@ TOOLS_BY_MODE = {
 from app.agent import owner_tools as _ot  # noqa: E402
 
 TOOLS_BY_MODE["owner"] = [
-    _ot.store_snapshot, _ot.find_products, get_low_stock, _ot.sales_report, forecast_demand, _ot.reorder_drafts, draft_purchase_order,
+    _ot.store_snapshot, _ot.stock_report, _ot.find_products, get_low_stock, _ot.sales_report, forecast_demand, _ot.reorder_drafts, draft_purchase_order,
     _ot.demand_signals, _ot.customers_overview, _ot.list_offers, _ot.exit_summary, get_anomalies, _ot.sync_status, _ot.floor_map_summary,
     search_products, get_product,
     _ot.set_reorder_rule, _ot.adjust_stock, _ot.record_shelf_count, _ot.update_price, _ot.move_product, _ot.create_offer,
