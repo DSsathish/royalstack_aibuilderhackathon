@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normaliseIndianMobile, validateIndianMobile } from "@/components/PhoneSignIn";
+import { normaliseIndianMobile, validateIndianMobile } from "@/lib/phone";
 
 describe("Indian mobile validation", () => {
   it("normalises pasted formats to ten digits", () => {
