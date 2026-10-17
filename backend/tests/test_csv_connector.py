@@ -111,3 +111,18 @@ def test_upsert_classifies_storage_and_use(store_id):
     got = {d.id: d.to_dict() for d in db.products(store_id).stream()}
     assert got[f"{store_id}-m1"]["storage"] == "chilled" and got[f"{store_id}-m1"]["use"] == "human"
     assert got[f"{store_id}-d1"]["use"] == "pet" and got[f"{store_id}-f1"]["storage"] == "frozen"
+
+
+def test_retail_fields_import_and_validate(store_id):
+    data = (b"sku,name,price,on_hand,pack_size,cost_price,gst_rate,shelf_life_days,status,origin\n"
+            b"T1,Tata Tea Gold 500 g,250,10,500 g,210,5,365,active,India\n"
+            b"T2,Old Lamp,100,1,,,18,,discontinued,\n"
+            b"T3,Bad,10,1,,,,,unknown,\n")
+    mapping = {**CANON, "pack_size": "pack_size", "cost_price": "cost_price", "gst_rate": "gst_rate", "shelf_life_days": "shelf_life_days", "status": "status", "origin": "origin"}
+    rows, errors = csvc.parse(data, mapping)
+    assert [r.sku for r in rows] == ["T1", "T2"] and errors[0].line == 4
+    csvc.upsert(store_id, rows, high_value_threshold=500)
+    t1 = db.products(store_id).document(f"{store_id}-t1").get().to_dict()
+    assert (t1["pack_size"], t1["cost_price"], t1["gst_rate"], t1["shelf_life_days"], t1["status"], t1["origin"]) == ("500 g", 210.0, 5.0, 365, "active", "India")
+    t2 = db.products(store_id).document(f"{store_id}-t2").get().to_dict()
+    assert t2["cost_price"] is None and t2["shelf_life_days"] is None and t2["status"] == "discontinued"

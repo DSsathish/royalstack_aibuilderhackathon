@@ -34,6 +34,14 @@ SUPPLIERS = [
 
 
 def seed_store(store_id: str, owner_emails: list[str]) -> Store:
+    existing = db.store_ref(store_id).get()
+    if existing.exists:                      # existing store: keep its settings, PIN, branding and owners; add the floor blocks it lacks
+        cur = existing.to_dict()
+        fm = cur.get("floor_map") or []
+        names = {b["aisle"] for b in fm}
+        fm = fm + [a.model_dump() for a in FLOOR_MAP if a.aisle not in names]
+        db.store_ref(store_id).update({"floor_map": fm, "owner_emails": sorted(set(cur.get("owner_emails", [])) | {e.lower() for e in owner_emails})})
+        return Store(**{**cur, "floor_map": fm})
     store = Store(store_id=store_id, name="Royal Stack Supermarket", floor_map=FLOOR_MAP, owner_emails=[e.lower() for e in owner_emails])
     data = store.model_dump()
     if not owner_emails:
@@ -56,7 +64,7 @@ def seed_products(store: Store) -> None:
 
 
 def seed_embeddings(store_id: str) -> None:
-    docs = list(db.products(store_id).stream())
+    docs = [d for d in db.products(store_id).stream() if not d.to_dict().get("embedding")]   # only what is not embedded yet
     texts = [" | ".join(filter(None, [d.get("name"), d.get("brand"), d.get("category"),
                                        d.get("subcategory"), " ".join(d.get("tags") or [])])) for d in docs]
     done, size = 0, 20  # free tier counts each text against the per-minute embed quota

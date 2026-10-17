@@ -54,7 +54,7 @@ frontend/                Next.js 16 static export, TypeScript, Tailwind
                          StoreMap, TotalBar, RevenueChart
   lib/                   api.ts, sse.ts, voice.ts, live.ts, store.ts, firebase.ts, authed.ts, owner.ts, me.ts
   public/pcm-worklet.js  microphone -> 16 kHz PCM for live voice
-infra/seed/              demo store generator (170 products, 90 days of sales), seed script,
+infra/seed/              demo catalogue (1,579 products across 21 categories: products.csv, catalog_*.py, make_catalog.py, catalog_report.md), seed script,
                          kaggle_catalog.py (Kaggle BigBasket grocery or Myntra fashion catalogues into any store), import_dataset.py
 infra/scripts/           reset_demo.py, delete_store.py, sync_example.py (how a billing system signs and pushes stock)
 docs/                    hld.md, security.md, demo-script.md, submission-checklist.md, lld/ (one per module group), plan/

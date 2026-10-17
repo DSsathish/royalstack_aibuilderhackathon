@@ -16,7 +16,8 @@ BATCH = 400
 REQUIRED = ("sku", "name", "price", "on_hand")
 OPTIONAL = ("barcode", "brand", "category", "subcategory", "description", "mrp", "unit",
             "image_url", "tags", "substitutes", "aisle", "bay", "shelf", "side",
-            "reorder_point", "reorder_qty", "lead_time_days", "supplier_id")
+            "reorder_point", "reorder_qty", "lead_time_days", "supplier_id",
+            "pack_size", "cost_price", "gst_rate", "shelf_life_days", "status", "origin")
 HEADER_RE = re.compile(r"^[^\x00-\x1f]{1,64}$")   # any printable header text, e.g. "Rate (Rs)" or "M.R.P."
 
 
@@ -48,6 +49,12 @@ class Row(BaseModel):
     reorder_qty: int = 20
     lead_time_days: int = 3
     supplier_id: str = ""
+    pack_size: str = ""
+    cost_price: float | None = None
+    gst_rate: float | None = None
+    shelf_life_days: int | None = None
+    status: str = "active"
+    origin: str = ""
 
 
 class RowError(BaseModel):
@@ -130,10 +137,14 @@ def _row(line: int, rec: dict, mapping: dict[str, str]) -> Row:
             continue
         if f in ("tags", "substitutes"):
             kwargs[f] = [t.strip() for t in v.split("|") if t.strip()]
-        elif f in ("mrp",):
+        elif f in ("mrp", "cost_price", "gst_rate"):
             kwargs[f] = _num(v, integer=False)
-        elif f in ("bay", "shelf", "reorder_point", "reorder_qty", "lead_time_days"):
+        elif f in ("bay", "shelf", "reorder_point", "reorder_qty", "lead_time_days", "shelf_life_days"):
             kwargs[f] = _num(v, integer=True)
+        elif f == "status":
+            if v.lower() not in ("active", "inactive", "discontinued", "seasonal"):
+                raise ValueError("status must be active, inactive, discontinued or seasonal")
+            kwargs[f] = v.lower()
         elif f == "side":
             if v.lower() not in ("left", "right"):
                 raise ValueError("side must be left or right")
@@ -155,6 +166,8 @@ def upsert(store_id: str, rows: list[Row], *, high_value_threshold: float) -> Im
             barcode=r.barcode, brand=r.brand, category=r.category, subcategory=r.subcategory,
             description=r.description, mrp=r.mrp or r.price, unit=r.unit, image_url=r.image_url,
             tags=r.tags, substitutes=[f"{store_id}-{slug(s)}" for s in r.substitutes],
+            pack_size=r.pack_size, cost_price=r.cost_price, gst_rate=r.gst_rate, shelf_life_days=r.shelf_life_days,
+            status=r.status, origin=r.origin,
         )
         batch.set(db.products(store_id).document(p.product_id), p.model_dump(exclude={"embedding"}), merge=True)
         batch.set(db.inventory(store_id).document(p.product_id), Inventory(

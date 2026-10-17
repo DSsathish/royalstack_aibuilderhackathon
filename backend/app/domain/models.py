@@ -88,6 +88,12 @@ class Product(BaseModel):
     is_high_value: bool = False
     storage: Literal["ambient", "chilled", "frozen"] = "ambient"           # where it lives: aisle, chiller or freezer
     use: Literal["human", "pet", "household", "personal_care"] = "human"   # who it is for; keeps pet food out of people's searches
+    pack_size: str = ""                   # "1 kg", "500 ml", "6 pcs"; parsed from the name when empty
+    cost_price: float | None = None       # purchase cost; None until the owner or the billing system supplies it
+    gst_rate: float | None = None         # percent; None when not classified yet
+    shelf_life_days: int | None = None    # None for durable goods
+    status: Literal["active", "inactive", "discontinued", "seasonal"] = "active"
+    origin: str = ""                      # country or region of origin when known
     embedding: list[float] = []
 
     @classmethod
