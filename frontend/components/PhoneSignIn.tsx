@@ -2,7 +2,7 @@
 import { useState } from "react";
 import type { ConfirmationResult } from "firebase/auth";
 import { confirmOtp, phoneUser, reverifyPhone, sendOtp } from "@/lib/firebase";
-import { normaliseIndianMobile, validateIndianMobile } from "@/lib/phone";
+import { friendlyAuthError as friendly, normaliseIndianMobile, validateIndianMobile } from "@/lib/phone";
 
 /** Mobile number, then the one-time code. Indian numbers only for now (+91).
  *  With `reverify`, the signed-in shopper confirms a code sent to their own number (used before spending points). */

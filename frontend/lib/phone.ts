@@ -19,7 +19,7 @@ export function validateIndianMobile(digits: string): string {
   return "";
 }
 
-function friendly(e: unknown): string {
+export function friendlyAuthError(e: unknown): string {
   const m = (e as Error)?.message ?? "";
   if (m.includes("invalid-verification-code")) return "That code is not right. Check and try again.";
   if (m.includes("code-expired")) return "That code has expired. Send a new one.";
