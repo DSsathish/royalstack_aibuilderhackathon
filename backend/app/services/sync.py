@@ -265,4 +265,5 @@ def run_scheduled() -> dict:
             pull_feed(sid)
             pulled += 1
         delivered += retry_outbox(sid)
-    return {"pulled": pulled, "delivered": delivered}
+    from app.services import connectors
+    return {"pulled": pulled, "delivered": delivered, **connectors.run_due()}

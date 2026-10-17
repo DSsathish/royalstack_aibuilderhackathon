@@ -33,3 +33,5 @@ Rules we follow in code:
 | Owner agent: separate prompt and full-access tools, confirmation in code before any change, briefing and table rendering in the dashboard chat | [owner-agent.md](owner-agent.md) | done |
 | Product classification (storage and use), floor blocks and floors, scan-to-cart, voice language | [classification-floors-scan.md](classification-floors-scan.md) | done |
 - [product-facts.md](product-facts.md): grounded product facts tool with guardrails (18 Oct)
+- [connector-agent.md](connector-agent.md): bring any external data in through one agent, preview then confirm (18 Oct)
+- [shopper-ui.md](shopper-ui.md): shopper assistant screen with the floating voice pill (18 Oct)

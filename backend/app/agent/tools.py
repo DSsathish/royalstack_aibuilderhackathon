@@ -299,4 +299,5 @@ TOOLS_BY_MODE["owner"] = [
     search_products, get_product, product_facts,
     _ot.set_reorder_rule, _ot.adjust_stock, _ot.record_shelf_count, _ot.update_price, _ot.move_product, _ot.create_offer,
     _ot.set_offer_active, _ot.adjust_points, _ot.approve_purchase_order,
+    _ot.connect_source, _ot.apply_source, _ot.connectors_status,
 ]

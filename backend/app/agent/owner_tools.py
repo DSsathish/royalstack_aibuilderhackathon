@@ -10,6 +10,7 @@ from google.adk.tools import ToolContext
 from google.cloud.firestore_v1 import FieldFilter
 
 from app.domain.models import Location, Offer, now
+from app.services import connectors as connsvc
 from app.services import catalog, db, forecast as forecast_svc, insights, reorder, verification
 from app.services import customers as customers_svc
 from app.services import offers as offers_svc
@@ -361,3 +362,52 @@ def approve_purchase_order(po_id: str, tool_context: ToolContext, confirm: bool 
         return _plan(f"Approve the order to {d.supplier_name}: " + ", ".join(f"{l['name']} x{l['qty']}" for l in d.lines[:6]) + (" and more" if len(d.lines) > 6 else ""), po_id=po_id)
     approved = reorder.approve(sid, po_id, by=_actor(tool_context))
     return {"ok": True, "po_id": approved.po_id, "supplier": approved.supplier_name, "status": approved.status, "lines": len(approved.lines)}
+
+
+# --- the shop's own data ------------------------------------------------------------------------------------------
+
+def connect_source(link: str, kind: str = "sheet", tool_context: ToolContext = None) -> dict:
+    """Inspect a Google Sheet (kind "sheet") or a JSON/CSV API link (kind "api") that holds the shop's products or stock:
+    the columns found, the proposed mapping to our catalog, and what applying it would add, update or restock. Nothing is
+    written. Files and database connections are set up on the Connectors page, not here."""
+    store_id = tool_context.state["store_id"]
+    kind = kind if kind in ("sheet", "api") else "sheet"
+    try:
+        out = connsvc.inspect(store_id, kind, url=link)
+    except (connsvc.SourceError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception as exc:
+        return {"ok": False, "error": f"could not read the source: {str(exc)[:120]}"}
+    return {"ok": True, "columns": out["columns"], "mapping": out["mapping"], "rows": out["row_count"],
+            "preview": out["preview"], "problem": out["problem"]}
+
+
+def apply_source(link: str, kind: str = "sheet", keep_in_step: bool = False, confirm: bool = False, tool_context: ToolContext = None) -> dict:
+    """Write a Sheet or API source into the catalog with the mapping connect_source proposed. keep_in_step saves it so the
+    sync job pulls it every 15 minutes from then on. Returns a plan until confirm is true."""
+    kind = kind if kind in ("sheet", "api") else "sheet"
+    if not confirm:
+        return _plan(f"Apply the {kind} at {link} to the catalog" + (" and keep it in step every 15 minutes" if keep_in_step else ""),
+                     link=link, kind=kind, keep_in_step=keep_in_step)
+    store_id, actor = tool_context.state["store_id"], _actor(tool_context)
+    try:
+        out = connsvc.inspect(store_id, kind, url=link)
+        if out["problem"]:
+            return {"ok": False, "error": out["problem"]}
+        result = connsvc.apply(store_id, kind, mapping=out["mapping"], actor=actor, label=link[:60], url=link)
+        if keep_in_step:
+            connsvc.save(store_id, kind, label=link[:60], url=link, mapping=out["mapping"], actor=actor)
+    except (connsvc.SourceError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception as exc:
+        return {"ok": False, "error": f"could not read the source: {str(exc)[:120]}"}
+    return {"ok": True, **result, "kept_in_step": keep_in_step}
+
+
+def connectors_status(tool_context: ToolContext = None) -> dict:
+    """The sources kept in step (sheets, APIs, databases) with their last run."""
+    rows = [{"label": c.label, "kind": c.kind, "every_min": c.every_min,
+             "last_run": c.last_run_at.strftime("%d %b %H:%M") if c.last_run_at else "never",
+             "last_result": ("ok, " + ", ".join(f"{k} {v}" for k, v in c.last_result.items() if k in ("created", "updated", "errors"))) if c.last_result.get("ok") else (c.last_result.get("error") or "not run yet")}
+            for c in connsvc.list_(tool_context.state["store_id"])]
+    return _rows(["label", "kind", "every_min", "last_run", "last_result"], rows)

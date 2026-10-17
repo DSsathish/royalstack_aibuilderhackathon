@@ -115,6 +115,20 @@ def parse(data: bytes, mapping: dict[str, str]) -> tuple[list[Row], list[RowErro
     return rows, errors
 
 
+def rows_from_records(records: list[dict], mapping: dict[str, str]) -> tuple[list[Row], list[RowError]]:
+    """Records from any source (a sheet, an API, a database) through the same row checks as a CSV file."""
+    rows, errors = [], []
+    for i, rec in enumerate(records, start=2):
+        if i - 1 > MAX_ROWS:
+            raise ImportError_(f"more than {MAX_ROWS} rows")
+        text = {k: ("" if v is None else str(v)) for k, v in rec.items() if isinstance(k, str)}
+        try:
+            rows.append(_row(i, text, mapping))
+        except (ValueError, InvalidOperation, OverflowError) as exc:
+            errors.append(RowError(line=i, message=str(exc)))
+    return rows, errors
+
+
 def from_record(line: int, rec: dict) -> Row:
     """A JSON object with canonical column names (sync webhooks) through the same checks as a CSV row."""
     text = {k: ("" if v is None else str(v)) for k, v in rec.items() if isinstance(k, str)}

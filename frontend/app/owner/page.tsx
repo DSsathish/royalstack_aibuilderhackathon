@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { User } from "firebase/auth";
 import { API, money, type Aisle } from "@/lib/api";
 import { createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
-import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner } from "@/lib/owner";
+import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner, ConnectorDoc, Inspection, SourceInput } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
 import FloorMapEditor from "@/components/FloorMapEditor";
@@ -33,7 +33,7 @@ const TITLES: Record<Tab, [string, string]> = {
   loss: ["Loss and shrink", "Shelf counts against system stock, exit outcomes and the controls behind them."],
   exits: ["Exit checks", "Every receipt scanned at the exit kiosk and how it was cleared."],
   setup: ["Store settings", "Products, aisles, branding, QR codes, team and payments."],
-  connectors: ["Connectors", "Bring products in from a file, keep stock in sync with your billing system, print QR codes."],
+  connectors: ["Connectors", "The connector agent brings in files, sheets, API feeds and databases, shows what would change, and keeps them in step. Also webhooks and QR codes."],
 };
 
 export default function OwnerPage() {
@@ -731,59 +731,148 @@ function LossTab({ store }: { store: string }) {
   );
 }
 
+const KINDS: { id: SourceInput["kind"]; label: string; hint: string }[] = [
+  { id: "file", label: "File", hint: "CSV, Excel, JSON or PDF exported from your billing software. Up to 10 MB." },
+  { id: "sheet", label: "Google Sheet", hint: "Share the sheet with \u201cAnyone with the link\u201d as viewer, then paste the link." },
+  { id: "api", label: "API link", hint: "A JSON or CSV endpoint your billing or POS software serves over https. The auth header is stored in Secret Manager." },
+  { id: "db", label: "Database", hint: "A Postgres or MySQL connection reachable from the internet. Read-only: one table is read, nothing is written." },
+];
+const MAP_FIELDS = ["sku", "name", "price", "on_hand", "barcode", "brand", "category", "subcategory", "mrp", "unit", "aisle", "supplier_id", "reorder_point", "reorder_qty", "lead_time_days", "tags"];
+const REQUIRED_FIELDS = ["sku", "name", "price", "on_hand"];
+
+/** The connector agent: any source in, a proposed mapping and a preview, writes only after the owner confirms. */
 function ConnectorsTab({ store }: { store: string }) {
+  const [kind, setKind] = useState<SourceInput["kind"]>("file");
   const [file, setFile] = useState<File | null>(null);
-  const [mapping, setMapping] = useState<Record<string, string>>({ sku: "sku", name: "name", price: "price", on_hand: "on_hand", barcode: "barcode", category: "category", aisle: "aisle" });
-  const [analysis, setAnalysis] = useState<{ notes: string[]; questions: string[]; confidence: number; source: string; header: string[] } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<string>("");
+  const [src, setSrc] = useState({ url: "", auth: "", dsn: "", table: "" });
+  const [tables, setTables] = useState<string[]>([]);
+  const [label, setLabel] = useState("");
+  const [keep, setKeep] = useState(true);
+  const [every, setEvery] = useState("15");
+  const [insp, setInsp] = useState<Inspection | null>(null);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<"" | "analyse" | "apply" | "discover">("");
+  const [msg, setMsg] = useState("");
+  const [list, setList] = useState<ConnectorDoc[]>([]);
   const [qr, setQr] = useState<{ entrance_url: string; aisles: { aisle: string; url: string }[] } | null>(null);
-  async function analyse() {
-    if (!file) return;
-    setBusy(true); setResult("");
+  const input = (): SourceInput => ({ kind, file, ...src });
+  const loadList = () => owner.connectors(store).then((r) => setList(r.connectors)).catch(() => {});
+  useEffect(() => { loadList(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const ready = kind === "file" ? !!file : kind === "db" ? !!src.dsn && !!src.table : !!src.url;
+
+  async function analyse(withMapping = false) {
+    setBusy("analyse"); setMsg("");
     try {
-      const r = await owner.propose(store, file);
-      setMapping(r.proposal.mapping);
-      setAnalysis({ ...r.proposal, header: r.header });
-    } catch (e) { setResult(`Analysis failed: ${(e as Error).message}`); }
-    setBusy(false);
+      const r = await owner.inspectSource(store, input(), withMapping ? mapping : undefined);
+      setInsp(r); setMapping(r.mapping); if (r.problem) setMsg(r.problem);
+    } catch (e) { setMsg((e as Error).message); }
+    setBusy("");
   }
-  async function run() {
-    if (!file) return;
-    const clean = Object.fromEntries(Object.entries(mapping).filter(([, v]) => v));
-    try { const r = await owner.importCsv(store, file, clean); setResult(`Created ${r.created}, updated ${r.updated}, ${r.errors.length} row errors${r.errors[0] ? ` (line ${r.errors[0].line}: ${r.errors[0].message})` : ""}.`); }
-    catch (e) { setResult(`Import failed: ${(e as Error).message}`); }
+  async function apply() {
+    setBusy("apply"); setMsg("");
+    try {
+      const r = await owner.applySource(store, input(), mapping, { label: label || file?.name || src.url || src.table || kind, save: keep && kind !== "file", every_min: Number(every) || 15 });
+      setMsg(`Done: ${r.result.created} added, ${r.result.updated} updated, ${r.result.errors} rows skipped${r.connector ? `. Kept in step every ${r.connector.every_min} minutes.` : "."}`);
+      setInsp(null); loadList();
+    } catch (e) { setMsg((e as Error).message); }
+    setBusy("");
   }
-  const fields = ["sku", "name", "price", "on_hand", "barcode", "brand", "category", "subcategory", "mrp", "unit", "aisle", "supplier_id", "reorder_point", "reorder_qty", "lead_time_days", "tags"];
+  async function discover() {
+    setBusy("discover"); setMsg("");
+    try { const r = await owner.discoverTables(store, src.dsn); setTables(r.tables); if (!src.table && r.tables[0]) setSrc({ ...src, table: r.tables[0] }); }
+    catch (e) { setMsg((e as Error).message); }
+    setBusy("");
+  }
+  const pv = insp?.preview;
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-4xl">
-      <section className="section space-y-2">
-        <h2 className="text-base font-semibold">Import products from any file</h2>
-        <p className="text-xs text-muted">Export from your POS, Excel, Google Sheets or Shopify as CSV. The assistant reads the header and a few rows, proposes how the columns map to ours, and you confirm. Your data is converted by the connector, not by the model.</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <input type="file" accept=".csv,text/csv" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setAnalysis(null); }} className="text-sm" />
-          <button onClick={analyse} disabled={!file || busy} className="btn btn-primary">{busy ? "Analysing" : "Analyse with AI"}</button>
+      <section className="section space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">Bring in the shop\u2019s own data</h2>
+          <p className="text-xs text-muted">Give the connector agent whatever you already have. It reads it, proposes how the columns map to ours, shows what would change, and writes only after you confirm. Sheets, API links and databases can be kept in step on a schedule.</p>
         </div>
-        {analysis && (
-          <div className="card border-accent p-3 text-sm space-y-1">
-            <div className="flex items-center gap-2"><b>Proposed mapping</b><span className="chip chip-accent">{analysis.source === "model" ? `AI · ${Math.round(analysis.confidence * 100)}% confident` : "heuristic"}</span></div>
-            {analysis.notes.map((n) => <div key={n} className="text-muted">· {n}</div>)}
-            {analysis.questions.map((q) => <div key={q} className="text-warn">? {q}</div>)}
-            <div className="text-xs text-muted">Columns in your file: {analysis.header.join(", ")}</div>
+        <div className="flex flex-wrap gap-2">
+          {KINDS.map((k) => <button key={k.id} type="button" onClick={() => { setKind(k.id); setInsp(null); setMsg(""); }} className={`chip px-3 py-1.5 ${kind === k.id ? "bg-ink text-bg" : "chip-muted"}`}>{k.label}</button>)}
+        </div>
+        <p className="text-xs text-muted">{KINDS.find((k) => k.id === kind)?.hint}</p>
+        {kind === "file" && <input type="file" accept=".csv,.xlsx,.json,.pdf" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setInsp(null); }} className="text-sm" />}
+        {kind === "sheet" && <input value={src.url} onChange={(e) => setSrc({ ...src, url: e.target.value })} placeholder="https://docs.google.com/spreadsheets/d/\u2026" className="field" />}
+        {kind === "api" && (
+          <div className="grid sm:grid-cols-2 gap-2">
+            <input value={src.url} onChange={(e) => setSrc({ ...src, url: e.target.value })} placeholder="https://pos.example.com/items.json" className="field" />
+            <input value={src.auth} onChange={(e) => setSrc({ ...src, auth: e.target.value })} placeholder="Authorization header, e.g. Bearer \u2026 (optional)" className="field" type="password" autoComplete="off" />
           </div>
         )}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-          {fields.map((k) => <label key={k} className="text-xs">{k}{["sku", "name", "price", "on_hand"].includes(k) && <span className="text-bad">*</span>}
-            {analysis ? (
-              <select value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="field py-1.5 text-sm">
-                <option value="">not in file</option>{analysis.header.map((h) => <option key={h} value={h}>{h}</option>)}
-              </select>
-            ) : <input value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="field py-1.5 text-sm" />}
-          </label>)}
+        {kind === "db" && (
+          <div className="grid sm:grid-cols-3 gap-2">
+            <input value={src.dsn} onChange={(e) => { setSrc({ ...src, dsn: e.target.value }); setTables([]); }} placeholder="postgresql://user:password@host:5432/dbname" className="field sm:col-span-2" type="password" autoComplete="off" />
+            <div className="flex gap-2">
+              <button type="button" onClick={discover} disabled={!src.dsn || busy !== ""} className="btn btn-ghost whitespace-nowrap">{busy === "discover" ? "Looking" : "Find tables"}</button>
+              {tables.length > 0
+                ? <select value={src.table} onChange={(e) => setSrc({ ...src, table: e.target.value })} className="field">{tables.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+                : <input value={src.table} onChange={(e) => setSrc({ ...src, table: e.target.value })} placeholder="table" className="field" />}
+            </div>
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => analyse(false)} disabled={!ready || busy !== ""} className="btn btn-primary">{busy === "analyse" ? "Reading" : "Analyse"}</button>
+          {insp && <span className="text-xs text-muted">{insp.row_count} rows, {insp.columns.length} columns{insp.proposal ? `, mapping by ${insp.proposal.source === "model" ? `AI (${Math.round(insp.proposal.confidence * 100)}% confident)` : "name matching"}` : ""}</span>}
         </div>
-        <button onClick={run} disabled={!file} className="btn btn-ink">Import with this mapping</button>
-        {result && <p className="text-sm">{result}</p>}
+        {insp && (
+          <>
+            {(insp.proposal?.notes.length || insp.proposal?.questions.length) ? (
+              <div className="card p-3 text-sm space-y-1">
+                {insp.proposal?.notes.map((n) => <div key={n} className="text-muted">{n}</div>)}
+                {insp.proposal?.questions.map((q) => <div key={q} className="text-warn">{q}</div>)}
+              </div>
+            ) : null}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              {MAP_FIELDS.map((k) => <label key={k} className="text-xs">{k}{REQUIRED_FIELDS.includes(k) && <span className="text-bad">*</span>}
+                <select value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="field py-1.5 text-sm">
+                  <option value="">not in source</option>{insp.columns.map((h) => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </label>)}
+            </div>
+            <button onClick={() => analyse(true)} disabled={busy !== ""} className="btn btn-ghost">Re-check with this mapping</button>
+            {pv && (
+              <div className="card p-3 text-sm space-y-1">
+                <div className="flex flex-wrap gap-2">
+                  <span className="chip chip-good">{pv.adds} to add</span><span className="chip chip-accent">{pv.updates} to update</span>
+                  <span className="chip chip-muted">{pv.restocks} restocks</span><span className="chip chip-muted">{pv.unchanged} unchanged</span>
+                  {pv.errors > 0 && <span className="chip chip-bad">{pv.errors} rows skipped</span>}
+                </div>
+                {pv.changes.map((c) => <div key={c.sku + c.note} className="text-muted">{c.note}</div>)}
+                {pv.error_samples.map((e) => <div key={e.line} className="text-bad">Row {e.line}: {e.message}</div>)}
+              </div>
+            )}
+            {pv && (
+              <div className="flex flex-wrap items-center gap-3">
+                <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Name this source" className="field max-w-xs" />
+                {kind !== "file" && <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> Keep in step every <input value={every} onChange={(e) => setEvery(e.target.value)} inputMode="numeric" className="field w-16 py-1" /> min</label>}
+                <button onClick={apply} disabled={busy !== ""} className="btn btn-ink">{busy === "apply" ? "Applying" : "Apply to the catalog"}</button>
+              </div>
+            )}
+          </>
+        )}
+        {msg && <p className="text-sm">{msg}</p>}
       </section>
+      {list.length > 0 && (
+        <section className="section space-y-2">
+          <h2 className="text-base font-semibold">Kept in step</h2>
+          {list.map((c) => {
+            const r = c.last_result as { ok?: boolean; created?: number; updated?: number; error?: string };
+            return (
+              <div key={c.connector_id} className="flex flex-wrap items-center gap-2 text-sm py-1.5 border-b border-line last:border-0">
+                <b>{c.label}</b><span className="chip chip-muted">{c.kind}</span>
+                <span className="text-muted">every {c.every_min} min, last run {c.last_run_at ? new Date(c.last_run_at).toLocaleString() : "never"}{r.ok === true ? `: ${r.created} added, ${r.updated} updated` : r.ok === false ? `: failed, ${r.error}` : ""}</span>
+                <span className="flex-1" />
+                <button onClick={() => owner.runConnector(store, c.connector_id).then(loadList)} className="btn btn-ghost">Run now</button>
+                <button onClick={() => { if (confirm("Remove this source? Products already imported stay.")) owner.removeConnector(store, c.connector_id).then(loadList); }} className="btn btn-ghost">Remove</button>
+              </div>
+            );
+          })}
+        </section>
+      )}
       <LiveSync store={store} mapping={mapping} />
       <section className="section space-y-2">
         <h2 className="text-base font-semibold">Printable QR codes</h2>

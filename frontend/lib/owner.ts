@@ -73,6 +73,18 @@ export const owner = {
   settings: (s: string, body: Partial<Loss["settings"]>) => call(`/owner/${s}/settings`, { method: "PATCH", body: JSON.stringify(body) }),
   session: (s: string) => call<Session>(`/owner/${s}/session`, { method: "POST" }),
   qr: (s: string) => call<{ entrance_url: string; aisles: { aisle: string; url: string }[] }>(`/owner/${s}/qr`),
+  connectors: (s: string) => call<{ connectors: ConnectorDoc[] }>(`/owner/${s}/connectors`),
+  inspectSource: (s: string, src: SourceInput, mapping?: Record<string, string>) => {
+    const form = sourceForm(src); if (mapping) form.set("mapping", JSON.stringify(mapping));
+    return multipart<Inspection>(`/owner/${s}/connectors/inspect`, form);
+  },
+  applySource: (s: string, src: SourceInput, mapping: Record<string, string>, opts: { label: string; save: boolean; every_min: number }) => {
+    const form = sourceForm(src); form.set("mapping", JSON.stringify(mapping)); form.set("label", opts.label); form.set("save", String(opts.save)); form.set("every_min", String(opts.every_min));
+    return multipart<{ result: ApplyResult; connector: ConnectorDoc | null }>(`/owner/${s}/connectors/apply`, form);
+  },
+  discoverTables: (s: string, dsn: string) => call<{ tables: string[] }>(`/owner/${s}/connectors/discover`, { method: "POST", body: JSON.stringify({ dsn }) }),
+  runConnector: (s: string, cid: string) => call<Record<string, unknown>>(`/owner/${s}/connectors/${cid}/run`, { method: "POST" }),
+  removeConnector: (s: string, cid: string) => call<{ ok: boolean }>(`/owner/${s}/connectors/${cid}`, { method: "DELETE" }),
   propose: async (s: string, file: File) => {
     const token = await idToken();
     const form = new FormData(); form.set("file", file);
@@ -88,3 +100,27 @@ export const owner = {
     return res.json() as Promise<{ created: number; updated: number; errors: { line: number; message: string }[] }>;
   },
 };
+
+/** Connector agent: a source the owner brings in (docs/lld/connector-agent.md). */
+export type SourceInput = { kind: "file" | "sheet" | "api" | "db"; file?: File | null; url?: string; auth?: string; dsn?: string; table?: string };
+export type Inspection = {
+  kind: string; columns: string[]; samples: Record<string, string>[]; row_count: number; mapping: Record<string, string>;
+  proposal: { notes: string[]; questions: string[]; confidence: number; source: string } | null;
+  preview: { adds: number; updates: number; restocks: number; unchanged: number; errors: number; error_samples: { line: number; message: string }[]; changes: { kind: string; sku: string; note: string }[] } | null;
+  problem: string;
+};
+export type ApplyResult = { created: number; updated: number; errors: number; rows: number; source: string; error_samples: { line: number; message: string }[] };
+export type ConnectorDoc = { connector_id: string; kind: string; label: string; url: string; table: string; mapping: Record<string, string>; every_min: number; enabled: boolean; last_run_at: string | null; last_result: Record<string, unknown> };
+
+function sourceForm(src: SourceInput): FormData {
+  const form = new FormData(); form.set("kind", src.kind);
+  if (src.file) form.set("file", src.file);
+  for (const k of ["url", "auth", "dsn", "table"] as const) if (src[k]) form.set(k, src[k]!);
+  return form;
+}
+async function multipart<T>(path: string, form: FormData): Promise<T> {
+  const token = await idToken();
+  const res = await fetch(`${API}${path}`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form });
+  if (!res.ok) { let d = res.statusText; try { d = (await res.json()).detail ?? d; } catch {} throw new ApiError(res.status, String(d)); }
+  return res.json() as Promise<T>;
+}

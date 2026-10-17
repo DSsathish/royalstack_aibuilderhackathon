@@ -97,3 +97,23 @@ def test_reports_and_status(shop):
     st = ot.sync_status(c)
     assert st["has_secret"] is False and st["outbox_pending"] == 0
     assert ot.approve_purchase_order("nope", c, confirm=True)["error"] == "unknown_draft"
+
+
+def test_connector_tools_inspect_plan_and_apply(monkeypatch):
+    from types import SimpleNamespace
+    from app.agent import owner_tools
+    from app.services import connectors
+    ctx = SimpleNamespace(state={"store_id": "s", "mode": "owner", "user_id": "owner-1"})
+    monkeypatch.setattr(connectors, "inspect", lambda store_id, kind, **kw: {"columns": ["a"], "mapping": {"sku": "a", "name": "a", "price": "a", "on_hand": "a"},
+                                                                             "row_count": 3, "preview": {"adds": 3}, "problem": ""})
+    out = owner_tools.connect_source("https://docs.google.com/spreadsheets/d/X/edit", tool_context=ctx)
+    assert out["ok"] and out["rows"] == 3 and out["preview"]["adds"] == 3
+    plan = owner_tools.apply_source("https://docs.google.com/spreadsheets/d/X/edit", keep_in_step=True, tool_context=ctx)
+    assert plan["needs_confirmation"] and "keep it in step" in plan["plan"]
+    applied, saved = {}, {}
+    monkeypatch.setattr(connectors, "apply", lambda store_id, kind, **kw: applied.update(kw) or {"created": 3, "updated": 0, "errors": 0, "rows": 3, "source": "x"})
+    monkeypatch.setattr(connectors, "save", lambda store_id, kind, **kw: saved.update(kw) or None)
+    out = owner_tools.apply_source("https://docs.google.com/spreadsheets/d/X/edit", keep_in_step=True, confirm=True, tool_context=ctx)
+    assert out["ok"] and out["created"] == 3 and out["kept_in_step"] and applied["actor"] == "owner-1" and saved["every_min" if "every_min" in saved else "actor"]
+    monkeypatch.setattr(connectors, "list_", lambda store_id: [])
+    assert owner_tools.connectors_status(tool_context=ctx)["count"] == 0

@@ -24,6 +24,7 @@ MAX_LLM_CALLS = 8
 ACTION_FOR_TOOL = {
     "search_products": "show_products",
     "product_facts": "show_facts",
+    "connectors_status": "show_rows",
     "suggest_substitutes": "show_products",
     "get_product": "show_product",
     "navigate_to": "highlight_map",
