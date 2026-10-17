@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Product, api } from "@/lib/api";
+import { Offer, Product, api } from "@/lib/api";
 import { LiveFrame, LiveState, liveSupported, startLive } from "@/lib/live";
 import { UiEvent } from "@/lib/sse";
 import { Msg, sayAloud, useApp } from "@/lib/store";
@@ -15,7 +15,7 @@ const STATUS: Record<string, string> = {
   search_products: "Checking the shelves", navigate_to: "Finding the aisle", add_to_cart: "Adding to your cart",
   suggest_substitutes: "Looking for alternatives", view_cart: "Opening your cart", start_checkout: "Preparing checkout",
   get_low_stock: "Checking stock levels", forecast_demand: "Reading the forecast", draft_purchase_order: "Drafting orders",
-  get_anomalies: "Checking exits and counts", record_demand_signal: "Noting your request",
+  get_anomalies: "Checking exits and counts", record_demand_signal: "Noting your request", get_offers: "Checking offers",
 };
 const SUGGESTIONS = ["Where is atta?", "பால் எங்கே இருக்கு?", "Do you have oat milk?", "Something for a headache"];
 const OWNER_SUGGESTIONS = ["What is running low?", "How much milk will we sell this week?", "Prepare purchase orders", "Anything suspicious at the exits?"];
@@ -38,6 +38,11 @@ export default function Chat() {
   const bottom = useRef<HTMLDivElement>(null);
   const talking = live !== "closed" || voiceOn;
   const owner = session?.mode === "owner";
+  const [offers, setOffers] = useState<Offer[]>([]);
+  useEffect(() => {
+    if (!session || owner) return;
+    api.offers(session.store_id, session).then(setOffers).catch(() => {});
+  }, [session, owner]);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
@@ -75,6 +80,7 @@ export default function Chat() {
     else if (name === "checkout_ready" && data.ok) patch(id, { checkout: true });
     else if (name === "show_low_stock") patch(id, { lowStock: (data.items as Msg["lowStock"]) ?? [] });
     else if (name === "drafts_created") patch(id, { drafts: (data.drafts as Msg["drafts"]) ?? [] });
+    else if (name === "show_offers") patch(id, { offers: (data.offers as Msg["offers"]) ?? [] });
   }
   async function refreshCart() { if (session) setCart(await api.cart(session)); }
 
@@ -183,6 +189,14 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-3">
+        {messages.length === 0 && !talking && offers.length > 0 && (
+          <div className="px-1 space-y-1.5">
+            <div className="eyebrow">Offers for you</div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {offers.map((o) => <div key={o.offer_id} className="card px-3 py-2 text-sm shrink-0 max-w-[220px]"><div className="font-semibold truncate">{o.name}</div><div className="text-xs text-muted">{o.detail}</div></div>)}
+            </div>
+          </div>
+        )}
         {messages.length === 0 && !talking && (
           <div className="px-1 space-y-2">
             <div className="eyebrow">Try asking</div>
@@ -213,6 +227,13 @@ export default function Chat() {
                 <div className="eyebrow mb-1">Drafts waiting for approval</div>
                 {m.drafts.map((d) => <div key={d.po_id} className="py-0.5"><b>{d.supplier}</b> <span className="text-muted">· {d.lines} lines</span></div>)}
                 <Link href="/owner/" className="text-accent text-sm font-semibold">Review in Reorders</Link>
+              </div>
+            )}
+            {m.offers && (
+              <div className="card p-3 text-sm max-w-[85%]">
+                <div className="eyebrow mb-1">Offers for you</div>
+                {m.offers.length === 0 ? <span className="text-muted">No offers running right now.</span>
+                  : m.offers.map((o) => <div key={o.name} className="py-0.5"><b>{o.name}</b> <span className="text-muted">· {o.detail}</span></div>)}
               </div>
             )}
             {m.checkout && <Link href="/checkout" className="btn btn-primary">Go to checkout</Link>}

@@ -81,3 +81,7 @@ def customers(store_id: str) -> firestore.CollectionReference:
 def people() -> firestore.CollectionReference:
     """One doc per signed-in shopper listing the stores they linked: people/{uid}."""
     return client().collection("people")
+
+
+def offers(store_id: str) -> firestore.CollectionReference:
+    return store_ref(store_id).collection("offers")

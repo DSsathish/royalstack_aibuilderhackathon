@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.domain.models import Order, Session
 from app.services import cart as cart_svc
-from app.services import checkout, db, qr, sessions
-from app.services.auth import STORE_ID, current_uid, require_owner
+from app.services import checkout, customers, db, offers, points, qr, sessions
+from app.services.auth import STORE_ID, current_uid, require_owner, require_recent_phone
 
 router = APIRouter(tags=["shop"])
 HEX_ID = r"^[a-f0-9]{32}$"
@@ -75,10 +75,11 @@ class CartItemIn(BaseModel):
     via: Literal["scan", "vision", "chat"] = "scan"
 
 
-def _cart_view(c) -> dict:
-    subtotal, savings, total = cart_svc.totals(c)
-    return {**c.model_dump(), "count": sum(i.qty for i in c.items),
-            "subtotal": subtotal, "savings": savings, "total": total}
+def _cart_view(c, s: Session) -> dict:
+    segment = customers.segment_of(s.store_id, s.customer_id)
+    p = cart_svc.pricing(s.store_id, c, segment)
+    return {**c.model_dump(), "count": sum(i.qty for i in c.items), **p.model_dump(), "segment": segment,
+            "points_balance": points.balance(s.store_id, s.customer_id) if s.customer_id else None}
 
 
 def _own_cart(cart_id: str, s: Session) -> None:
@@ -89,7 +90,7 @@ def _own_cart(cart_id: str, s: Session) -> None:
 @router.get("/carts/{cart_id}")
 def get_cart(cart_id: str = Path(pattern=HEX_ID), s: Session = Depends(session_header)):
     _own_cart(cart_id, s)
-    return _cart_view(cart_svc.get(s.store_id, cart_id))
+    return _cart_view(cart_svc.get(s.store_id, cart_id), s)
 
 
 @router.post("/carts/{cart_id}/items")
@@ -100,29 +101,47 @@ def add_item(body: CartItemIn, cart_id: str = Path(pattern=HEX_ID), s: Session =
     res = cart_svc.add(s.store_id, cart_id, body.product_id, body.qty, via=body.via, mode=s.mode)
     if isinstance(res, str):
         raise HTTPException(409, res)
-    return _cart_view(res)
+    return _cart_view(res, s)
 
 
 @router.delete("/carts/{cart_id}/items/{product_id}")
 def remove_item(cart_id: str = Path(pattern=HEX_ID), product_id: str = Path(pattern=r"^[a-z0-9-]{3,80}$"), s: Session = Depends(session_header)):
     _own_cart(cart_id, s)
-    return _cart_view(cart_svc.remove(s.store_id, cart_id, product_id))
+    return _cart_view(cart_svc.remove(s.store_id, cart_id, product_id), s)
 
 
 # --- checkout and orders ----------------------------------------------------
 
+@router.get("/stores/{store_id}/offers")
+def store_offers(store_id: str = STORE_ID, x_session_id: str | None = Header(default=None)):
+    """Offers for this shopper: store-wide ones, plus segment offers when the session is linked to a signed-in shopper."""
+    segment = "guest"
+    if x_session_id and re.fullmatch(HEX_ID, x_session_id):
+        s = sessions.get(x_session_id)
+        if s and s.store_id == store_id:
+            segment = customers.segment_of(store_id, s.customer_id)
+    return [offers.public(store_id, o) for o in offers.applicable(store_id, segment)]
+
+
 class IntentIn(BaseModel):
     session_id: str = Field(pattern=HEX_ID)
+    points: int = Field(default=0, ge=0, le=100_000)
 
 
 @router.post("/checkout/intent")
-def checkout_intent(body: IntentIn):
+def checkout_intent(body: IntentIn, authorization: str | None = Header(default=None), x_test_uid: str | None = Header(default=None)):
     s = _session_or_404(body.session_id)
+    if body.points:                                   # spending points needs a fresh phone verification by the linked shopper
+        uid = current_uid(authorization, x_test_uid)
+        require_recent_phone(uid)
+        if uid != s.customer_id:
+            raise HTTPException(403, "points belong to a different shopper")
     try:
-        o = checkout.intent(s)
+        o = checkout.intent(s, points=body.points)
     except checkout.CheckoutError as exc:
         raise HTTPException(409, str(exc))
-    out = {"order_id": o.order_id, "amount": o.total, "currency": "INR", "provider": o.payment_provider}
+    out = {"order_id": o.order_id, "amount": o.total, "currency": "INR", "provider": o.payment_provider,
+           "discount_total": o.discount_total, "points_redeemed": o.points_redeemed}
     if o.payment_provider == "razorpay":
         out |= {"razorpay_key_id": settings.razorpay_key_id, "razorpay_order_id": o.payment_ref}
     return out

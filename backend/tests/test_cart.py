@@ -26,7 +26,8 @@ def test_add_reserves_stock_and_computes_totals(shop):
     c = cart.add(shop, f"{shop}-cart1", f"{shop}-a", 2, via="scan")
     assert c.items[0].qty == 2
     assert inventory.available(shop, f"{shop}-a") == 3
-    assert cart.totals(c) == (40, 4, 40)
+    p = cart.pricing(shop, c)
+    assert (p.subtotal, p.savings, p.total) == (40, 4, 40)
 
 
 def test_add_same_product_merges_line(shop):

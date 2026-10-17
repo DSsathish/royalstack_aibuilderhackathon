@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 def slug(text: str) -> str:
@@ -160,6 +160,12 @@ class Cart(BaseModel):
     status: Literal["open", "checked_out"] = "open"
 
 
+class DiscountLine(BaseModel):
+    offer_id: str
+    name: str
+    amount: float
+
+
 class Order(BaseModel):
     order_id: str
     store_id: str
@@ -169,8 +175,13 @@ class Order(BaseModel):
     items: list[CartItem]
     subtotal: float
     savings: float
+    discounts: list[DiscountLine] = []
+    discount_total: float = 0
+    points_redeemed: int = 0
+    points_value: float = 0
+    points_earned: int = 0
     total: float
-    status: Literal["pending", "paid", "verified", "flagged"] = "pending"
+    status: Literal["pending", "paid", "verified", "flagged", "cancelled"] = "pending"
     payment_provider: Literal["mock", "razorpay"] = "mock"
     payment_ref: str = ""   # provider order id
     payment_id: str = ""    # provider payment id
@@ -246,3 +257,35 @@ class Customer(BaseModel):
     visits: int = 0
     spend: float = 0.0
     points: int = 0
+    segment: Literal["new", "regular", "vip", "at_risk"] = "new"
+
+
+Segment = Literal["all", "signed_in", "new", "regular", "vip", "at_risk"]
+
+
+class Offer(BaseModel):
+    offer_id: str
+    store_id: str
+    name: str = Field(min_length=1, max_length=60)
+    kind: Literal["product", "category", "cart"]
+    product_id: str = ""
+    category: str = Field(default="", max_length=40)
+    min_total: float = Field(default=0, ge=0)
+    percent_off: float = Field(default=0, ge=0, le=90)
+    amount_off: float = Field(default=0, ge=0)          # per unit for product and category offers
+    segment: Segment = "all"
+    active: bool = True
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    created_by: str = ""
+    created_at: datetime = Field(default_factory=now)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "Offer":
+        if (self.percent_off > 0) == (self.amount_off > 0):
+            raise ValueError("set exactly one of percent_off or amount_off")
+        if self.kind == "product" and not self.product_id:
+            raise ValueError("product offers need a product_id")
+        if self.kind == "category" and not self.category:
+            raise ValueError("category offers need a category")
+        return self

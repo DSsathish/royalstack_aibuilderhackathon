@@ -1,19 +1,19 @@
 "use client";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { money } from "@/lib/api";
 import { signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
-import { Customer, Draft, InvRow, Loss, Overview, Signals, StoreDoc, owner } from "@/lib/owner";
+import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, owner } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
 import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import RevenueChart from "@/components/RevenueChart";
 
-type Tab = "overview" | "inventory" | "reorders" | "signals" | "customers" | "loss" | "connectors" | "setup" | "exits" | "chat";
+type Tab = "overview" | "inventory" | "reorders" | "signals" | "customers" | "offers" | "loss" | "connectors" | "setup" | "exits" | "chat";
 const OWNER_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" }, { id: "inventory", label: "Inventory" }, { id: "reorders", label: "Reorders" },
-  { id: "signals", label: "Signals" }, { id: "customers", label: "Customers" }, { id: "loss", label: "Loss" }, { id: "connectors", label: "Connectors" }, { id: "setup", label: "Store" }, { id: "chat", label: "Ask" },
+  { id: "signals", label: "Signals" }, { id: "customers", label: "Customers" }, { id: "offers", label: "Offers" }, { id: "loss", label: "Loss" }, { id: "connectors", label: "Connectors" }, { id: "setup", label: "Store" }, { id: "chat", label: "Ask" },
 ];
 const STAFF_TABS: { id: Tab; label: string }[] = [{ id: "inventory", label: "Shelf counts" }, { id: "exits", label: "Exits" }];
 
@@ -68,6 +68,7 @@ export default function OwnerPage() {
         {tab === "reorders" && <ReordersTab store={store} />}
         {tab === "signals" && <SignalsTab store={store} />}
         {tab === "customers" && <CustomersTab store={store} />}
+        {tab === "offers" && <OffersTab store={store} />}
         {tab === "loss" && <LossTab store={store} />}
         {tab === "connectors" && <ConnectorsTab store={store} />}
         {tab === "setup" && <SetupTab store={store} newPin={newPin} />}
@@ -348,29 +349,123 @@ function SignalsTab({ store }: { store: string }) {
   );
 }
 
+const SEGMENTS: Record<Customer["segment"], string> = { new: "New", regular: "Regular", vip: "VIP", at_risk: "At risk" };
+const OFFER_SEGMENTS: [OfferDoc["segment"], string][] = [["all", "Everyone"], ["signed_in", "Signed-in shoppers"], ["new", "New customers"], ["regular", "Regulars"], ["vip", "VIP"], ["at_risk", "At risk (win back)"]];
+
 function CustomersTab({ store }: { store: string }) {
   const [rows, setRows] = useState<Customer[] | null>(null);
-  useEffect(() => { owner.customers(store).then(setRows).catch(() => setRows([])); }, [store]);
+  const [filter, setFilter] = useState<Customer["segment"] | "all">("all");
+  const [editing, setEditing] = useState<{ uid: string; delta: string; reason: string } | null>(null);
+  const [msg, setMsg] = useState("");
+  const load = () => owner.customers(store).then(setRows).catch(() => setRows([]));
+  useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!rows) return <p className="p-4 text-muted">Loading</p>;
+  const counts = rows.reduce((m, r) => ({ ...m, [r.segment]: (m[r.segment] ?? 0) + 1 }), {} as Record<string, number>);
+  const shown = rows.filter((r) => filter === "all" || r.segment === filter);
+  async function savePoints() {
+    if (!editing) return;
+    try { await owner.adjustPoints(store, editing.uid, Number(editing.delta), editing.reason); setMsg("Points updated."); setEditing(null); load(); }
+    catch (e) { setMsg((e as Error).message); }
+  }
   return (
     <div className="p-4 space-y-3 max-w-4xl">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Tile label="Signed-in customers" value={rows.length} /><Tile label="Their spend" value={money(rows.reduce((n, r) => n + r.spend, 0))} />
         <Tile label="Repeat (2+ visits)" value={rows.filter((r) => r.visits >= 2).length} /><Tile label="Points outstanding" value={rows.reduce((n, r) => n + r.points, 0)} />
       </div>
-      <p className="text-xs text-muted">Only shoppers who chose to sign in appear here, with the last four digits of their number. Guests are counted in Overview.</p>
-      {rows.length === 0 ? <p className="text-sm text-muted">No signed-in customers yet.</p> : (
+      <div className="flex flex-wrap gap-1.5">
+        <button onClick={() => setFilter("all")} className={`chip ${filter === "all" ? "chip-accent" : "chip-muted"}`}>All {rows.length}</button>
+        {(Object.keys(SEGMENTS) as Customer["segment"][]).map((k) => <button key={k} onClick={() => setFilter(k)} className={`chip ${filter === k ? "chip-accent" : "chip-muted"}`}>{SEGMENTS[k]} {counts[k] ?? 0}</button>)}
+      </div>
+      <p className="text-xs text-muted">Only shoppers who chose to sign in appear here, with the last four digits of their number. Segments: new (one visit), regular (two or more), VIP (five visits and ₹5,000), at risk (no visit in 45 days). Target offers at a segment in the Offers tab.</p>
+      {msg && <div className="chip chip-muted">{msg}</div>}
+      {shown.length === 0 ? <p className="text-sm text-muted">No customers in this view.</p> : (
         <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead className="text-left text-muted text-xs"><tr><th className="py-1 pr-2">Customer</th><th className="pr-2">Visits</th><th className="pr-2">Spend</th><th className="pr-2">Points</th><th className="pr-2">Prefers</th><th>Last visit</th></tr></thead>
-          <tbody>{rows.map((r) => (
-            <tr key={r.uid} className="border-t border-line">
-              <td className="py-1.5 pr-2">{r.name || "Shopper"} <span className="text-muted mono text-xs">····{r.phone_last4}</span></td>
-              <td className="mono pr-2">{r.visits}</td><td className="mono pr-2">{money(r.spend)}</td><td className="mono pr-2">{r.points}</td>
-              <td className="text-xs text-muted pr-2">{[...r.dietary, ...r.favourite_categories].join(", ") || "–"}</td>
-              <td className="text-xs text-muted">{new Date(r.last_seen).toLocaleDateString()}</td>
-            </tr>))}</tbody>
+          <thead className="text-left text-muted text-xs"><tr><th className="py-1 pr-2">Customer</th><th className="pr-2">Segment</th><th className="pr-2">Visits</th><th className="pr-2">Spend</th><th className="pr-2">Points</th><th className="pr-2">Prefers</th><th>Last visit</th></tr></thead>
+          <tbody>{shown.map((r) => (
+            <React.Fragment key={r.uid}>
+              <tr className="border-t border-line">
+                <td className="py-1.5 pr-2">{r.name || "Shopper"} <span className="text-muted mono text-xs">····{r.phone_last4}</span></td>
+                <td className="pr-2"><span className={`chip ${r.segment === "vip" ? "chip-accent" : r.segment === "at_risk" ? "chip-warn" : "chip-muted"}`}>{SEGMENTS[r.segment]}</span></td>
+                <td className="mono pr-2">{r.visits}</td><td className="mono pr-2">{money(r.spend)}</td>
+                <td className="mono pr-2">{r.points} <button onClick={() => setEditing({ uid: r.uid, delta: "", reason: "" })} className="text-accent text-xs font-semibold ml-1">Adjust</button></td>
+                <td className="text-xs text-muted pr-2">{[...r.dietary, ...r.favourite_categories].join(", ") || "–"}</td>
+                <td className="text-xs text-muted">{new Date(r.last_seen).toLocaleDateString()}</td>
+              </tr>
+              {editing?.uid === r.uid && (
+                <tr><td colSpan={7} className="pb-2">
+                  <div className="card p-2 flex flex-wrap items-center gap-2 text-sm">
+                    <input value={editing.delta} onChange={(e) => setEditing({ ...editing, delta: e.target.value })} inputMode="numeric" placeholder="+50 or -20" className="field w-28 py-1.5 mono" />
+                    <input value={editing.reason} onChange={(e) => setEditing({ ...editing, reason: e.target.value })} placeholder="Reason (kept in the audit log)" className="field flex-1 py-1.5 min-w-[200px]" />
+                    <button onClick={savePoints} disabled={!editing.delta || !editing.reason} className="btn btn-primary py-1.5">Save</button>
+                    <button onClick={() => setEditing(null)} className="btn btn-ghost py-1.5">Cancel</button>
+                  </div>
+                </td></tr>
+              )}
+            </React.Fragment>
+          ))}</tbody>
         </table></div>
       )}
+    </div>
+  );
+}
+
+function OffersTab({ store }: { store: string }) {
+  const [rows, setRows] = useState<OfferDoc[] | null>(null);
+  const [form, setForm] = useState({ name: "", kind: "product" as OfferDoc["kind"], product_id: "", product_name: "", category: "", min_total: "", value_type: "percent" as "percent" | "amount", value: "", segment: "all" as OfferDoc["segment"], ends_at: "" });
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<{ product_id: string; name: string; category: string }[]>([]);
+  const [msg, setMsg] = useState("");
+  const load = () => owner.offers(store).then(setRows).catch((e) => setMsg(e.message));
+  useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  async function find() { try { setFound(await owner.searchProducts(store, query)); } catch { setFound([]); } }
+  async function create() {
+    try {
+      await owner.createOffer(store, { name: form.name, kind: form.kind, product_id: form.product_id, category: form.category, min_total: Number(form.min_total || 0),
+        percent_off: form.value_type === "percent" ? Number(form.value) : 0, amount_off: form.value_type === "amount" ? Number(form.value) : 0,
+        segment: form.segment, ends_at: form.ends_at ? new Date(form.ends_at + "T23:59:59").toISOString() : null });
+      setMsg("Offer is live."); setForm({ ...form, name: "", value: "", product_id: "", product_name: "" }); load();
+    } catch (e) { setMsg((e as Error).message); }
+  }
+  const ready = form.name && Number(form.value) > 0 && (form.kind === "cart" || (form.kind === "product" ? !!form.product_id : !!form.category));
+  return (
+    <div className="p-4 space-y-4 max-w-4xl">
+      <section className="card p-4 space-y-3 text-sm">
+        <div><div className="eyebrow">New offer</div><p className="text-xs text-muted">Offers apply by themselves in the cart, the best one wins per item and one per bill. No codes.</p></div>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <label className="text-xs">Name shown to shoppers<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} className="field mt-1 py-1.5 text-sm" placeholder="Dairy week" /></label>
+          <label className="text-xs">Kind<select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as OfferDoc["kind"] })} className="field mt-1 py-1.5 text-sm"><option value="product">One product</option><option value="category">A category</option><option value="cart">Whole bill above an amount</option></select></label>
+          {form.kind === "product" && (
+            <div className="text-xs sm:col-span-2">Product
+              <div className="flex gap-2 mt-1"><input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); find(); } }} placeholder="Search by name" className="field py-1.5 text-sm" /><button onClick={find} className="btn btn-ghost py-1.5">Find</button></div>
+              {form.product_id && <div className="chip chip-accent mt-1">{form.product_name}</div>}
+              {found.length > 0 && <div className="flex flex-wrap gap-1.5 mt-1">{found.map((p) => <button key={p.product_id} onClick={() => { setForm({ ...form, product_id: p.product_id, product_name: p.name }); setFound([]); }} className="chip chip-muted">{p.name}</button>)}</div>}
+            </div>
+          )}
+          {form.kind === "category" && <label className="text-xs">Category<input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} maxLength={40} className="field mt-1 py-1.5 text-sm" placeholder="Dairy" /></label>}
+          {form.kind === "cart" && <label className="text-xs">Bill must be above (₹)<input value={form.min_total} onChange={(e) => setForm({ ...form, min_total: e.target.value })} inputMode="decimal" className="field mt-1 py-1.5 text-sm" placeholder="500" /></label>}
+          <label className="text-xs">Discount
+            <div className="flex gap-2 mt-1">
+              <select value={form.value_type} onChange={(e) => setForm({ ...form, value_type: e.target.value as "percent" | "amount" })} className="field w-auto py-1.5 text-sm"><option value="percent">% off</option><option value="amount">₹ off{form.kind !== "cart" ? " each" : ""}</option></select>
+              <input value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} inputMode="decimal" className="field py-1.5 text-sm" placeholder={form.value_type === "percent" ? "10" : "20"} />
+            </div>
+          </label>
+          <label className="text-xs">Who gets it<select value={form.segment} onChange={(e) => setForm({ ...form, segment: e.target.value as OfferDoc["segment"] })} className="field mt-1 py-1.5 text-sm">{OFFER_SEGMENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+          <label className="text-xs">Ends on (optional)<input type="date" value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} className="field mt-1 py-1.5 text-sm" /></label>
+        </div>
+        <div className="flex items-center gap-2"><button onClick={create} disabled={!ready} className="btn btn-primary py-2">Create offer</button>{msg && <span className="text-xs text-muted">{msg}</span>}</div>
+      </section>
+      <section className="space-y-2">
+        <div className="eyebrow">Offers</div>
+        {!rows ? <p className="text-muted text-sm">Loading</p> : rows.length === 0 ? <p className="text-sm text-muted">No offers yet.</p> : rows.map((o) => (
+          <div key={o.offer_id} className="card p-3 flex flex-wrap items-center gap-2 text-sm">
+            <div className="flex-1 min-w-[200px]"><div className="font-semibold">{o.name}</div><div className="text-xs text-muted">{o.detail} · {OFFER_SEGMENTS.find(([v]) => v === o.segment)?.[1]}{o.ends_at ? ` · until ${new Date(o.ends_at).toLocaleDateString()}` : ""}</div></div>
+            <span className={`chip ${o.active ? "chip-good" : "chip-muted"}`}>{o.active ? "Live" : "Paused"}</span>
+            <button onClick={() => owner.patchOffer(store, o.offer_id, { active: !o.active }).then(load)} className="btn btn-ghost py-1.5 text-xs">{o.active ? "Pause" : "Resume"}</button>
+            <button onClick={() => { if (confirm(`Delete "${o.name}"?`)) owner.deleteOffer(store, o.offer_id).then(load); }} className="btn btn-ghost py-1.5 text-xs text-bad">Delete</button>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }

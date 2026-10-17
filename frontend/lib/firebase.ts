@@ -1,7 +1,7 @@
 "use client";
 /** Firebase web app: Google sign-in for owners and staff, phone OTP for shoppers who opt in. */
 import { getApps, initializeApp } from "firebase/app";
-import { ConfirmationResult, GoogleAuthProvider, RecaptchaVerifier, getAuth, onAuthStateChanged, signInWithPhoneNumber, signInWithPopup, signOut, type User } from "firebase/auth";
+import { ConfirmationResult, GoogleAuthProvider, RecaptchaVerifier, getAuth, onAuthStateChanged, reauthenticateWithPhoneNumber, signInWithPhoneNumber, signInWithPopup, signOut, type User } from "firebase/auth";
 
 const config = {
   apiKey: "AIzaSyD1gsb4UoNpjbCQcyu0gLp6MNwpjxtiXsk",
@@ -24,15 +24,21 @@ export function firstAuthState(): Promise<User | null> {
 /** The signed-in shopper, if the current Firebase user came from phone sign-in. */
 export function phoneUser(): User | null { const u = auth().currentUser; return u?.phoneNumber ? u : null; }
 
-let verifier: RecaptchaVerifier | null = null;
-/** Send a one-time code; the invisible reCAPTCHA mounts in the element with `containerId`. */
-export async function sendOtp(phone: string, containerId: string): Promise<ConfirmationResult> {
-  try {
-    verifier ??= new RecaptchaVerifier(auth(), containerId, { size: "invisible" });
-    return await signInWithPhoneNumber(auth(), phone, verifier);
-  } catch (e) {
-    verifier?.clear(); verifier = null;     // a failed challenge cannot be reused
-    throw e;
-  }
+/** One invisible reCAPTCHA per attempt, mounted in `containerId` and removed afterwards, so pages can mount their own slot. */
+async function withVerifier<T>(containerId: string, fn: (v: RecaptchaVerifier) => Promise<T>): Promise<T> {
+  const v = new RecaptchaVerifier(auth(), containerId, { size: "invisible" });
+  try { return await fn(v); } finally { v.clear(); }
+}
+/** Send a one-time code to sign in. */
+export function sendOtp(phone: string, containerId: string): Promise<ConfirmationResult> {
+  return withVerifier(containerId, (v) => signInWithPhoneNumber(auth(), phone, v));
+}
+/** Send a one-time code to the signed-in shopper's own number (the check before spending points). */
+export function reverifyPhone(containerId: string): Promise<ConfirmationResult> {
+  const u = phoneUser();
+  if (!u?.phoneNumber) return Promise.reject(new Error("not signed in by phone"));
+  return withVerifier(containerId, (v) => reauthenticateWithPhoneNumber(u, u.phoneNumber!, v));
 }
 export function confirmOtp(result: ConfirmationResult, code: string) { return result.confirm(code); }
+/** A token minted now, so the server sees the fresh verification time. */
+export async function freshIdToken(): Promise<string | null> { return (await auth().currentUser?.getIdToken(true)) ?? null; }

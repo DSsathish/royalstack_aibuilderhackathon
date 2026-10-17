@@ -31,8 +31,10 @@ export default function Cart() {
         ))}
         <div className="p-3 receipt-edge space-y-1 text-sm">
           <div className="flex justify-between"><span className="text-muted">Subtotal</span><span className="mono">{money(cart.subtotal)}</span></div>
-          {cart.savings > 0 && <div className="flex justify-between text-good"><span>Savings</span><span className="mono">{money(cart.savings)}</span></div>}
+          {cart.savings > 0 && <div className="flex justify-between text-good"><span>Savings vs MRP</span><span className="mono">{money(cart.savings)}</span></div>}
+          {cart.discounts?.map((d) => <div key={d.offer_id} className="flex justify-between text-good"><span>{d.name}</span><span className="mono">−{money(d.amount)}</span></div>)}
           <div className="flex justify-between text-lg font-semibold"><span>Total</span><span className="mono">{money(cart.total)}</span></div>
+          {cart.points_balance != null && cart.points_balance >= 50 && <div className="text-xs text-muted">You have {cart.points_balance} points worth {money(cart.points_balance)}. Use them at checkout.</div>}
         </div>
       </div>
     </div>

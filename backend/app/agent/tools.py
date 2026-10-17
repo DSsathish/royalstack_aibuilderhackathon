@@ -22,11 +22,17 @@ def _row(v: ProductView) -> dict:
             "aisle": loc.aisle if loc else "", "bay": loc.bay if loc else 0}
 
 
-def _cart_summary(c) -> dict:
-    subtotal, savings, total = cart_svc.totals(c)
+def _cart_summary(c, segment: str = "guest") -> dict:
+    p = cart_svc.pricing(c.store_id, c, segment)
     return {"items": [{"product_id": i.product_id, "name": i.name, "qty": i.qty, "unit_price": i.unit_price}
                       for i in c.items],
-            "count": sum(i.qty for i in c.items), "subtotal": subtotal, "savings": savings, "total": total}
+            "count": sum(i.qty for i in c.items), "subtotal": p.subtotal, "savings": p.savings,
+            "discounts": [{"name": l.name, "amount": l.amount} for l in p.discounts], "discount_total": p.discount_total, "total": p.total}
+
+
+def _segment(state) -> str:
+    from app.services import customers
+    return state.get("segment") or customers.segment_of(state["store_id"], state.get("customer_id"))
 
 
 def search_products(query: str, tool_context: ToolContext, max_results: int = 6) -> dict:
@@ -107,16 +113,24 @@ def remove_from_cart(product_id: str, tool_context: ToolContext) -> dict:
 def view_cart(tool_context: ToolContext) -> dict:
     """Current cart lines, item count, subtotal, savings and total."""
     s = tool_context.state
-    return {"ok": True, "cart": _cart_summary(cart_svc.get(s["store_id"], s["cart_id"]))}
+    return {"ok": True, "cart": _cart_summary(cart_svc.get(s["store_id"], s["cart_id"]), _segment(s))}
 
 
 def start_checkout(tool_context: ToolContext) -> dict:
-    """Begin checkout for the current cart. Returns the total the shopper will pay."""
+    """Begin checkout for the current cart. Returns the total the shopper will pay after offers."""
     s = tool_context.state
     c = cart_svc.get(s["store_id"], s["cart_id"])
     if not c.items:
         return {"ok": False, "error": "empty_cart"}
-    return {"ok": True, "cart_id": c.cart_id, "total": cart_svc.totals(c)[2]}
+    return {"ok": True, "cart_id": c.cart_id, "total": cart_svc.pricing(c.store_id, c, _segment(s)).total}
+
+
+def get_offers(tool_context: ToolContext) -> dict:
+    """Offers and discounts this shopper can use right now: store-wide ones plus any for their segment."""
+    from app.services import offers
+    s = tool_context.state
+    items = [offers.public(s["store_id"], o) for o in offers.applicable(s["store_id"], _segment(s))]
+    return {"ok": True, "offers": [{"name": o["name"], "detail": o["detail"]} for o in items]}
 
 
 def record_demand_signal(requested_item: str, tool_context: ToolContext) -> dict:
@@ -178,8 +192,8 @@ def get_anomalies(tool_context: ToolContext, days: int = 7) -> dict:
 
 TOOLS_BY_MODE = {
     "instore": [search_products, get_product, suggest_substitutes, navigate_to, record_demand_signal,
-                remove_from_cart, view_cart, start_checkout],      # items enter the cart only by scanning
+                remove_from_cart, view_cart, start_checkout, get_offers],      # items enter the cart only by scanning
     "online": [search_products, get_product, suggest_substitutes, record_demand_signal,
-               add_to_cart, remove_from_cart, view_cart, start_checkout],
+               add_to_cart, remove_from_cart, view_cart, start_checkout, get_offers],
     "owner": [search_products, get_product, get_low_stock, forecast_demand, draft_purchase_order, get_anomalies],
 }
