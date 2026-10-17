@@ -128,17 +128,15 @@ def test_off_topic_redirects(shop):
 
 
 def test_out_of_stock_is_said_plainly_with_an_alternative(shop):
-    s = sessions.create(shop, "online")
-    events = run(s, "Do you have So Good almond milk?")
-    reply = next(e["text"] for e in events if e["type"] == "done").lower()
+    _, reply, _ = run(sessions.create(shop, "online"), "Do you have So Good almond milk?")
+    reply = reply.lower()
     assert "out of stock" in reply or "not available" in reply or "unavailable" in reply or "don't have" in reply, reply
     assert "soya" in reply, reply                                     # the listed substitute is offered
     assert not any(w in reply for w in ("we have so good", "yes, we have so good")), reply
 
 
 def test_amount_is_turned_into_packs(shop):
-    s = sessions.create(shop, "online")
-    events = run(s, "I need 10 kg of atta")
-    reply = next(e["text"] for e in events if e["type"] == "done").lower()
+    _, reply, _ = run(sessions.create(shop, "online"), "I need 10 kg of atta")
+    reply = reply.lower()
     assert ("two" in reply or "2 " in reply or "2x" in reply or "2 x" in reply) and "5" in reply, reply   # two 5 kg packs
     assert "530" in reply or "265" in reply, reply                                            # price of the combination or per pack
