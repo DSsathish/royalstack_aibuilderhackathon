@@ -58,8 +58,8 @@ export default function Shop() {
       {session.mode !== "owner" && <TotalBar />}
       <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
         {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id ? "page" : undefined} className={`py-2 text-[11px] font-semibold flex flex-col items-center gap-0.5 ${tab === t.id ? "text-ink" : "text-muted"}`}>
-            <span className={`rounded-full px-4 py-1 transition-colors ${tab === t.id ? "bg-accent-soft text-accent" : ""}`}>{t.icon}</span>{t.label}
+          <button key={t.id} onClick={() => setTab(t.id)} className={`py-2 text-[11px] font-semibold flex flex-col items-center gap-0.5 ${tab === t.id ? "text-ink" : "text-muted"}`}>
+            <span className={`rounded-full px-3 py-0.5 ${tab === t.id ? "bg-accent-soft text-accent-ink" : ""}`}>{t.icon}</span>{t.label}
           </button>
         ))}
       </nav>
