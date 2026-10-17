@@ -68,17 +68,28 @@ def main() -> None:
     rows, errors = csvc.parse(data, mapping)
     print(f"parsed {len(rows)} rows, {len(errors)} row errors")
 
-    store = Store(store_id=a.store, name=a.name, floor_map=FLOOR_MAP, owner_emails=[e.lower() for e in a.owner_email])
-    payload = store.model_dump()
-    if not a.owner_email:
-        payload.pop("owner_emails")
-    db.store_ref(a.store).set(payload, merge=True)
+    existing = db.store_ref(a.store).get()
+    if existing.exists:                       # a store the owner registered: keep its name, PIN, branding and settings
+        cur = existing.to_dict()
+        updates = {}
+        if not cur.get("floor_map"):
+            updates["floor_map"] = [x.model_dump() for x in FLOOR_MAP]
+        if a.owner_email:
+            updates["owner_emails"] = sorted(set(cur.get("owner_emails", [])) | {e.lower() for e in a.owner_email})
+        if updates:
+            db.store_ref(a.store).update(updates)
+        store = Store(**{**cur, **updates})
+        print(f"store {a.store} exists ({store.name}); adding products to it")
+    else:
+        store = Store(store_id=a.store, name=a.name, floor_map=FLOOR_MAP, owner_emails=[e.lower() for e in a.owner_email])
+        db.store_ref(a.store).set(store.model_dump())
     res = csvc.upsert(a.store, rows, high_value_threshold=store.high_value_threshold)
     print(f"products: created={res.created} updated={res.updated}")
 
     # synthesise barcodes, aisles and suppliers where the dataset has none
     categories = sorted({r.category for r in rows if r.category}) or ["General"]
-    aisle_of = {c: AISLES[i % len(AISLES)] for i, c in enumerate(categories)}
+    aisles = [x.aisle for x in store.floor_map] or AISLES
+    aisle_of = {c: aisles[i % len(aisles)] for i, c in enumerate(categories)}
     sup_of = {c: "sup-" + "".join(ch if ch.isalnum() else "-" for ch in c.lower())[:30] for c in categories}
     for c in categories:
         db.suppliers(a.store).document(sup_of[c]).set(Supplier(supplier_id=sup_of[c], store_id=a.store, name=f"{c} supplier", lead_time_days=3).model_dump())
@@ -101,6 +112,8 @@ def main() -> None:
     if n:
         batch.commit()
     print(f"synthesised barcodes/aisles/suppliers for {len(rows)} products across {len(categories)} categories")
+    from app.services import catalog
+    catalog.bump(a.store)                     # running API instances reload within two seconds
 
     if a.sales:
         sraw = Path(a.sales).read_bytes().decode("utf-8-sig", errors="replace")

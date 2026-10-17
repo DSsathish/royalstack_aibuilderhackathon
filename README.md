@@ -54,7 +54,8 @@ frontend/                Next.js 16 static export, TypeScript, Tailwind
                          StoreMap, TotalBar, RevenueChart
   lib/                   api.ts, sse.ts, voice.ts, live.ts, store.ts, firebase.ts, authed.ts, owner.ts, me.ts
   public/pcm-worklet.js  microphone -> 16 kHz PCM for live voice
-infra/seed/              demo store generator (170 products, 90 days of sales), seed script
+infra/seed/              demo store generator (170 products, 90 days of sales), seed script,
+                         kaggle_bigbasket.py (real Kaggle BigBasket catalogue into any store), import_dataset.py
 infra/scripts/           reset_demo.py, sync_example.py (how a billing system signs and pushes stock)
 docs/                    hld.md, security.md, demo-script.md, submission-checklist.md, lld/ (one per module group), plan/
 ```
@@ -77,6 +78,10 @@ cd frontend && npm ci && npm run dev    # NEXT_PUBLIC_API_URL defaults to http:/
 # demo data (Firestore + BigQuery) and forecasts
 cd backend && .venv/bin/python ../infra/seed/seed.py --store demo-grocery --embed --owner-email you@example.com
 .venv/bin/python -m app.jobs.forecast --store demo-grocery
+
+# a store from the public Kaggle BigBasket dataset (27,555 real Indian grocery products; no Kaggle account needed)
+.venv/bin/python ../infra/seed/kaggle_bigbasket.py --store my-mart --name "My Mart" --owner-email you@example.com --limit 300
+.venv/bin/python -m app.jobs.forecast --store my-mart
 ```
 
 Entrance link for local testing: `http://localhost:3000/enter/?store=demo-grocery&t=<token>` where the token comes from `python -c "from app.services import qr; print(qr.entrance_token('demo-grocery'))"` run in `backend/`.

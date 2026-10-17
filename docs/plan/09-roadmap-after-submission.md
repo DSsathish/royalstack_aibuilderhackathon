@@ -95,3 +95,8 @@ handle_webhook(store_id, headers, body) -> list[Inventory] | list[Order]
 - Logo and image storage bucket and CDN caching.
 - Whether staff sign in with Google or with a store-issued code.
 - Pricing: per-store subscription or per-transaction fee through Razorpay Route.
+
+
+## Dataset import (done 17 Oct)
+
+`infra/seed/kaggle_bigbasket.py` downloads the public Kaggle BigBasket product list (27,555 Indian grocery products) through kagglehub without credentials, samples a cross-section (or chosen categories), synthesises stock levels, aisles, suppliers, barcodes and ninety days of sales, imports through the CSV connector and computes embeddings. `import_dataset.py` now adds products to an existing registered store without touching its name, PIN, branding or settings, uses the store's own aisle names, and bumps the catalog version so live instances reload.
