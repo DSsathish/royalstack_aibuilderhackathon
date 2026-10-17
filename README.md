@@ -27,7 +27,7 @@ Scan the entrance QR (see `docs/plan/00-overview.md` or the owner dashboard's Co
 
 ## Google Cloud services
 
-Cloud Run (API and websocket bridge), Firebase Hosting (static PWA), Firebase Auth (Google for owners and staff, phone OTP for shoppers), Firestore (operational data), BigQuery and BigQuery ML `ARIMA_PLUS` (sales history and forecasts), Vertex AI Gemini (`gemini-3.5-flash`, `gemini-live-2.5-flash`, `gemini-embedding-001`), Google ADK (agent runtime), Cloud Scheduler (nightly forecasts and customer jobs, sync every 15 minutes), Secret Manager (signing keys, per-store payment and sync secrets), Cloud Build, Artifact Registry.
+Cloud Run (API and websocket bridge), Firebase Hosting (static PWA), Firebase Auth (Google or email-and-password for owners and staff, phone OTP for shoppers), Firestore (operational data), BigQuery and BigQuery ML `ARIMA_PLUS` (sales history and forecasts), Vertex AI Gemini (`gemini-3.5-flash`, `gemini-live-2.5-flash`, `gemini-embedding-001`), Google ADK (agent runtime), Cloud Scheduler (nightly forecasts and customer jobs, sync every 15 minutes), Secret Manager (signing keys, per-store payment and sync secrets), Cloud Build, Artifact Registry.
 
 ## Codebase
 
@@ -135,7 +135,7 @@ Known gaps kept on purpose are listed at the end of `docs/security.md` (cart add
 
 ## For judges
 
-- Owner dashboard: sign in with a Google account listed on the demo store (ask the team), or register your own store with any Google account: the dashboard opens a registration form, and the Connectors tab imports a CSV or lets you add products by scanning a barcode.
+- Owner dashboard: sign in with a Google account listed on the demo store (ask the team), or register your own store with any Google account or an email-and-password account (verify the email first): the dashboard opens a registration form, and the Connectors tab imports a CSV or lets you add products by scanning a barcode.
 - Shopper sign-in is optional. Test numbers `+91 99999 00001`, `00002`, `00003` with code `123456` work without an SMS (Firebase test numbers); real Indian numbers receive a real code.
 - Kiosk PIN for `demo-grocery` is `1234`. Payments are sandbox only.
 - Sync from a billing system: generate a secret in Connectors → Live sync, then run `python infra/scripts/sync_example.py --store demo-grocery --secret <secret> --sku <sku> --on-hand 2`; the assistant reflects the change within two seconds.

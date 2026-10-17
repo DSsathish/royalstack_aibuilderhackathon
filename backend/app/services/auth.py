@@ -109,5 +109,5 @@ def require_staff(store_id: str, uid: str) -> str:
 def verified_email(uid: str) -> str:
     email = _EMAILS.get(uid)
     if not email:
-        raise HTTPException(403, "a verified Google email is required")
+        raise HTTPException(403, "a verified email is required: sign in with Google, or open the verification link we emailed you")
     return email

@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { money } from "@/lib/api";
-import { signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
+import { createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
 import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
@@ -26,24 +26,19 @@ export default function OwnerPage() {
   const [error, setError] = useState("");
   const [loadedMe, setLoadedMe] = useState(false);
   const [newPin, setNewPin] = useState("");
+  const [verifiedTick, setVerifiedTick] = useState(0);
 
   useEffect(() => watchUser(setUser), []);
   useEffect(() => {
-    if (!user?.email) return;
+    if (!user?.email || (isPasswordUser(user) && !user.emailVerified)) return;
     owner.me().then((m) => { setStores(m.stores); setRoles(m.roles); setStore(m.stores[0] ?? ""); setLoadedMe(true); if (m.roles[m.stores[0]] === "staff") setTab("inventory"); }).catch((e) => { setError(e.message); setLoadedMe(true); });
-  }, [user]);
+  }, [user, verifiedTick]);
   const role = roles[store] ?? "owner";
   const TABS = role === "staff" ? STAFF_TABS : OWNER_TABS;
 
   if (user === undefined) return <main className="p-6 text-muted">Loading…</main>;
-  if (!user?.email) return (                       // shoppers signed in by phone are not owners
-    <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <div><div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Owner dashboard</h1></div>
-      <p className="text-muted max-w-sm">Sign in with the Google account registered for your store.</p>
-      <button onClick={() => signInWithGoogle().catch((e) => setError(e.message))} className="btn btn-primary px-6 py-3">Sign in with Google</button>
-      {error && <p className="chip chip-bad max-w-sm">{error.includes("operation-not-allowed") ? "Google sign-in is not enabled yet in the Firebase console (Authentication → Sign-in method → Google)." : error}</p>}
-    </main>
-  );
+  if (!user?.email) return <OwnerSignIn />;          // shoppers signed in by phone are not owners
+  if (isPasswordUser(user) && !user.emailVerified) return <VerifyEmail email={user.email} onVerified={() => setVerifiedTick((t) => t + 1)} />;
   if (!store) {
     if (!loadedMe) return <main className="p-6 text-muted">Loading</main>;
     return <RegisterForm email={user.email ?? ""} error={error} onDone={(s, pin) => { setStores([s.store_id]); setRoles({ [s.store_id]: "owner" }); setStore(s.store_id); setNewPin(pin); setTab("setup"); }} />;
@@ -77,6 +72,67 @@ export default function OwnerPage() {
       </div>
     </div>
   );
+}
+
+/** Google, or email and password. New password accounts must verify the address before the API lets them own or join a store. */
+function OwnerSignIn() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; bad: boolean } | null>(null);
+  const run = async (fn: () => Promise<unknown>, okText?: string) => {
+    setBusy(true); setMsg(null);
+    try { await fn(); if (okText) setMsg({ text: okText, bad: false }); } catch (e) { setMsg({ text: authMessage(e), bad: true }); }
+    setBusy(false);
+  };
+  return (
+    <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
+      <div className="text-center"><div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Owner dashboard</h1><p className="text-muted mt-1">For shop owners and staff.</p></div>
+      <div className="card p-5 w-full max-w-sm space-y-3">
+        <button onClick={() => run(signInWithGoogle)} disabled={busy} className="btn btn-primary w-full py-3">Continue with Google</button>
+        <div className="flex items-center gap-3 text-xs text-muted"><span className="flex-1 border-t border-line" />or with email<span className="flex-1 border-t border-line" /></div>
+        <form onSubmit={(e) => { e.preventDefault(); run(() => signInWithEmail(email, password)); }} className="space-y-2">
+          <label className="block text-sm">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required className="field mt-1" /></label>
+          <label className="block text-sm">Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" minLength={6} required className="field mt-1" /></label>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy || !email || !password} className="btn btn-ink flex-1">Sign in</button>
+            <button type="button" onClick={() => run(() => createOwnerAccount(email, password), "Account created. Check your inbox for the verification link.")} disabled={busy || !email || password.length < 6} className="btn btn-ghost flex-1">Create account</button>
+          </div>
+        </form>
+        <button onClick={() => run(() => resetPassword(email), "If that address has an account, a reset link is on its way.")} disabled={busy || !email} className="text-xs text-muted underline">Forgot password?</button>
+        {msg && <p className={`chip ${msg.bad ? "chip-bad" : "chip-good"} whitespace-normal`}>{msg.text}</p>}
+      </div>
+      <p className="text-xs text-muted max-w-sm text-center">New here? Create an account, verify the email, and the dashboard opens with “Register your shop”. Staff use the email their owner added.</p>
+    </main>
+  );
+}
+
+function VerifyEmail({ email, onVerified }: { email: string; onVerified: () => void }) {
+  const [msg, setMsg] = useState("");
+  return (
+    <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
+      <div><div className="eyebrow">One more step</div><h1 className="text-2xl font-semibold">Verify your email</h1></div>
+      <p className="text-muted max-w-sm">We sent a verification link to <b>{email}</b>. Open it, then come back and tap Continue. The address must be verified before it can own or join a store.</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <button onClick={async () => { if (await refreshVerified()) onVerified(); else setMsg("Not verified yet. Open the link in the email first."); }} className="btn btn-primary">Continue</button>
+        <button onClick={() => resendVerification().then(() => setMsg("Sent again.")).catch((e) => setMsg(authMessage(e)))} className="btn btn-ghost">Resend link</button>
+        <button onClick={() => signOutOwner()} className="btn btn-ghost">Sign out</button>
+      </div>
+      {msg && <p className="chip chip-muted whitespace-normal max-w-sm">{msg}</p>}
+    </main>
+  );
+}
+
+function authMessage(e: unknown): string {
+  const code = (e as { code?: string }).code ?? (e as Error).message ?? "";
+  if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return "Wrong email or password.";
+  if (code.includes("email-already-in-use")) return "That email already has an account. Sign in instead, or reset the password.";
+  if (code.includes("weak-password")) return "Use a password of at least 6 characters.";
+  if (code.includes("invalid-email")) return "That email address does not look right.";
+  if (code.includes("too-many-requests")) return "Too many attempts. Wait a few minutes and try again.";
+  if (code.includes("operation-not-allowed")) return "This sign-in method is not enabled for the project.";
+  if (code.includes("popup-closed")) return "The Google window was closed before sign-in finished.";
+  return "Could not sign in. Please try again.";
 }
 
 function Tile({ label, value, tone = "" }: { label: string; value: string | number; tone?: string }) {

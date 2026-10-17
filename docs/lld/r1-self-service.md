@@ -56,3 +56,8 @@ Session state carries `store_name` and `greeting`; the instruction provider appe
 ## Tests
 
 `test_api_register.py`: register, duplicate name slug, membership and role, patch store and aisles, staff add and access matrix, payments patch with Secret Manager mocked, public store hides private fields; `test_checkout.py`: provider from store config.
+
+
+## Addendum 17 Oct: email and password sign-in
+- Owners and staff may sign in with email and password as well as Google (Firebase Auth email provider, `passwordRequired`). The dashboard offers Sign in, Create account and Forgot password; a new account receives a verification link and sees a "Verify your email" screen until `emailVerified` is true (`refreshVerified` reloads the user and mints a token carrying `email_verified`).
+- The API is unchanged: it records an email only from tokens with `email_verified`, so an unverified account cannot register a store or be bootstrapped from `owner_emails` or `staff_emails`. A username is not a separate field; the email is the login name.

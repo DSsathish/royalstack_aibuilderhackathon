@@ -1,7 +1,7 @@
 "use client";
 /** Firebase web app: Google sign-in for owners and staff, phone OTP for shoppers who opt in. */
 import { getApps, initializeApp } from "firebase/app";
-import { ConfirmationResult, GoogleAuthProvider, RecaptchaVerifier, getAuth, onAuthStateChanged, reauthenticateWithPhoneNumber, signInWithPhoneNumber, signInWithPopup, signOut, type User } from "firebase/auth";
+import { ConfirmationResult, GoogleAuthProvider, RecaptchaVerifier, createUserWithEmailAndPassword, getAuth, onAuthStateChanged, reauthenticateWithPhoneNumber, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPhoneNumber, signInWithPopup, signOut, type User } from "firebase/auth";
 
 const config = {
   apiKey: "AIzaSyD1gsb4UoNpjbCQcyu0gLp6MNwpjxtiXsk",
@@ -14,6 +14,24 @@ function app() { return getApps()[0] ?? initializeApp(config); }
 export function auth() { return getAuth(app()); }
 export function signInWithGoogle() { return signInWithPopup(auth(), new GoogleAuthProvider()); }
 export function signOutOwner() { return signOut(auth()); }
+/** Email and password for owners and staff. A new account gets a verification link; the API accepts the email only once verified. */
+export function signInWithEmail(email: string, password: string) { return signInWithEmailAndPassword(auth(), email.trim(), password); }
+export async function createOwnerAccount(email: string, password: string) {
+  const cred = await createUserWithEmailAndPassword(auth(), email.trim(), password);
+  await sendEmailVerification(cred.user);
+  return cred.user;
+}
+export function resendVerification() { const u = auth().currentUser; return u ? sendEmailVerification(u) : Promise.resolve(); }
+export function resetPassword(email: string) { return sendPasswordResetEmail(auth(), email.trim()); }
+/** Re-read the user after they clicked the link, and mint a token that carries email_verified. */
+export async function refreshVerified(): Promise<boolean> {
+  const u = auth().currentUser;
+  if (!u) return false;
+  await u.reload();
+  await u.getIdToken(true);
+  return u.emailVerified;
+}
+export function isPasswordUser(u: User): boolean { return u.providerData.some((p) => p.providerId === "password"); }
 export const signOutShopper = signOutOwner;
 export function watchUser(cb: (u: User | null) => void) { return onAuthStateChanged(auth(), cb); }
 export async function idToken(): Promise<string | null> { return (await auth().currentUser?.getIdToken()) ?? null; }
