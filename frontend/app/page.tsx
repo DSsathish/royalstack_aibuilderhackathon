@@ -11,6 +11,7 @@ export default function Home() {
         <p className="text-muted">Your assistant knows every shelf. Ask by voice, scan as you go, pay without the queue.</p>
       </div>
       <Link href="/shop" className="btn btn-ghost">Continue a store visit</Link>
+      <p className="text-sm text-muted">Shop owner? <Link href="/owner/" className="text-accent font-semibold">Register your shop or sign in</Link></p>
     </main>
   );
 }
