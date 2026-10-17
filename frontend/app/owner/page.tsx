@@ -128,12 +128,12 @@ function VerifyEmail({ email, onVerified }: { email: string; onVerified: () => v
     } finally { setChecking(false); }
   }, [onVerified]);
   useEffect(() => {
-    check();
+    const first = setTimeout(() => check(), 0);            // first check after mount, not during the effect itself
     const id = setInterval(() => check(), 5000);
     const onFocus = () => check();
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
-    return () => { clearInterval(id); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
+    return () => { clearTimeout(first); clearInterval(id); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
   }, [check]);
   return (
     <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
