@@ -46,6 +46,7 @@ One AI commerce agent and one inventory truth across the physical store, the onl
 | 5 | [06-phase-5-digital-commerce.md](06-phase-5-digital-commerce.md) | Online storefront mode, embeddable widget, WhatsApp | 17 Oct |
 | 6 | [07-phase-6-owner-inventory.md](07-phase-6-owner-inventory.md) | Owner dashboard, forecasting, reorder approvals, alerts, loss dashboard | 17 Oct |
 | 7 | [08-phase-7-hardening-submission.md](08-phase-7-hardening-submission.md) | Security, tests, monitoring, demo, video, deck, submission | 18 Oct |
+| R1-R6 | [09-roadmap-after-submission.md](09-roadmap-after-submission.md) | Self-service shops, webhook sync, scan-first cart, shopper identity, offers and rewards | after submission |
 
 Phases 1 and 2 can run in parallel. Phases 3, 5, 6 can run in parallel once phase 2 exposes the agent API. Phase 4 depends on phase 3 checkout.
 
