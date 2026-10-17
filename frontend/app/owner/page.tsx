@@ -200,7 +200,14 @@ function RegisterForm({ email, error, onDone }: { email: string; error: string; 
   }
   return (
     <main className="flex-1 flex flex-col gap-4 p-6 max-w-md mx-auto w-full justify-center">
-      <div><div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Register your shop</h1><p className="text-muted text-sm mt-1">Signed in as {email}. Takes a minute; you can change everything later.</p></div>
+      <div>
+        <div className="eyebrow">Royal Stack</div><h1 className="text-3xl font-semibold">Register your shop</h1>
+        <p className="text-muted text-sm mt-1">Signed in as {email}. Takes a minute; you can change everything later.</p>
+        <p className="text-sm mt-2 flex flex-wrap gap-3">
+          <button type="button" onClick={() => signOutOwner()} className="text-accent font-semibold underline">Not you? Sign out</button>
+          <a href="/" className="text-muted underline">Back to the shopper app</a>
+        </p>
+      </div>
       <label className="text-sm">Shop name<input id="reg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sri Murugan Stores" className="field mt-1" /></label>
       <label className="text-sm">City<input id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Chennai" className="field mt-1" /></label>
       <div className="text-sm">Languages your shoppers use<div className="flex gap-2 mt-1">{[["en", "English"], ["ta", "தமிழ்"], ["hi", "हिन्दी"]].map(([k, l]) => <button key={k} onClick={() => toggle(k)} className={`chip ${langs.includes(k) ? "bg-ink text-bg" : "chip-muted"}`}>{l}</button>)}</div></div>
