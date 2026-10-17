@@ -65,3 +65,5 @@ Cloud Run: websockets are supported; request timeout raised to 3600 s for the se
 ## Addendum 18 Oct: live model through the Gemini API
 - Vertex AI offers no live model beyond `gemini-live-2.5-flash` (and a native-audio variant in us-central1); AI Studio has `gemini-3.8-live`. The bridge therefore takes an optional `GEMINI_LIVE_API_KEY`: when set, `gemini.live_client()` is an AI Studio client (explicitly `vertexai=False`, because the SDK otherwise obeys `GOOGLE_GENAI_USE_VERTEXAI` from the environment) and `GEMINI_LIVE_MODEL` names the AI Studio model. Text, vision and embeddings stay on Vertex.
 - `gemini-3.8-live` rejects `enable_affective_dialog`; `GEMINI_LIVE_AFFECTIVE=false` leaves it out. Everything else in the session config (voice, transcription, turn detection, compression, resumption, tools) works unchanged, and the three live scenarios pass on it.
+
+- Reverted 18 Oct to `gemini-live-2.5-flash` on Vertex at the owner's request; the AI Studio path stays available behind `GEMINI_LIVE_API_KEY`.

@@ -27,7 +27,7 @@ Scan the entrance QR (see `docs/plan/00-overview.md` or the owner dashboard's Co
 
 ## Google Cloud services
 
-Cloud Run (API and websocket bridge), Firebase Hosting (static PWA), Firebase Auth (Google or email-and-password for owners and staff, phone OTP for shoppers), Firestore (operational data), BigQuery and BigQuery ML `ARIMA_PLUS` (sales history and forecasts), Vertex AI Gemini (`gemini-3.5-flash`, `gemini-embedding-001`) with the live voice bridge on `gemini-3.8-live` through the Gemini API (AI Studio key in Secret Manager; falls back to `gemini-live-2.5-flash` on Vertex when no live key is set), Google ADK (agent runtime), Cloud Scheduler (nightly forecasts and customer jobs, sync every 15 minutes), Secret Manager (signing keys, per-store payment and sync secrets), Cloud Build, Artifact Registry.
+Cloud Run (API and websocket bridge), Firebase Hosting (static PWA), Firebase Auth (Google or email-and-password for owners and staff, phone OTP for shoppers), Firestore (operational data), BigQuery and BigQuery ML `ARIMA_PLUS` (sales history and forecasts), Vertex AI Gemini (`gemini-3.5-flash`, `gemini-live-2.5-flash`, `gemini-embedding-001`); the live bridge can also run a Gemini API (AI Studio) live model such as `gemini-3.8-live` by setting `GEMINI_LIVE_API_KEY` and `GEMINI_LIVE_MODEL`, Google ADK (agent runtime), Cloud Scheduler (nightly forecasts and customer jobs, sync every 15 minutes), Secret Manager (signing keys, per-store payment and sync secrets), Cloud Build, Artifact Registry.
 
 ## Codebase
 
