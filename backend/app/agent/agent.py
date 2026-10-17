@@ -1,5 +1,6 @@
 """Build the per-mode agents, run a turn, translate ADK events into UI messages."""
 
+import uuid
 from functools import lru_cache
 from typing import AsyncIterator, Iterator
 
@@ -13,7 +14,7 @@ from google.genai import types
 
 from app.agent import prompts
 from app.agent.tools import TOOLS_BY_MODE
-from app.services import gemini
+from app.services import conversation, gemini
 from app.config import settings
 from app.domain.models import Mode, Session
 
@@ -39,13 +40,19 @@ ACTION_FOR_TOOL = {
 _sessions = InMemorySessionService()
 
 
+def instruction_for(mode: Mode, state: dict) -> str:
+    """Mode prompt plus the conversation so far, read from the session state each turn."""
+    history = state.get("history") or ""
+    return prompts.for_mode(mode) + (f"\n\n{history}\n" if history else "")
+
+
 def build(mode: Mode) -> LlmAgent:
     return LlmAgent(
         name=f"retail_{mode}",
         model=Gemini(model=settings.gemini_flash_model, retry_options=gemini.RETRY,
                      client_kwargs=gemini.client_kwargs()),
         generate_content_config=gemini.FAST,
-        instruction=prompts.for_mode(mode),
+        instruction=lambda ctx: instruction_for(mode, dict(ctx.state)),
         tools=list(TOOLS_BY_MODE[mode]),
     )
 
@@ -72,23 +79,35 @@ def translate(event: Event) -> Iterator[dict]:
             yield {"type": "token" if event.partial else "done", "text": part.text}
 
 
-async def _ensure_session(s: Session) -> None:
-    existing = await _sessions.get_session(app_name=APP_NAME, user_id=s.session_id, session_id=s.session_id)
-    if existing is None:
-        await _sessions.create_session(
-            app_name=APP_NAME, user_id=s.session_id, session_id=s.session_id,
-            state={"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id,
-                   "session_id": s.session_id, "language": s.language})
+async def _fresh_session(s: Session) -> str:
+    """One ADK session per turn. Memory of record is the Firestore conversation, injected as state."""
+    sid = uuid.uuid4().hex
+    await _sessions.create_session(
+        app_name=APP_NAME, user_id=s.session_id, session_id=sid,
+        state={"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id,
+               "language": s.language, "history": conversation.history_text(s)})
+    return sid
 
 
 async def chat(s: Session, text: str, image: tuple[bytes, str] | None = None) -> AsyncIterator[dict]:
-    await _ensure_session(s)
+    sid = await _fresh_session(s)
+    reply = ""
     parts = [types.Part(text=text)]
     if image:
         parts.append(types.Part.from_bytes(data=image[0], mime_type=image[1]))
     msg = types.Content(role="user", parts=parts)
     cfg = RunConfig(streaming_mode=StreamingMode.SSE, max_llm_calls=MAX_LLM_CALLS)
-    async for event in runner(s.mode).run_async(user_id=s.session_id, session_id=s.session_id,
-                                                 new_message=msg, run_config=cfg):
-        for ui in translate(event):
-            yield ui
+    try:
+        async for event in runner(s.mode).run_async(user_id=s.session_id, session_id=sid,
+                                                     new_message=msg, run_config=cfg):
+            for ui in translate(event):
+                if ui["type"] == "done":
+                    reply = ui["text"]
+                yield ui
+    finally:
+        conversation.add_turn(s, "user", text if not image else f"{text} (with a photo)")
+        conversation.add_turn(s, "assistant", reply)
+        try:
+            await _sessions.delete_session(app_name=APP_NAME, user_id=s.session_id, session_id=sid)
+        except Exception:
+            pass

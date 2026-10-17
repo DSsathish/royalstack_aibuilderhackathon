@@ -59,6 +59,7 @@ Companion to `hld.md` section 3. Every row is implemented in the code path named
 | Control | Implementation | Test |
 |---|---|---|
 | Secrets in Secret Manager mounted as env (`QR_SESSION_SIGNING_KEY`, `JOB_KEY`); `.env` git-ignored and excluded from Cloud Build uploads | `backend/.gcloudignore`, root `.gitignore` | *console* |
+| Conversation memory stores text turns only (no audio), 600 chars per turn, keyed by the anonymous session for shoppers and by the owner's uid for owners; shoppers' memory is unreachable after the 4 h session expires because the key is never reissued | `services/conversation.py` | `test_conversation.py` |
 | Bag photos processed in memory only; stored fields are verdict, confidence, item names and a SHA-256 of the bytes | `services/verification.py::verify_exit` (`image_hash`) | `test_verification.py::test_vision_low_confidence_flags`, `test_api_exit.py::test_verify_with_bag_image` |
 | Audit trail for imports, settings changes, purchase-order decisions | `stores/{id}/audit` writes in `api/owner_import.py`, `api/owner.py`, `services/reorder.py` | `test_api_owner_import.py::test_import_writes_audit`, `test_reorder.py::test_approve_and_reject` |
 | Runtime service account has only the roles it needs (Firestore user, BigQuery data editor/job user, Vertex user, secret accessor, Pub/Sub publisher, log writer) | `docs/plan/01-phase-0-setup.md`, created 15 Oct | *console* |
@@ -70,4 +71,4 @@ Companion to `hld.md` section 3. Every row is implemented in the code path named
 - Cart `add` is read-modify-write outside a transaction; a simultaneous add from chat and scan could drop a line.
 - Owner membership is not revoked when an email is removed from `owner_emails`.
 - Firebase web API key should be restricted by HTTP referrer in the Google Cloud console, and only the Google provider should be enabled in Firebase Auth (*console*).
-- Verification records are kept indefinitely; the 90-day retention job from the plan is not implemented.
+- Verification records and conversation turns are kept indefinitely; the 90-day retention job from the plan is not implemented.

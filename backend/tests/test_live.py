@@ -71,3 +71,54 @@ def test_websocket_accepts_owner_session_from_owner_endpoint_outside_dev(store_i
     with pytest.raises(Exception):
         with client.websocket_connect(f"/agent/live?session_id={dev_s.session_id}") as ws:
             ws.receive_text()
+
+
+def test_live_config_has_voice_vad_resumption_compression_and_history(store_id):
+    from google.genai import types
+    from app.domain.models import Store
+    from app.services import conversation, sessions
+    db.store_ref(store_id).set(Store(store_id=store_id, name="S").model_dump())
+    s = sessions.create(store_id, "instore")
+    conversation.add_turn(s, "user", "Do you have basmati rice?")
+    cfg = live._config(s)
+    assert cfg.speech_config.voice_config.prebuilt_voice_config.voice_name == "Kore"
+    vad = cfg.realtime_input_config.automatic_activity_detection
+    assert vad.silence_duration_ms == 900 and vad.prefix_padding_ms == 300
+    assert vad.end_of_speech_sensitivity == types.EndSensitivity.END_SENSITIVITY_LOW
+    assert cfg.session_resumption is not None and cfg.context_window_compression is not None
+    assert cfg.enable_affective_dialog is True
+    assert "basmati rice" in cfg.system_instruction and "ask the shopper to repeat" in cfg.system_instruction
+    assert "navigate_to" in {d.name for d in cfg.tools[0].function_declarations}
+
+
+def test_config_reuses_a_stored_resumption_handle(store_id):
+    from app.domain.models import Store
+    from app.services import sessions
+    db.store_ref(store_id).set(Store(store_id=store_id, name="S").model_dump())
+    s = sessions.create(store_id, "instore")
+    live._resume_handles[s.session_id] = "abc123"
+    assert live._config(s).session_resumption.handle == "abc123"
+    live._resume_handles.pop(s.session_id, None)
+    assert live._config(s).session_resumption.handle is None
+
+
+def test_turn_recorder_saves_on_turn_complete_and_interruption():
+    saved = []
+    rec = live.TurnRecorder(lambda role, text: saved.append((role, text)))
+    rec.user("where is "); rec.user("atta?")
+    rec.assistant("Aisle A1, "); rec.assistant("bay 2.")
+    rec.turn_complete()
+    assert saved == [("user", "where is atta?"), ("assistant", "Aisle A1, bay 2.")]
+    rec.assistant("The price is"); rec.interrupted()
+    assert saved[-1] == ("assistant", "The price is")
+    rec.turn_complete()
+    assert len(saved) == 3           # nothing new to save
+
+
+def test_search_in_store_also_highlights_the_top_product_on_the_map():
+    result = {"products": [{"product_id": "p1", "name": "Atta", "aisle": "A1", "bay": 2}, {"product_id": "p2", "name": "Rice", "aisle": "A1", "bay": 3}], "signal": "found"}
+    extra = live.extra_actions("search_products", result, {"mode": "instore"})
+    assert extra == [{"type": "action", "name": "highlight_map", "data": {"aisle": "A1", "bay": 2, "product_id": "p1", "name": "Atta", "shelf": 1, "side": "left", "x": 0, "y": 0}}]
+    assert live.extra_actions("search_products", result, {"mode": "online"}) == []
+    assert live.extra_actions("search_products", {"products": [], "signal": "not_carried"}, {"mode": "instore"}) == []
+    assert live.extra_actions("get_product", result, {"mode": "instore"}) == []

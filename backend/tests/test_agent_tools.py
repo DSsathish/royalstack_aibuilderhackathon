@@ -133,3 +133,10 @@ def test_owner_tools_forecast_and_drafts(shop, monkeypatch):
     assert "exits" in tools.get_anomalies(tool_context=ctx(shop, mode="owner"))
     names = {t.__name__ for t in tools.TOOLS_BY_MODE["owner"]}
     assert {"forecast_demand", "draft_purchase_order", "get_anomalies"} <= names
+
+
+def test_add_to_cart_resolves_a_name_when_the_id_is_unknown(shop):
+    out = tools.add_to_cart("toned milk", 1, tool_context=ctx(shop))
+    assert out["ok"] and out["cart"]["items"][0]["product_id"] == f"{shop}-milk" and out["resolved_from"] == "toned milk"
+    out = tools.add_to_cart("india-gate-basmati-rice-5kg", 1, tool_context=ctx(shop))
+    assert out == {"ok": False, "error": "unknown_product"}      # nothing matches: still an honest error

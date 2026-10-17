@@ -14,13 +14,15 @@ from app.agent.agent import ACTION_FOR_TOOL
 from app.agent.tools import TOOLS_BY_MODE
 from app.config import settings
 from app.domain.models import Mode, Session
-from app.services import gemini
+from app.services import conversation, gemini
 
 log = logging.getLogger(__name__)
 _TYPES = {str: "STRING", int: "INTEGER", float: "NUMBER", bool: "BOOLEAN"}
-MAX_SESSION_S = 900          # a store conversation; the client can reconnect
+MAX_SESSION_S = 1800         # with context compression a conversation can run long; the client reconnects after
 MAX_AUDIO_FRAME = 32_000     # 1 s of PCM16 at 16 kHz; the worklet sends 3.2 KB chunks
 _active: set[str] = set()    # session ids with an open live socket (one Vertex session each)
+_resume_handles: dict[str, str] = {}   # session id -> latest Live resumption handle (reconnects continue the conversation)
+VOICE_NAME = "Kore"
 
 
 class SessionBusy(Exception):
@@ -30,7 +32,36 @@ VOICE_BLOCK = """
 You are speaking aloud. Keep each reply to one or two short sentences. Say prices and aisles
 plainly. After a tool call, tell the shopper what you did in a few words. If they interrupt, stop
 and listen.
+If you did not clearly hear or understand, say what you heard and ask the shopper to repeat.
+Never guess a product name. Use the conversation so far: "that one", "the same", "add it" refer
+to what was just discussed; call search_products to get its product_id before add_to_cart.
 """
+
+
+class TurnRecorder:
+    """Accumulates live transcription chunks and saves whole turns through the callback."""
+
+    def __init__(self, save) -> None:
+        self._save, self._user, self._ai = save, "", ""
+
+    def user(self, chunk: str) -> None:
+        self._user += chunk
+
+    def assistant(self, chunk: str) -> None:
+        self._ai += chunk
+
+    def _flush(self) -> None:
+        if self._user.strip():
+            self._save("user", self._user.strip())
+        if self._ai.strip():
+            self._save("assistant", self._ai.strip())
+        self._user, self._ai = "", ""
+
+    def turn_complete(self) -> None:
+        self._flush()
+
+    def interrupted(self) -> None:
+        self._flush()
 
 
 def declarations(mode: Mode) -> list[types.FunctionDeclaration]:
@@ -49,6 +80,18 @@ def declarations(mode: Mode) -> list[types.FunctionDeclaration]:
     return out
 
 
+def extra_actions(name: str, result: dict, state: dict) -> list[dict]:
+    """UI actions derived from tool results in code, so they never depend on the model remembering a follow-up call.
+    In-store, a product search highlights the top product's shelf on the map."""
+    if name == "search_products" and state.get("mode") == "instore":
+        top = next((p for p in result.get("products") or [] if p.get("aisle")), None)
+        if top:
+            return [{"type": "action", "name": "highlight_map", "data": {
+                "aisle": top["aisle"], "bay": top.get("bay") or 1, "shelf": 1, "side": "left", "x": 0, "y": 0,
+                "product_id": top["product_id"], "name": top["name"]}}]
+    return []
+
+
 def dispatch(name: str, args: dict, state: dict) -> dict:
     fn = next((f for f in TOOLS_BY_MODE[state["mode"]] if f.__name__ == name), None)
     if not fn:
@@ -60,13 +103,22 @@ def dispatch(name: str, args: dict, state: dict) -> dict:
         return {"error": str(exc)[:200]}
 
 
-def _config(mode: Mode) -> types.LiveConnectConfig:
+def _config(s: Session) -> types.LiveConnectConfig:
+    history = conversation.history_text(s)
     return types.LiveConnectConfig(
         response_modalities=["AUDIO"],
-        system_instruction=prompts.for_mode(mode) + VOICE_BLOCK,
-        tools=[types.Tool(function_declarations=declarations(mode))],
+        system_instruction=prompts.for_mode(s.mode) + VOICE_BLOCK + (f"\n{history}\n" if history else ""),
+        tools=[types.Tool(function_declarations=declarations(s.mode))],
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),
+        speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE_NAME))),
+        realtime_input_config=types.RealtimeInputConfig(automatic_activity_detection=types.AutomaticActivityDetection(
+            start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
+            end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+            prefix_padding_ms=300, silence_duration_ms=900)),
+        enable_affective_dialog=True,
+        context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
+        session_resumption=types.SessionResumptionConfig(handle=_resume_handles.get(s.session_id)),
     )
 
 
@@ -83,7 +135,16 @@ async def run(ws: WebSocket, s: Session) -> None:
 async def _run(ws: WebSocket, s: Session) -> None:
     state = {"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "language": s.language}
     client = gemini.client()
-    async with client.aio.live.connect(model=settings.gemini_live_model, config=_config(s.mode)) as live:
+    recorder = TurnRecorder(lambda role, text: conversation.add_turn(s, role, text))
+    try:
+        cm = client.aio.live.connect(model=settings.gemini_live_model, config=_config(s))
+        live = await cm.__aenter__()
+    except Exception:
+        if not _resume_handles.pop(s.session_id, None):
+            raise
+        cm = client.aio.live.connect(model=settings.gemini_live_model, config=_config(s))   # stale handle: start fresh
+        live = await cm.__aenter__()
+    try:
         await ws.send_text(json.dumps({"type": "ready"}))
 
         async def uplink() -> None:
@@ -103,6 +164,7 @@ async def _run(ws: WebSocket, s: Session) -> None:
                     if not isinstance(frame, dict):
                         continue
                     if frame.get("type") == "text" and frame.get("text"):
+                        recorder.user(str(frame["text"])[:2000])   # typed frames have no audio transcription
                         await live.send_client_content(
                             turns=types.Content(role="user", parts=[types.Part(text=str(frame["text"])[:2000])]), turn_complete=True)
                     elif frame.get("type") == "end":
@@ -111,19 +173,27 @@ async def _run(ws: WebSocket, s: Session) -> None:
         async def downlink() -> None:
             while True:  # receive() yields one turn and stops at turn_complete; the session stays open
               async for msg in live.receive():
+                  if msg.session_resumption_update and msg.session_resumption_update.new_handle:
+                      _resume_handles[s.session_id] = msg.session_resumption_update.new_handle
+                  if msg.go_away:
+                      await ws.send_text(json.dumps({"type": "reconnect"}))
                   sc = msg.server_content
                   if sc:
                       if sc.interrupted:
+                          recorder.interrupted()
                           await ws.send_text(json.dumps({"type": "interrupted"}))
                       if sc.input_transcription and sc.input_transcription.text:
+                          recorder.user(sc.input_transcription.text)
                           await ws.send_text(json.dumps({"type": "transcript", "role": "user", "text": sc.input_transcription.text}))
                       if sc.output_transcription and sc.output_transcription.text:
+                          recorder.assistant(sc.output_transcription.text)
                           await ws.send_text(json.dumps({"type": "transcript", "role": "assistant", "text": sc.output_transcription.text}))
                       if sc.model_turn:
                           for part in sc.model_turn.parts:
                               if part.inline_data and part.inline_data.data:
                                   await ws.send_bytes(part.inline_data.data)
                       if sc.turn_complete:
+                          recorder.turn_complete()
                           await ws.send_text(json.dumps({"type": "turn_complete"}))
                   if msg.tool_call:
                       responses = []
@@ -131,6 +201,8 @@ async def _run(ws: WebSocket, s: Session) -> None:
                           await ws.send_text(json.dumps({"type": "status", "tool": call.name}))
                           result = await asyncio.to_thread(dispatch, call.name, dict(call.args or {}), state)
                           await ws.send_text(json.dumps({"type": "action", "name": ACTION_FOR_TOOL.get(call.name, call.name), "data": result}, ensure_ascii=False))
+                          for extra in extra_actions(call.name, result, state):
+                              await ws.send_text(json.dumps(extra, ensure_ascii=False))
                           responses.append(types.FunctionResponse(id=call.id, name=call.name, response=result))
                       await live.send_tool_response(function_responses=responses)
 
@@ -145,3 +217,6 @@ async def _run(ws: WebSocket, s: Session) -> None:
         finally:
             for t in (up, down):
                 t.cancel()
+            recorder.turn_complete()
+    finally:
+        await cm.__aexit__(None, None, None)

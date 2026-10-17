@@ -103,8 +103,8 @@ export default function Chat() {
         onLevel: (l) => setLevel(l),
         onState: (st) => {
           setLive(st);
-          setOrb(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" ? "connecting" : "idle");
-          setAvatar(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" ? "thinking" : "idle");
+          setOrb(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" || st === "reconnecting" ? "connecting" : "idle");
+          setAvatar(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "closed" ? "idle" : "thinking");
           if (st === "closed") { closedEarly = true; liveStop.current = null; liveMsg.current = { user: null, assistant: null }; setLevel(0); }
         },
         onFrame: (f: LiveFrame) => {
@@ -114,6 +114,7 @@ export default function Chat() {
             else patch(cur, { text: (useApp.getState().messages.find((m) => m.id === cur)?.text ?? "") + f.text });
             if (slot === "user") liveMsg.current.assistant = null;
           } else if (f.type === "turn_complete") liveMsg.current = { user: null, assistant: null };
+          else if (f.type === "status") setOrb("thinking");      // a tool is running; the voice resumes when audio arrives
           else if (f.type === "action") { const id = liveMsg.current.assistant ?? (liveMsg.current.assistant = push({ role: "assistant", text: "" })); handleAction(f.name, f.data, id); }
           else if (f.type === "error") push({ role: "assistant", text: f.text });
         },
@@ -153,7 +154,7 @@ export default function Chat() {
   function endTalk() { if (liveStop.current) liveStop.current(); if (voiceRef.current) stopVoice(); }
   useEffect(() => () => { if (voiceRef.current) stopVoice(); liveStop.current?.(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const orbCaption = live === "connecting" ? "Connecting" : orb === "listening" ? "Listening. Just talk, interrupt any time" : orb === "speaking" ? "Speaking" : orb === "thinking" ? "Thinking" : "Tap to talk";
+  const orbCaption = live === "reconnecting" ? "Reconnecting, keep talking" : live === "connecting" ? "Connecting" : orb === "listening" ? "Listening. Just talk, interrupt any time" : orb === "speaking" ? "Speaking" : orb === "thinking" ? "Checking" : "Tap to talk";
 
   return (
     <div className="flex flex-col h-full">
