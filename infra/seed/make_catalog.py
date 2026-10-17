@@ -128,9 +128,9 @@ def expand(main: str, sub: str, entry: str, meta: tuple, seen: set, counter: Cou
 
 def main() -> None:
     sys.path.insert(0, str(HERE.parent.parent / "backend"))
-    existing = list(csv.DictReader(SRC.open(encoding="utf-8")))
     if not BACKUP.exists():
         BACKUP.write_text(SRC.read_text(encoding="utf-8"), encoding="utf-8")
+    existing = list(csv.DictReader(BACKUP.open(encoding="utf-8")))      # always expand from the original file, so re-runs are idempotent
     seen = set()
     out, changed = [], Counter()
     for r in existing:
