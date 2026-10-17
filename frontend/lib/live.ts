@@ -3,11 +3,11 @@
 import { API } from "./api";
 
 export type LiveFrame =
-  | { type: "ready" } | { type: "interrupted" } | { type: "turn_complete" } | { type: "status"; tool: string }
+  | { type: "ready" } | { type: "interrupted" } | { type: "turn_complete" } | { type: "reconnect" } | { type: "status"; tool: string }
   | { type: "transcript"; role: "user" | "assistant"; text: string }
   | { type: "action"; name: string; data: Record<string, unknown> } | { type: "error"; text: string };
 
-export type LiveState = "connecting" | "listening" | "speaking" | "closed";
+export type LiveState = "connecting" | "reconnecting" | "listening" | "speaking" | "closed";
 export type LiveHandlers = { onFrame: (f: LiveFrame) => void; onState: (s: LiveState) => void; onLevel?: (level: number, who: "mic" | "ai") => void };
 
 /** RMS of an analyser's time-domain signal, 0..1 with a speech-friendly curve. */
@@ -49,8 +49,11 @@ export async function startLive(sessionId: string, h: LiveHandlers): Promise<() 
   let scheduled: AudioBufferSourceNode[] = [];
   let speakingTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const ws = new WebSocket(`${API.replace(/^http/, "ws")}/agent/live?session_id=${sessionId}`);
-  ws.binaryType = "arraybuffer";
+  const url = `${API.replace(/^http/, "ws")}/agent/live?session_id=${sessionId}`;
+  let ws: WebSocket;
+  let ready = false;
+  let attempts = 0;
+  let fatal = false;
 
   function playChunk(buf: ArrayBuffer) {
     const pcm = new Int16Array(buf);
@@ -71,23 +74,35 @@ export async function startLive(sessionId: string, h: LiveHandlers): Promise<() 
     scheduled = []; playHead = 0; clearTimeout(speakingTimer); setState("listening");
   }
 
-  let ready = false;
-  node.port.onmessage = (e) => { if (ready && ws.readyState === WebSocket.OPEN) ws.send(e.data as ArrayBuffer); };   // drop audio captured before the model is ready
-  ws.onmessage = (e) => {
-    if (e.data instanceof ArrayBuffer) { playChunk(e.data); return; }
-    const f = JSON.parse(e.data) as LiveFrame;
-    if (f.type === "ready") { ready = true; setState("listening"); }
-    if (f.type === "interrupted") flush();
-    h.onFrame(f);
-  };
-  ws.onclose = () => stop();
-  ws.onerror = () => { h.onFrame({ type: "error", text: "Live voice connection failed." }); stop(); };
+  function connect(reconnect = false) {
+    ready = false;
+    setState(reconnect ? "reconnecting" : "connecting");
+    ws = new WebSocket(url);
+    ws.binaryType = "arraybuffer";
+    ws.onmessage = (e) => {
+      if (e.data instanceof ArrayBuffer) { playChunk(e.data); return; }
+      const f = JSON.parse(e.data) as LiveFrame;
+      if (f.type === "ready") { ready = true; attempts = 0; setState("listening"); }
+      if (f.type === "interrupted") flush();
+      if (f.type === "error") fatal = true;
+      if (f.type === "reconnect") { try { ws.close(); } catch {} }     // server is rotating the session: reconnect with resumption
+      h.onFrame(f);
+    };
+    ws.onclose = () => {
+      if (stopped || fatal) { stop(); return; }
+      if (attempts < 3) { attempts += 1; setTimeout(() => connect(true), 400 * attempts); }   // keep mic and playback alive across the gap
+      else { h.onFrame({ type: "error", text: "Live voice lost the connection. Tap Talk to start again." }); stop(); }
+    };
+    ws.onerror = () => { /* onclose follows and decides */ };
+  }
+  node.port.onmessage = (e) => { if (ready && ws && ws.readyState === WebSocket.OPEN) ws.send(e.data as ArrayBuffer); };
+  connect();
 
   let stopped = false;
   function stop() {
     if (stopped) return; stopped = true;
-    try { ws.send(JSON.stringify({ type: "end" })); } catch {}
-    try { ws.close(); } catch {}
+    try { ws?.send(JSON.stringify({ type: "end" })); } catch {}
+    try { ws?.close(); } catch {}
     cancelAnimationFrame(levelRaf);
     node.port.onmessage = null; source.disconnect(); node.disconnect();
     stream.getTracks().forEach((t) => t.stop());

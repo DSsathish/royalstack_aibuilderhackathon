@@ -24,3 +24,4 @@ Rules we follow in code:
 | live speech-to-speech bridge, PCM worklet, live client (shopper and owner) | [live-voice.md](live-voice.md) | done |
 | forecasts, reorder drafts, insights, owner API, forecast job, owner dashboard | [phase-6-owner.md](phase-6-owner.md) | done |
 | universal normalizer (column mapping agent), dataset import | [normalizer.md](normalizer.md) | done; dataset import awaits a Kaggle file |
+| conversation memory, voice tuning, reconnect, named voice | [voice-memory.md](voice-memory.md) | done |

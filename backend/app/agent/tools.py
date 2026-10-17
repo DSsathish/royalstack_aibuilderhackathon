@@ -80,12 +80,22 @@ def navigate_to(product_id: str, tool_context: ToolContext) -> dict:
 
 
 def add_to_cart(product_id: str, qty: int, tool_context: ToolContext) -> dict:
-    """Add qty units of a product to the shopper's cart. Fails with out_of_stock, item_limit or unknown_product."""
+    """Add qty units of a product to the shopper's cart. Use the product_id from search_products; a product name
+    also works and is matched to the catalog. Fails with out_of_stock, item_limit or unknown_product."""
     s = tool_context.state
+    resolved = None
+    if not catalog.get_product(s["store_id"], product_id):
+        hits = [h for h in catalog.search(s["store_id"], product_id.replace("-", " "), k=3) if h.available > 0]
+        if not hits:
+            return {"ok": False, "error": "unknown_product"}
+        resolved, product_id = product_id, hits[0].product_id
     res = cart_svc.add(s["store_id"], s["cart_id"], product_id, qty, via="chat", mode=s.get("mode", "online"))
     if isinstance(res, str):
         return {"ok": False, "error": res}
-    return {"ok": True, "cart": _cart_summary(res)}
+    out = {"ok": True, "cart": _cart_summary(res)}
+    if resolved:
+        out["resolved_from"] = resolved
+    return out
 
 
 def remove_from_cart(product_id: str, tool_context: ToolContext) -> dict:
