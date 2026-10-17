@@ -43,7 +43,7 @@ _sessions = InMemorySessionService()
 def instruction_for(mode: Mode, state: dict) -> str:
     """Mode prompt, the store's identity, and the conversation so far, read from the session state each turn."""
     history = state.get("history") or ""
-    return prompts.for_mode(mode) + prompts.store_block(state) + (f"\n\n{history}\n" if history else "")
+    return prompts.for_mode(mode) + prompts.store_block(state) + prompts.customer_block(state) + (f"\n\n{history}\n" if history else "")
 
 
 def build(mode: Mode) -> LlmAgent:
@@ -85,7 +85,7 @@ async def _fresh_session(s: Session) -> str:
     await _sessions.create_session(
         app_name=APP_NAME, user_id=s.session_id, session_id=sid,
         state={"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id,
-               "language": s.language, "history": conversation.history_text(s), **prompts.store_state(s.store_id)})
+               "language": s.language, "history": conversation.history_text(s), **prompts.store_state(s.store_id), **prompts.customer_state(s)})
     return sid
 
 

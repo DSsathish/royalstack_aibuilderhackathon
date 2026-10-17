@@ -137,6 +137,7 @@ class Session(BaseModel):
     mode: Mode
     cart_id: str
     user_id: str | None = None
+    customer_id: str | None = None     # signed-in shopper (phone uid); None for guests
     language: str = "auto"
     aisle_hint: str | None = None
     created_at: datetime = Field(default_factory=now)
@@ -174,6 +175,7 @@ class Order(BaseModel):
     payment_ref: str = ""   # provider order id
     payment_id: str = ""    # provider payment id
     receipt_token: str = ""
+    customer_id: str | None = None
     created_at: datetime = Field(default_factory=now)
     paid_at: datetime | None = None
     exited_at: datetime | None = None
@@ -226,3 +228,21 @@ class PurchaseOrderDraft(BaseModel):
     decided_by: str = ""
     decided_at: datetime | None = None
     created_at: datetime = Field(default_factory=now)
+
+
+class Customer(BaseModel):
+    uid: str
+    store_id: str
+    phone_last4: str = ""
+    name: str = ""
+    language: str = "auto"
+    dietary: list[str] = []
+    favourite_categories: list[str] = []
+    usual_items: list[str] = []
+    substitution: Literal["ask", "same_brand", "any"] = "ask"
+    consent_at: datetime = Field(default_factory=now)
+    created_at: datetime = Field(default_factory=now)
+    last_seen: datetime = Field(default_factory=now)
+    visits: int = 0
+    spend: float = 0.0
+    points: int = 0

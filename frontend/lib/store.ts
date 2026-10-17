@@ -15,6 +15,8 @@ type State = {
   language: "auto" | "en" | "ta" | "hi";
   speak: boolean;
   avatar: "idle" | "listening" | "thinking" | "speaking";
+  customer: { uid: string; name: string } | null;      // signed-in shopper; null for guests
+  setCustomer: (c: State["customer"]) => void;
   setSession: (s: Session | null) => void;
   updateSession: (s: Session) => void;
   setStore: (s: Store | null) => void;
@@ -30,8 +32,9 @@ type State = {
 let nextId = 1;
 export const useApp = create<State>((set) => ({
   session: typeof window === "undefined" ? null : loadSession(),
-  store: null, cart: null, messages: [], highlight: null, language: "auto", speak: true, avatar: "idle",
-  setSession: (session) => { saveSession(session); set({ session, cart: null, messages: [], highlight: null }); },
+  store: null, cart: null, messages: [], highlight: null, language: "auto", speak: true, avatar: "idle", customer: null,
+  setCustomer: (customer) => set({ customer }),
+  setSession: (session) => { saveSession(session); set({ session, cart: null, messages: [], highlight: null, customer: null }); },
   updateSession: (session) => { saveSession(session); set({ session }); },
   setStore: (store) => set({ store }),
   setCart: (cart) => set({ cart }),

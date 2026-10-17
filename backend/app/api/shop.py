@@ -152,8 +152,9 @@ def checkout_confirm(body: ConfirmIn):
 @router.get("/orders/{order_id}", response_model=Order)
 def get_order(order_id: str = Path(pattern=HEX_ID), s: Session = Depends(session_header)):
     o = checkout.get(order_id)
-    if not o or o.session_id != s.session_id:
-        raise HTTPException(404, "order not found")
+    mine = o and (o.session_id == s.session_id or (s.customer_id is not None and o.customer_id == s.customer_id))
+    if not mine:
+        raise HTTPException(404, "order not found")      # the visit that paid, or a later visit by the same signed-in shopper
     return o
 
 

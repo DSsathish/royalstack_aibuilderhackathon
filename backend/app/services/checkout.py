@@ -9,7 +9,7 @@ import httpx
 from app.config import settings
 from app.domain.models import Order, Session, now
 from app.services import cart as cart_svc
-from app.services import db, inventory, payments, qr
+from app.services import customers, db, inventory, payments, qr
 
 
 class CheckoutError(ValueError):
@@ -47,7 +47,7 @@ def intent(s: Session) -> Order:
     provider, key_id, key_secret = _keys(s.store_id)
     o = Order(order_id=uuid.uuid4().hex, store_id=s.store_id, session_id=s.session_id, cart_id=c.cart_id,
               channel="store" if s.mode == "instore" else "online", items=c.items,
-              subtotal=subtotal, savings=savings, total=total, payment_provider=provider)
+              subtotal=subtotal, savings=savings, total=total, payment_provider=provider, customer_id=s.customer_id)
     if o.payment_provider == "razorpay":
         o.payment_ref = _razorpay_order(o, key_id, key_secret)
     db.orders().document(o.order_id).set(o.model_dump())
@@ -90,4 +90,5 @@ def confirm(order_id: str, *, payment_id: str, signature: str) -> Order:
     o.status, o.payment_id, o.paid_at = "paid", payment_id, now()
     o.receipt_token = qr.receipt_token(o.order_id, o.store_id, sum(i.qty for i in o.items))
     db.orders().document(o.order_id).set(o.model_dump())
+    customers.record_order(o)
     return o

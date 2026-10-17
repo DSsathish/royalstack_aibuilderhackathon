@@ -107,7 +107,7 @@ def _config(s: Session) -> types.LiveConnectConfig:
     history = conversation.history_text(s)
     return types.LiveConnectConfig(
         response_modalities=["AUDIO"],
-        system_instruction=prompts.for_mode(s.mode) + prompts.store_block(prompts.store_state(s.store_id)) + VOICE_BLOCK + (f"\n{history}\n" if history else ""),
+        system_instruction=prompts.for_mode(s.mode) + prompts.store_block(prompts.store_state(s.store_id)) + prompts.customer_block(prompts.customer_state(s)) + VOICE_BLOCK + (f"\n{history}\n" if history else ""),
         tools=[types.Tool(function_declarations=declarations(s.mode))],
         input_audio_transcription=types.AudioTranscriptionConfig(),
         output_audio_transcription=types.AudioTranscriptionConfig(),

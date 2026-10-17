@@ -104,6 +104,16 @@ def reject(body: RejectIn, store_id: str = STORE_ID, po_id: str = Path(pattern=r
         raise HTTPException(409, str(exc))
 
 
+@router.get("/owner/{store_id}/customers")
+def customers_list(store_id: str = STORE_ID, uid: str = Depends(current_uid)):
+    """Signed-in customers only; guests appear as counts in the overview."""
+    require_owner(store_id, uid)
+    from google.cloud import firestore
+    rows = [d.to_dict() for d in db.customers(store_id).order_by("spend", direction=firestore.Query.DESCENDING).limit(500).stream()]
+    keep = ("uid", "phone_last4", "name", "language", "dietary", "favourite_categories", "visits", "spend", "points", "last_seen", "created_at")
+    return [{k: r.get(k) for k in keep} for r in rows]
+
+
 @router.get("/owner/{store_id}/signals")
 def signals(store_id: str = STORE_ID, days: int = Query(default=7, ge=1, le=90), uid: str = Depends(current_uid)):
     require_owner(store_id, uid)

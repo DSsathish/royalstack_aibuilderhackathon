@@ -7,7 +7,7 @@ const SESSION_KEY = "rs.session";
 
 export type Session = {
   session_id: string; store_id: string; mode: "instore" | "online" | "owner";
-  cart_id: string; aisle_hint: string | null; language: string;
+  cart_id: string; aisle_hint: string | null; language: string; customer_id?: string | null;
 };
 export type Aisle = { aisle: string; x: number; y: number; w: number; h: number };
 export type Store = { store_id: string; name: string; currency: string; languages: string[];
