@@ -17,10 +17,17 @@ from app.services import db  # noqa: E402
 
 
 def delete_tree(ref) -> int:
+    """Delete a document and everything under it, in small batches (documents with embeddings are large)."""
     n = 0
     for sub in ref.collections():
+        refs = []
         for d in sub.stream():
-            n += delete_tree(d.reference)
+            if list(d.reference.collections()):
+                n += delete_tree(d.reference)
+            else:
+                refs.append(d.reference)
+        db.batched(refs, lambda b, r: b.delete(r), size=10)
+        n += len(refs)
     ref.delete()
     return n + 1
 

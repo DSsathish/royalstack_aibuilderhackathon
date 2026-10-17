@@ -29,7 +29,7 @@ def main() -> None:
     n = 0
     for name in COLLECTIONS:
         refs = [d.reference for d in ref.collection(name).stream()]
-        db.batched(refs, lambda b, r: b.delete(r))
+        db.batched(refs, lambda b, r: b.delete(r), size=10)      # product documents carry embeddings; big batches exceed the 10 MB transaction limit
         n += len(refs)
     catalog.bump(a.store)
     try:
