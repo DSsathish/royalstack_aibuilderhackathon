@@ -103,7 +103,7 @@ def test_not_carried_is_honest(shop):
 
 
 def test_add_to_cart_emits_cart_action(shop):
-    s = sessions.create(shop, "instore")
+    s = sessions.create(shop, "online")
     tools, reply, events = run(s, "Add 2 packets of Dolo 650 to my cart")
     assert "add_to_cart" in tools
     carts = [e for e in events if e["type"] == "action" and e["name"] == "cart_updated"]

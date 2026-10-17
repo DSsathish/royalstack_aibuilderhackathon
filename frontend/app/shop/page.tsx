@@ -76,7 +76,7 @@ function ChatWithPhoto({ photo, clear }: { photo: File | null; clear: () => void
         for await (const e of api.chat(session, "What is this product? Find it in the catalog.", photo)) {
           if (e.type === "token") { buffer += e.text; patch(id, { text: buffer, status: undefined }); }
           else if (e.type === "done") patch(id, { text: e.text || buffer, status: undefined });
-          else if (e.type === "action" && e.name === "show_products") patch(id, { products: e.data.products as never });
+          else if (e.type === "action" && e.name === "show_products") patch(id, { products: e.data.products as never, fromPhoto: true });
           else if (e.type === "action" && e.name === "cart_updated") setCart(await api.cart(session));
         }
       } catch { patch(id, { text: "Could not analyse the photo. Please try again.", status: undefined }); }

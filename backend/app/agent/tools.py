@@ -178,7 +178,7 @@ def get_anomalies(tool_context: ToolContext, days: int = 7) -> dict:
 
 TOOLS_BY_MODE = {
     "instore": [search_products, get_product, suggest_substitutes, navigate_to, record_demand_signal,
-                add_to_cart, remove_from_cart, view_cart, start_checkout],
+                remove_from_cart, view_cart, start_checkout],      # items enter the cart only by scanning
     "online": [search_products, get_product, suggest_substitutes, record_demand_signal,
                add_to_cart, remove_from_cart, view_cart, start_checkout],
     "owner": [search_products, get_product, get_low_stock, forecast_demand, draft_purchase_order, get_anomalies],

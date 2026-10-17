@@ -121,3 +121,18 @@ def test_malformed_ids_are_4xx_not_500(shop):
     assert client.post("/checkout/intent", json={"session_id": "a/b"}).status_code == 422
     assert client.post("/checkout/confirm", json={"order_id": "a/b", "payment_id": "p", "signature": "mock", "session_id": "0" * 32}).status_code == 422
     assert client.get("/orders/a%2Fb", headers={"X-Session-Id": "0" * 32}).status_code in (404, 422)
+
+
+def test_instore_cart_rejects_chat_adds_but_allows_scan_and_vision(shop):
+    s = enter(shop)
+    h = {"X-Session-Id": s["session_id"]}
+    body = {"product_id": f"{shop}-salt", "qty": 1}
+    assert client.post(f"/carts/{s['cart_id']}/items", json={**body, "via": "chat"}, headers=h).status_code == 409
+    assert client.post(f"/carts/{s['cart_id']}/items", json={**body, "via": "scan"}, headers=h).status_code == 200
+    assert client.post(f"/carts/{s['cart_id']}/items", json={**body, "via": "vision"}, headers=h).status_code == 200
+
+
+def test_online_cart_allows_chat_adds(shop):
+    s = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()
+    res = client.post(f"/carts/{s['cart_id']}/items", json={"product_id": f"{shop}-salt", "qty": 1, "via": "chat"}, headers={"X-Session-Id": s["session_id"]})
+    assert res.status_code == 200

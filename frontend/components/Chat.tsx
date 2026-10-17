@@ -68,7 +68,7 @@ export default function Chat() {
   }
 
   function handleAction(name: string, data: Record<string, unknown>, id: number) {
-    if (name === "show_products") patch(id, { products: (data.products as Product[]) ?? [] });
+    if (name === "show_products") patch(id, { products: (data.products as Product[]) ?? [], fromPhoto: photoTurn.current });
     else if (name === "show_product") patch(id, { products: [data as unknown as Product] });
     else if (name === "highlight_map" && data.aisle) { const loc = data as Msg["map"]; setHighlight(loc!); patch(id, { map: loc }); }
     else if (name === "cart_updated" && data.cart) refreshCart();
@@ -78,16 +78,20 @@ export default function Chat() {
   }
   async function refreshCart() { if (session) setCart(await api.cart(session)); }
 
+  const photoTurn = useRef(false);
   async function send(message: string, image?: Blob) {
     if (!session || (!message.trim() && !image)) return;
     setBusy(true); setText("");
+    photoTurn.current = !!image;
     push({ role: "user", text: message || "Photo of a product" });
     await consume(api.chat(session, message || "What is this product?", image));
     setBusy(false);
   }
-  async function addFromCard(p: Product) {
+  async function addFromCard(p: Product, fromPhoto: boolean) {
     if (!session) return;
-    try { setCart(await api.addItem(session, p.product_id, 1, "chat")); } catch (e) { push({ role: "assistant", text: `Could not add ${p.name}: ${(e as Error).message}` }); }
+    const via = session.mode === "instore" ? "vision" : "chat";      // in store, only a confirmed photo may add
+    if (session.mode === "instore" && !fromPhoto) return;
+    try { setCart(await api.addItem(session, p.product_id, 1, via)); } catch (e) { push({ role: "assistant", text: `Could not add ${p.name}: ${(e as Error).message}` }); }
   }
   const whereIs = (p: Product) => send(`Where is ${p.name}?`);
 
@@ -193,7 +197,7 @@ export default function Chat() {
             </div>
             {m.products && m.products.length > 0 && (
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3">
-                {m.products.map((p) => <ProductCard key={p.product_id} p={p} onAdd={!owner ? addFromCard : undefined} onWhere={session?.mode === "instore" ? whereIs : undefined} />)}
+                {m.products.map((p) => <ProductCard key={p.product_id} p={p} onAdd={!owner && (session?.mode !== "instore" || m.fromPhoto) ? (x) => addFromCard(x, !!m.fromPhoto) : undefined} onWhere={session?.mode === "instore" ? whereIs : undefined} />)}
               </div>
             )}
             {m.map && store && <div className="max-w-[85%]"><StoreMap aisles={store.floor_map} target={m.map} youAreHere={session?.aisle_hint} compact /></div>}
