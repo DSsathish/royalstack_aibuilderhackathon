@@ -85,3 +85,16 @@ def people() -> firestore.CollectionReference:
 
 def offers(store_id: str) -> firestore.CollectionReference:
     return store_ref(store_id).collection("offers")
+
+
+def sync_log(store_id: str) -> firestore.CollectionReference:
+    return store_ref(store_id).collection("sync_log")
+
+
+def sync_outbox(store_id: str) -> firestore.CollectionReference:
+    return store_ref(store_id).collection("sync_outbox")
+
+
+def sync_events(store_id: str) -> firestore.CollectionReference:
+    """Processed inbound event ids, for idempotency."""
+    return store_ref(store_id).collection("sync_events")

@@ -41,7 +41,7 @@ def create_product(body: ProductIn, store_id: str = STORE_ID, uid: str = Depends
                    barcode=body.barcode, brand=body.brand.strip(), category=body.category.strip(), mrp=body.mrp or body.price,
                    aisle=(body.aisle or "").strip())
     csvc.upsert(store_id, [row], high_value_threshold=store.to_dict().get("high_value_threshold", 500))
-    catalog.invalidate(store_id)
+    catalog.bump(store_id)
     db.audit(store_id).document(uuid.uuid4().hex).set({"actor": uid, "action": "product_saved", "created_at": now(),
                                                        "payload": {"barcode": body.barcode, "name": body.name}})
     view = catalog.get_product(store_id, f"{store_id}-{csvc.slug(row.sku)}")

@@ -28,3 +28,9 @@ def test_forecast_job_covers_every_store_when_no_store_given(store_id, monkeypat
     db.store_ref(store_id).set(Store(store_id=store_id, name="S").model_dump())
     res = client.post("/jobs/forecast", headers={"X-Job-Key": "test-job-key"})
     assert res.status_code == 200 and store_id in seen
+
+
+def test_sync_job_requires_key(store_id):
+    assert client.post("/jobs/sync").status_code == 401
+    res = client.post("/jobs/sync", headers={"X-Job-Key": "test-job-key"})
+    assert res.status_code == 200 and "pulled" in res.json()

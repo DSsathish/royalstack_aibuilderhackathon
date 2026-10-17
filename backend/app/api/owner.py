@@ -265,3 +265,11 @@ def customers_job(x_job_key: str | None = Header(default=None)):
     _job_key(x_job_key)
     from app.jobs import customers as job
     return job.run()
+
+
+@router.post("/jobs/sync")
+def sync_job(x_job_key: str | None = Header(default=None)):
+    """Every 15 minutes: due feed pulls and outbox retries for every store."""
+    _job_key(x_job_key)
+    from app.services import sync
+    return sync.run_scheduled()
