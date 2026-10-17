@@ -76,3 +76,45 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em
 .bubble-ai { background: var(--surface); border: 1px solid var(--line); border-radius: 18px 18px 18px 4px; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+
+/* Owner dashboard: a fixed light workspace, ruled like a ledger. It ignores the device's dark mode on purpose:
+   stock tables are read at a counter in daylight, and status colours must mean the same thing on every screen. */
+[data-theme="owner"] {
+  --bg: #f3f4f0; --surface: #ffffff; --surface-2: #eceeea; --ink: #182420; --muted: #66736d; --line: #dfe3de;
+  --accent: #1e7d55; --accent-ink: #ffffff; --accent-soft: #e2f1e8; --good: #1e7d55; --warn: #a86a00; --bad: #b5362b;
+  --bad-soft: #fae3e0; --good-soft: #e2f1e8; --warn-soft: #fbefd6; color-scheme: light;
+  background: var(--bg); color: var(--ink);
+}
+[data-theme="owner"] .card { border-radius: 10px; }
+[data-theme="owner"] .btn { border-radius: 8px; }
+[data-theme="owner"] .field { border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+[data-theme="owner"] .chip { border-radius: 6px; letter-spacing: 0; font-size: 12px; font-weight: 500; }
+[data-theme="owner"] .eyebrow { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; }
+.label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.rail { width: 236px; flex: none; border-right: 1px solid var(--line); background: var(--surface); flex-direction: column; }
+.rail-group { padding: 14px 14px 4px; font-size: 11.5px; color: var(--muted); font-weight: 500; }
+.rail-link { display: flex; align-items: center; width: calc(100% - 16px); margin: 0 8px; text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--ink); }
+.rail-link:hover { background: var(--surface-2); }
+.rail-link[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+.page-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; padding: 20px 16px 12px; }
+@media (min-width: 1024px) { .page-head { padding: 24px 24px 14px; } }
+.page-head h1 { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.page-head p { font-size: 13.5px; color: var(--muted); margin-top: 2px; max-width: 64ch; }
+.figures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+@media (min-width: 768px) { .figures { grid-template-columns: repeat(4, 1fr); } }
+.figure { background: var(--surface); padding: 14px 16px; min-width: 0; }
+.figure .value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 500; line-height: 1.1; margin-top: 4px; }
+.table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 72vh; }
+.table { width: 100%; font-size: 13.5px; border-collapse: separate; border-spacing: 0; }
+.table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.table thead th.num { text-align: right; }
+.table td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table tbody tr:hover td { background: var(--surface-2); }
+.table .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.status { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: currentColor; flex: none; }
+.status-ok { color: var(--good); } .status-low { color: var(--warn); } .status-out { color: var(--bad); } .status-dead, .status-overstock { color: var(--muted); }
+.section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.section > h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }

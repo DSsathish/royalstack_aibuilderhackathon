@@ -12,11 +12,27 @@ import Chat from "@/components/Chat";
 import RevenueChart from "@/components/RevenueChart";
 
 type Tab = "overview" | "inventory" | "reorders" | "signals" | "customers" | "offers" | "loss" | "connectors" | "setup" | "exits" | "chat";
-const OWNER_TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" }, { id: "inventory", label: "Inventory" }, { id: "reorders", label: "Reorders" },
-  { id: "signals", label: "Signals" }, { id: "customers", label: "Customers" }, { id: "offers", label: "Offers" }, { id: "loss", label: "Loss" }, { id: "connectors", label: "Connectors" }, { id: "setup", label: "Store" }, { id: "chat", label: "Ask" },
+const NAV: { group: string; items: { id: Tab; label: string }[] }[] = [
+  { group: "Today", items: [{ id: "overview", label: "Overview" }, { id: "chat", label: "Ask the assistant" }] },
+  { group: "Stock", items: [{ id: "inventory", label: "Inventory" }, { id: "reorders", label: "Reorders" }, { id: "signals", label: "Demand signals" }] },
+  { group: "Customers", items: [{ id: "customers", label: "Customers" }, { id: "offers", label: "Offers" }] },
+  { group: "Trust", items: [{ id: "loss", label: "Loss and shrink" }, { id: "exits", label: "Exit checks" }] },
+  { group: "Store", items: [{ id: "setup", label: "Store settings" }, { id: "connectors", label: "Connectors" }] },
 ];
-const STAFF_TABS: { id: Tab; label: string }[] = [{ id: "inventory", label: "Shelf counts" }, { id: "exits", label: "Exits" }];
+const STAFF_IDS: Tab[] = ["inventory", "exits"];
+const TITLES: Record<Tab, [string, string]> = {
+  overview: ["Today", "Sales so far, stock that needs attention, and decisions waiting for you."],
+  chat: ["Ask the assistant", "The same assistant your shoppers use, on your side of the counter. Type or talk."],
+  inventory: ["Inventory", "Stock on hand, how fast it sells and when to reorder. Click a reorder number to change it."],
+  reorders: ["Reorders", "Purchase order drafts grouped by supplier. Nothing is sent until you approve it."],
+  signals: ["Demand signals", "What shoppers asked for that you do not carry or had run out of."],
+  customers: ["Customers", "Shoppers who chose to sign in, grouped into segments you can target with offers."],
+  offers: ["Offers", "Discounts that apply themselves in the cart. The best one wins per item and one per bill."],
+  loss: ["Loss and shrink", "Shelf counts against system stock, exit outcomes and the controls behind them."],
+  exits: ["Exit checks", "Every receipt scanned at the exit kiosk and how it was cleared."],
+  setup: ["Store settings", "Products, aisles, branding, QR codes, team and payments."],
+  connectors: ["Connectors", "Bring products in from a file, keep stock in sync with your billing system, print QR codes."],
+};
 
 export default function OwnerPage() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -36,7 +52,9 @@ export default function OwnerPage() {
     owner.me().then((m) => { setStores(m.stores); setRoles(m.roles); setStore(m.stores[0] ?? ""); setLoadedMe(true); if (m.roles[m.stores[0]] === "staff") setTab("inventory"); }).catch((e) => { setError(e.message); setLoadedMe(true); });
   }, [user, verifiedTick]);
   const role = roles[store] ?? "owner";
-  const TABS = role === "staff" ? STAFF_TABS : OWNER_TABS;
+  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => role !== "staff" || STAFF_IDS.includes(i.id)) })).filter((g) => g.items.length);
+  const [storeName, setStoreName] = useState("");
+  useEffect(() => { if (store) owner.store(store).then((d) => setStoreName(d.name)).catch(() => setStoreName(store)); }, [store]);
 
   if (user === undefined) return <main className="p-6 text-muted">Loading…</main>;
   if (!user?.email) return <OwnerSignIn />;          // shoppers signed in by phone are not owners
@@ -46,19 +64,35 @@ export default function OwnerPage() {
     return <RegisterForm email={user.email ?? ""} error={error} onDone={(s, pin) => { setStores([s.store_id]); setRoles({ [s.store_id]: "owner" }); setStore(s.store_id); setNewPin(pin); setTab("setup"); }} />;
   }
 
+  const picker = stores.length > 1
+    ? <select value={store} onChange={(e) => setStore(e.target.value)} className="field mt-1" aria-label="Store">{stores.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+    : <div className="font-semibold text-[15px] leading-tight mt-0.5 truncate">{storeName || store}</div>;
   return (
-    <div className="flex flex-col h-dvh">
-      <header className="flex items-center gap-3 px-4 py-2.5 border-b border-line bg-surface">
-        <img src="/icon.svg" alt="" className="w-7 h-7" />
-        <div><div className="eyebrow leading-none">Owner</div><div className="display font-semibold leading-tight">Royal Stack</div></div>
-        {stores.length > 1 ? <select value={store} onChange={(e) => setStore(e.target.value)} className="field w-auto py-1 text-sm">{stores.map((s) => <option key={s}>{s}</option>)}</select> : <span className="chip chip-muted">{store}</span>}
-        <span className="flex-1" />
-        <span className="text-xs text-muted hidden sm:inline">{user.email}</span>
-        <button onClick={() => signOutOwner()} className="btn btn-ghost py-1.5 text-xs">Sign out</button>
-      </header>
-      <nav className="flex overflow-x-auto border-b border-line text-sm bg-surface">
-        {TABS.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={`px-4 py-2.5 whitespace-nowrap font-semibold ${tab === t.id ? "border-b-2 border-accent text-ink" : "text-muted"}`}>{t.label}</button>)}
-      </nav>
+    <div data-theme="owner" className="min-h-dvh flex bg-bg text-ink">
+      <aside className="rail hidden lg:flex">
+        <div className="px-4 py-4 border-b border-line"><div className="label">Royal Stack</div>{picker}</div>
+        <nav className="flex-1 overflow-y-auto py-2">
+          {nav.map((g) => (
+            <div key={g.group}>
+              <div className="rail-group">{g.group}</div>
+              {g.items.map((i) => <button key={i.id} aria-current={tab === i.id ? "page" : undefined} onClick={() => setTab(i.id)} className="rail-link">{i.label}</button>)}
+            </div>
+          ))}
+        </nav>
+        <div className="px-4 py-3 border-t border-line text-xs text-muted">
+          <div className="truncate" title={user.email}>{user.email}</div>
+          <div className="flex gap-3 mt-1"><button onClick={() => signOutOwner()} className="underline">Sign out</button><Link href="/" className="underline">Shopper app</Link></div>
+        </div>
+      </aside>
+      <div className="flex-1 min-w-0 flex flex-col h-dvh">
+        <header className="lg:hidden flex items-center gap-3 px-4 py-2.5 border-b border-line bg-surface">
+          <div className="min-w-0 flex-1"><div className="label">Royal Stack</div>{picker}</div>
+          <button onClick={() => signOutOwner()} className="btn btn-ghost py-1.5 text-xs">Sign out</button>
+        </header>
+        <nav className="lg:hidden flex overflow-x-auto border-b border-line text-sm bg-surface px-1">
+          {nav.flatMap((g) => g.items).map((i) => <button key={i.id} onClick={() => setTab(i.id)} className={`px-3 py-2.5 whitespace-nowrap font-medium ${tab === i.id ? "border-b-2 border-accent text-ink" : "text-muted"}`}>{i.label}</button>)}
+        </nav>
+        <div className="page-head"><div><h1>{TITLES[tab][0]}</h1><p>{TITLES[tab][1]}</p></div></div>
       <div className="flex-1 overflow-y-auto">
         {tab === "overview" && <OverviewTab store={store} />}
         {tab === "inventory" && <InventoryTab store={store} />}
@@ -71,6 +105,7 @@ export default function OwnerPage() {
         {tab === "setup" && <SetupTab store={store} newPin={newPin} />}
         {tab === "exits" && <ExitsTab store={store} />}
         {tab === "chat" && <OwnerChat store={store} />}
+      </div>
       </div>
     </div>
   );
@@ -164,24 +199,24 @@ function authMessage(e: unknown): string {
 }
 
 function Tile({ label, value, tone = "" }: { label: string; value: string | number; tone?: string }) {
-  return <div className="card p-3"><div className="eyebrow">{label}</div><div className={`mono text-2xl font-semibold mt-1 ${tone}`}>{value}</div></div>;
+  return <div className="figure"><div className="label">{label}</div><div className={`value ${tone}`}>{value}</div></div>;
 }
 
 function OverviewTab({ store }: { store: string }) {
   const [o, setO] = useState<Overview | null>(null);
   useEffect(() => { owner.overview(store).then(setO); const t = setInterval(() => owner.overview(store).then(setO), 15000); return () => clearInterval(t); }, [store]);
-  if (!o) return <p className="p-4 text-muted">Loading</p>;
+  if (!o) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
   return (
-    <div className="p-4 space-y-4 max-w-4xl">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-6xl">
+      <div className="figures">
         <Tile label="Today's revenue" value={money(o.today.revenue)} />
         <Tile label="Orders today" value={o.today.orders} />
         <Tile label="Avg basket" value={money(o.today.avg_basket)} />
-        <Tile label="Asked, not found (today)" value={o.asked_not_found} tone="text-amber-600" />
-        <Tile label="Low stock" value={o.low_stock} tone={o.low_stock ? "text-amber-600" : ""} />
-        <Tile label="Out of stock" value={o.out_of_stock} tone={o.out_of_stock ? "text-red-600" : ""} />
+        <Tile label="Asked, not found (today)" value={o.asked_not_found} tone="text-warn" />
+        <Tile label="Low stock" value={o.low_stock} tone={o.low_stock ? "text-warn" : ""} />
+        <Tile label="Out of stock" value={o.out_of_stock} tone={o.out_of_stock ? "text-bad" : ""} />
         <Tile label="Reorder drafts waiting" value={o.open_drafts} />
-        <Tile label="Exit flags open" value={o.open_flags} tone={o.open_flags ? "text-red-600" : ""} />
+        <Tile label="Exit flags open" value={o.open_flags} tone={o.open_flags ? "text-bad" : ""} />
       </div>
       <RevenueChart series={o.series} />
       <div className="text-sm text-muted">By channel today: {Object.entries(o.today.by_channel).map(([k, v]) => `${k} ${money(v)}`).join(" · ") || "no sales yet"}</div>
@@ -230,16 +265,16 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
   const load = () => owner.store(store).then((d) => { setDoc(d); setAisles(d.floor_map.map((a) => a.aisle)); setBrand({ tagline: d.brand.tagline, greeting: d.brand.greeting, accent: d.brand.accent }); });
   useEffect(() => { load(); owner.team(store).then(setTeam).catch(() => {}); owner.qr(store).then(setQr).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   async function save(body: Parameters<typeof owner.patchStore>[1], note: string) { await owner.patchStore(store, body); setMsg(note); load(); owner.qr(store).then(setQr).catch(() => {}); }
-  if (!doc) return <p className="p-4 text-muted">Loading</p>;
+  if (!doc) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
   return (
-    <div className="p-4 space-y-6 max-w-3xl">
+    <div className="px-4 lg:px-6 pb-10 space-y-6 max-w-4xl">
       {newPin && <div className="card border-accent p-3 text-sm"><b>Your exit kiosk PIN is {newPin}.</b> It is also shown in the Loss tab under Controls. Enter it once on the tablet at the exit.</div>}
       {msg && <div className="chip chip-good">{msg}</div>}
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">1. Products</h2>
         <p className="text-sm text-muted">Import a CSV from your billing software in the Connectors tab, or add products one by one from the Inventory tab by scanning their barcodes.</p>
       </section>
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">2. Aisles</h2>
         <p className="text-sm text-muted">Name your aisles in order from the entrance. The map and the assistant use these.</p>
         <div className="flex flex-wrap gap-2">{aisles.map((a, i) => <input key={i} value={a} onChange={(e) => setAisles(aisles.map((x, j) => (j === i ? e.target.value : x)))} className="field w-32 py-1.5 text-sm" />)}
@@ -247,7 +282,7 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
           {aisles.length > 1 && <button onClick={() => setAisles(aisles.slice(0, -1))} className="btn btn-ghost py-1.5 text-sm">Remove last</button>}</div>
         <button onClick={() => save({ aisles }, "Aisles saved")} className="btn btn-primary py-2">Save aisles</button>
       </section>
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">3. Brand</h2>
         <div className="grid sm:grid-cols-2 gap-3 text-sm">
           <label>Tagline<input value={brand.tagline} onChange={(e) => setBrand({ ...brand, tagline: e.target.value })} placeholder="Fresh every day" className="field mt-1" /></label>
@@ -256,7 +291,7 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
         </div>
         <button onClick={() => save(brand, "Brand saved")} className="btn btn-primary py-2">Save brand</button>
       </section>
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">4. QR codes</h2>
         <p className="text-sm text-muted">Print the entrance code for the door and one code per aisle. Shoppers scan with their phone camera; no app needed.</p>
         {qr && (
@@ -271,14 +306,14 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
         )}
         <button onClick={() => window.print()} className="btn btn-ghost py-2">Print this page</button>
       </section>
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">Team</h2>
         <p className="text-sm text-muted">Staff can run the exit kiosk and record shelf counts. They cannot approve orders, change settings or see customers.</p>
         {team && <ul className="text-sm">{team.owner_emails.map((e) => <li key={e} className="flex justify-between py-1 border-t border-line"><span>{e}</span><span className="chip chip-accent">owner</span></li>)}
           {team.staff_emails.map((e) => <li key={e} className="flex justify-between py-1 border-t border-line"><span>{e}</span><button onClick={async () => setTeam({ ...team, ...(await owner.removeStaff(store, e)) })} className="text-xs text-bad underline">remove</button></li>)}</ul>}
         <div className="flex gap-2"><input value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} placeholder="staff@gmail.com" className="field flex-1" /><button onClick={async () => { if (team) setTeam({ ...team, ...(await owner.addStaff(store, staffEmail)) }); setStaffEmail(""); }} className="btn btn-primary py-2">Add staff</button></div>
       </section>
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">Payments</h2>
         <p className="text-sm text-muted">Status: <span className={`chip ${doc.payments.provider === "razorpay" ? "chip-good" : "chip-muted"}`}>{doc.payments.provider === "razorpay" ? `Razorpay · ${doc.payments.key_id}` : "sandbox (no real money)"}</span></p>
         <div className="grid sm:grid-cols-2 gap-3 text-sm">
@@ -297,10 +332,10 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
 function ExitsTab({ store }: { store: string }) {
   const [data, setData] = useState<{ summary: Loss["summary"]; items: Loss["recent"] } | null>(null);
   useEffect(() => { owner.verifications(store).then(setData); }, [store]);
-  if (!data) return <p className="p-4 text-muted">Loading</p>;
+  if (!data) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
   return (
-    <div className="p-4 space-y-3 max-w-3xl">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3"><Tile label="Exits (7d)" value={data.summary.total} /><Tile label="Clear" value={data.summary.clear} /><Tile label="Spot checks" value={data.summary.spot_check} tone="text-warn" /><Tile label="Flags" value={data.summary.flag} tone="text-bad" /></div>
+    <div className="px-4 lg:px-6 pb-10 space-y-3 max-w-4xl">
+      <div className="figures"><Tile label="Exits (7d)" value={data.summary.total} /><Tile label="Clear" value={data.summary.clear} /><Tile label="Spot checks" value={data.summary.spot_check} tone="text-warn" /><Tile label="Flags" value={data.summary.flag} tone="text-bad" /></div>
       <ul className="text-sm">{data.items.slice(0, 30).map((v) => <li key={v.verification_id} className="border-t border-line py-1.5"><span className={`chip ${v.verdict === "flag" ? "chip-bad" : v.verdict === "spot_check" ? "chip-warn" : "chip-good"}`}>{v.verdict}</span> · {new Date(v.created_at).toLocaleString()} {v.reasons.length > 0 && <span className="text-muted">· {v.reasons.join("; ")}</span>}</li>)}</ul>
     </div>
   );
@@ -346,7 +381,9 @@ function InventoryTab({ store }: { store: string }) {
   const load = () => owner.inventory(store).then(setRows);
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shown = rows.filter((r) => (filter === "all" || r.status === filter) && r.name.toLowerCase().includes(q.toLowerCase()));
-  const badge: Record<string, string> = { ok: "chip-muted", low: "chip-warn", out: "chip-bad", dead: "chip-accent", overstock: "chip-muted" };
+  const STATUS: Record<InvRow["status"], string> = { ok: "Healthy", low: "Low", out: "Out of stock", dead: "Not selling", overstock: "Overstocked" };
+  const FILTERS: [typeof filter, string][] = [["all", "All"], ["low", "Low"], ["out", "Out of stock"], ["dead", "Not selling"], ["overstock", "Overstocked"], ["ok", "Healthy"]];
+  const counts = rows.reduce((m, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {} as Record<string, number>);
   async function edit(r: InvRow, field: "reorder_point" | "reorder_qty") {
     const v = window.prompt?.(`${field.replace("_", " ")} for ${r.name}`, String(r[field]));
     if (v && /^\d+$/.test(v)) { await owner.patchInventory(store, r.product_id, { [field]: Number(v) }); load(); }
@@ -356,27 +393,28 @@ function InventoryTab({ store }: { store: string }) {
     if (v && /^\d+$/.test(v)) { await owner.count(store, r.product_id, Number(v)); alert?.("Count recorded. See Loss tab for discrepancies."); }
   }
   return (
-    <div className="p-4 space-y-3">
+    <div className="px-4 lg:px-6 pb-10 space-y-3">
       <div className="flex flex-wrap gap-2 items-center">
-        {(["all", "low", "out", "dead", "overstock", "ok"] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`chip ${filter === f ? "bg-ink text-bg" : "chip-muted"}`}>{f}</button>)}
-        <input id="inv-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="field ml-auto w-auto py-1.5 text-sm" />
+        {FILTERS.map(([f, l]) => <button key={f} onClick={() => setFilter(f)} className={`chip ${filter === f ? "bg-ink text-bg" : "chip-muted"}`}>{l}{f !== "all" && counts[f] ? ` ${counts[f]}` : f === "all" ? ` ${rows.length}` : ""}</button>)}
+        <input id="inv-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products" className="field ml-auto w-56" />
         <button onClick={() => setAdding(!adding)} className="btn btn-primary py-1.5 text-sm">{adding ? "Close" : "Add by scan"}</button>
       </div>
       {adding && <AddByScan store={store} onSaved={() => { load(); }} />}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left eyebrow"><tr><th className="py-1">Product</th><th>Status</th><th className="text-right">Available</th><th className="text-right">Avg/day</th><th className="text-right">Days cover</th><th className="text-right">Reorder pt</th><th className="text-right">Reorder qty</th><th>Aisle</th><th></th></tr></thead>
+      <div className="table-wrap">
+        <table className="table">
+          <thead><tr><th>Product</th><th>Status</th><th className="num">On hand</th><th className="num">Sold per day</th><th className="num">Days of cover</th><th className="num">Reorder at</th><th className="num">Order qty</th><th>Aisle</th><th></th></tr></thead>
           <tbody>{shown.map((r) => (
-            <tr key={r.product_id} className="border-t border-line">
-              <td className="py-1.5">{r.name}</td>
-              <td><span className={`chip ${badge[r.status]}`}><span className="dot" />{r.status}</span></td>
-              <td className="text-right mono">{r.available}</td><td className="text-right mono">{r.avg_daily ?? "–"}</td><td className="text-right mono">{r.days_of_cover ?? "–"}</td>
+            <tr key={r.product_id}>
+              <td className="font-medium">{r.name}</td>
+              <td><span className={`status status-${r.status}`}>{STATUS[r.status]}</span></td>
+              <td className="num">{r.available}</td><td className="num">{r.avg_daily ?? "–"}</td><td className="num">{r.days_of_cover ?? "–"}</td>
               <td className="text-right"><button onClick={() => edit(r, "reorder_point")} className="mono underline decoration-dotted">{r.reorder_point}</button></td>
               <td className="text-right"><button onClick={() => edit(r, "reorder_qty")} className="mono underline decoration-dotted">{r.reorder_qty}</button></td>
               <td>{r.aisle}</td>
-              <td><button onClick={() => count(r)} className="text-xs text-muted underline">count</button></td>
+              <td><button onClick={() => count(r)} className="text-xs text-accent font-medium">Count shelf</button></td>
             </tr>))}</tbody>
         </table>
+        {shown.length === 0 && <p className="p-6 text-sm text-muted">{rows.length ? "Nothing matches this filter." : "No products yet. Add one by scanning its barcode, or import a file in Connectors."}</p>}
       </div>
     </div>
   );
@@ -390,7 +428,7 @@ function ReordersTab({ store }: { store: string }) {
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   async function makeDrafts() { setBusy(true); try { await owner.draft(store); await load(); } finally { setBusy(false); } }
   return (
-    <div className="p-4 space-y-3 max-w-4xl">
+    <div className="px-4 lg:px-6 pb-10 space-y-3 max-w-6xl">
       <div className="flex items-center gap-3">
         <button onClick={makeDrafts} disabled={busy} className="btn btn-primary">{busy ? "Drafting with Gemini" : "Draft reorders now"}</button>
         <span className="text-xs text-muted">Nothing is sent to a supplier until you approve.</span>
@@ -423,9 +461,9 @@ function SignalsTab({ store }: { store: string }) {
   const [s, setS] = useState<Signals | null>(null);
   const [days, setDays] = useState(7);
   useEffect(() => { owner.signals(store, days).then(setS); }, [store, days]);
-  if (!s) return <p className="p-4 text-muted">Loading</p>;
+  if (!s) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
   return (
-    <div className="p-4 space-y-4 max-w-3xl">
+    <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-4xl">
       <div className="flex gap-2 text-xs">{[1, 7, 30].map((d) => <button key={d} onClick={() => setDays(d)} className={`chip ${days === d ? "bg-ink text-bg" : "chip-muted"}`}>{d === 1 ? "Today" : `${d} days`}</button>)}</div>
       <section>
         <h2 className="text-base font-semibold">Asked for, but we don&apos;t carry it</h2>
@@ -450,7 +488,7 @@ function CustomersTab({ store }: { store: string }) {
   const [msg, setMsg] = useState("");
   const load = () => owner.customers(store).then(setRows).catch(() => setRows([]));
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!rows) return <p className="p-4 text-muted">Loading</p>;
+  if (!rows) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
   const counts = rows.reduce((m, r) => ({ ...m, [r.segment]: (m[r.segment] ?? 0) + 1 }), {} as Record<string, number>);
   const shown = rows.filter((r) => filter === "all" || r.segment === filter);
   async function savePoints() {
@@ -459,8 +497,8 @@ function CustomersTab({ store }: { store: string }) {
     catch (e) { setMsg((e as Error).message); }
   }
   return (
-    <div className="p-4 space-y-3 max-w-4xl">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="px-4 lg:px-6 pb-10 space-y-3 max-w-6xl">
+      <div className="figures">
         <Tile label="Signed-in customers" value={rows.length} /><Tile label="Their spend" value={money(rows.reduce((n, r) => n + r.spend, 0))} />
         <Tile label="Repeat (2+ visits)" value={rows.filter((r) => r.visits >= 2).length} /><Tile label="Points outstanding" value={rows.reduce((n, r) => n + r.points, 0)} />
       </div>
@@ -471,15 +509,15 @@ function CustomersTab({ store }: { store: string }) {
       <p className="text-xs text-muted">Only shoppers who chose to sign in appear here, with the last four digits of their number. Segments: new (one visit), regular (two or more), VIP (five visits and ₹5,000), at risk (no visit in 45 days). Target offers at a segment in the Offers tab.</p>
       {msg && <div className="chip chip-muted">{msg}</div>}
       {shown.length === 0 ? <p className="text-sm text-muted">No customers in this view.</p> : (
-        <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead className="text-left text-muted text-xs"><tr><th className="py-1 pr-2">Customer</th><th className="pr-2">Segment</th><th className="pr-2">Visits</th><th className="pr-2">Spend</th><th className="pr-2">Points</th><th className="pr-2">Prefers</th><th>Last visit</th></tr></thead>
+        <div className="table-wrap"><table className="table">
+          <thead><tr><th>Customer</th><th className="pr-2">Segment</th><th className="pr-2">Visits</th><th className="pr-2">Spend</th><th className="pr-2">Points</th><th className="pr-2">Prefers</th><th>Last visit</th></tr></thead>
           <tbody>{shown.map((r) => (
             <React.Fragment key={r.uid}>
-              <tr className="border-t border-line">
+              <tr>
                 <td className="py-1.5 pr-2">{r.name || "Shopper"} <span className="text-muted mono text-xs">····{r.phone_last4}</span></td>
                 <td className="pr-2"><span className={`chip ${r.segment === "vip" ? "chip-accent" : r.segment === "at_risk" ? "chip-warn" : "chip-muted"}`}>{SEGMENTS[r.segment]}</span></td>
-                <td className="mono pr-2">{r.visits}</td><td className="mono pr-2">{money(r.spend)}</td>
-                <td className="mono pr-2">{r.points} <button onClick={() => setEditing({ uid: r.uid, delta: "", reason: "" })} className="text-accent text-xs font-semibold ml-1">Adjust</button></td>
+                <td className="num">{r.visits}</td><td className="num">{money(r.spend)}</td>
+                <td className="num">{r.points} <button onClick={() => setEditing({ uid: r.uid, delta: "", reason: "" })} className="text-accent text-xs font-semibold ml-1">Adjust</button></td>
                 <td className="text-xs text-muted pr-2">{[...r.dietary, ...r.favourite_categories].join(", ") || "–"}</td>
                 <td className="text-xs text-muted">{new Date(r.last_seen).toLocaleDateString()}</td>
               </tr>
@@ -520,7 +558,7 @@ function OffersTab({ store }: { store: string }) {
   }
   const ready = form.name && Number(form.value) > 0 && (form.kind === "cart" || (form.kind === "product" ? !!form.product_id : !!form.category));
   return (
-    <div className="p-4 space-y-4 max-w-4xl">
+    <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-6xl">
       <section className="card p-4 space-y-3 text-sm">
         <div><div className="eyebrow">New offer</div><p className="text-xs text-muted">Offers apply by themselves in the cart, the best one wins per item and one per bill. No codes.</p></div>
         <div className="grid sm:grid-cols-2 gap-2">
@@ -546,7 +584,7 @@ function OffersTab({ store }: { store: string }) {
         </div>
         <div className="flex items-center gap-2"><button onClick={create} disabled={!ready} className="btn btn-primary py-2">Create offer</button>{msg && <span className="text-xs text-muted">{msg}</span>}</div>
       </section>
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <div className="eyebrow">Offers</div>
         {!rows ? <p className="text-muted text-sm">Loading</p> : rows.length === 0 ? <p className="text-sm text-muted">No offers yet.</p> : rows.map((o) => (
           <div key={o.offer_id} className="card p-3 flex flex-wrap items-center gap-2 text-sm">
@@ -566,11 +604,11 @@ function LossTab({ store }: { store: string }) {
   const [form, setForm] = useState<Partial<Loss["settings"]>>({});
   const load = () => owner.loss(store).then((x) => { setL(x); setForm(x.settings); });
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!l) return <p className="p-4 text-muted">Loading</p>;
+  if (!l) return <p className="px-4 lg:px-6 text-muted">Loading</p>;
   const s = l.summary;
   return (
-    <div className="p-4 space-y-4 max-w-3xl">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-4xl">
+      <div className="figures">
         <Tile label="Exits (7d)" value={s.total} /><Tile label="Clear" value={s.clear} /><Tile label="Spot checks" value={s.spot_check} tone="text-warn" /><Tile label="Flags" value={s.flag} tone="text-bad" />
         <Tile label="Flag rate" value={`${Math.round(s.flag_rate * 100)}%`} /><Tile label="Issues confirmed" value={s.issue_confirmed} /><Tile label="Random audits" value={`${Math.round(s.audit_rate * 100)}%`} />
       </div>
@@ -583,7 +621,7 @@ function LossTab({ store }: { store: string }) {
         <h2 className="text-base font-semibold">Recent exits</h2>
         <ul className="text-sm">{l.recent.slice(0, 10).map((v) => <li key={v.verification_id} className="border-t border-line py-1.5"><span className={`chip ${v.verdict === "flag" ? "chip-bad" : v.verdict === "spot_check" ? "chip-warn" : "chip-good"}`}>{v.verdict}</span> · {new Date(v.created_at).toLocaleTimeString()} {v.reasons.length > 0 && <span className="text-muted">· {v.reasons.join("; ")}</span>}{v.review_outcome && <span className="text-xs"> · {v.review_outcome}</span>}</li>)}</ul>
       </section>
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">Controls</h2>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <label>Self-checkout item limit<input type="number" value={form.self_checkout_item_limit ?? ""} onChange={(e) => setForm({ ...form, self_checkout_item_limit: Number(e.target.value) })} className="field mt-1" /></label>
@@ -622,8 +660,8 @@ function ConnectorsTab({ store }: { store: string }) {
   }
   const fields = ["sku", "name", "price", "on_hand", "barcode", "brand", "category", "subcategory", "mrp", "unit", "aisle", "supplier_id", "reorder_point", "reorder_qty", "lead_time_days", "tags"];
   return (
-    <div className="p-4 space-y-4 max-w-3xl">
-      <section className="space-y-2">
+    <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-4xl">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">Import products from any file</h2>
         <p className="text-xs text-muted">Export from your POS, Excel, Google Sheets or Shopify as CSV. The assistant reads the header and a few rows, proposes how the columns map to ours, and you confirm. Your data is converted by the connector, not by the model.</p>
         <div className="flex flex-wrap items-center gap-2">
@@ -651,7 +689,7 @@ function ConnectorsTab({ store }: { store: string }) {
         {result && <p className="text-sm">{result}</p>}
       </section>
       <LiveSync store={store} mapping={mapping} />
-      <section className="space-y-2">
+      <section className="section space-y-2">
         <h2 className="text-base font-semibold">Printable QR codes</h2>
         <button onClick={() => owner.qr(store).then(setQr)} className="btn btn-ghost">Show entrance and aisle links</button>
         {qr && <ul className="text-xs break-all space-y-1"><li><b>Entrance:</b> {qr.entrance_url}</li>{qr.aisles.map((a) => <li key={a.aisle}><b>{a.aisle}:</b> {a.url}</li>)}</ul>}
@@ -679,9 +717,9 @@ function LiveSync({ store, mapping }: { store: string; mapping: Record<string, s
     if (view?.settings.has_secret && !confirm("Rotating the secret breaks the shop system's current signature until it is updated there. Continue?")) return;
     try { setSecret((await owner.rotateSyncSecret(store)).secret); load(); } catch (e) { setMsg((e as Error).message); }
   }
-  if (!view) return <section className="space-y-2"><h2 className="text-base font-semibold">Live sync</h2><p className="text-sm text-muted">{msg || "Loading"}</p></section>;
+  if (!view) return <section className="section space-y-2"><h2 className="text-base font-semibold">Live sync</h2><p className="text-sm text-muted">{msg || "Loading"}</p></section>;
   return (
-    <section className="space-y-3">
+    <section className="section space-y-3">
       <div>
         <h2 className="text-base font-semibold">Live sync with your billing system</h2>
         <p className="text-xs text-muted">Your software posts stock changes to us the moment they happen, pulls our stock, and receives every sale we take. Requests are signed with a shared secret (HMAC-SHA256 over the timestamp and body). Catalog version {view.settings.catalog_version}.</p>
@@ -712,9 +750,9 @@ function LiveSync({ store, mapping }: { store: string; mapping: Record<string, s
       </div>
       <div className="text-xs text-muted">Feed mapping: {Object.keys(view.settings.feed_mapping).length ? Object.entries(view.settings.feed_mapping).map(([k, v]) => `${k}←${v}`).join(", ") : "not set"} · last pull {view.settings.last_pull_at ? new Date(view.settings.last_pull_at).toLocaleString() : "never"} · outbox {view.outbox.pending} waiting{view.outbox.dead ? `, ${view.outbox.dead} given up` : ""}</div>
       {view.log.length > 0 && (
-        <div className="overflow-x-auto"><table className="w-full text-xs">
-          <thead className="text-left text-muted"><tr><th className="py-1 pr-2">When</th><th className="pr-2">Direction</th><th className="pr-2">Kind</th><th className="pr-2">Rows</th><th className="pr-2">Changed</th><th>Result</th></tr></thead>
-          <tbody>{view.log.map((e, i) => <tr key={i} className="border-t border-line"><td className="py-1 pr-2">{new Date(e.at).toLocaleString()}</td><td className="pr-2">{e.direction === "in" ? "In" : "Out"}</td><td className="pr-2">{e.kind}</td><td className="mono pr-2">{e.rows}</td><td className="mono pr-2">{e.changed}</td><td>{e.ok ? <span className="chip chip-good">ok{e.unknown?.length ? ` · unknown: ${e.unknown.slice(0, 3).join(", ")}` : ""}{e.errors ? ` · ${e.errors} row errors` : ""}</span> : <span className="chip chip-bad">{e.error || "failed"}</span>}</td></tr>)}</tbody>
+        <div className="table-wrap"><table className="table">
+          <thead><tr><th>When</th><th className="pr-2">Direction</th><th className="pr-2">Kind</th><th className="pr-2">Rows</th><th className="pr-2">Changed</th><th>Result</th></tr></thead>
+          <tbody>{view.log.map((e, i) => <tr key={i}><td className="py-1 pr-2">{new Date(e.at).toLocaleString()}</td><td className="pr-2">{e.direction === "in" ? "In" : "Out"}</td><td className="pr-2">{e.kind}</td><td className="num">{e.rows}</td><td className="num">{e.changed}</td><td>{e.ok ? <span className="chip chip-good">ok{e.unknown?.length ? ` · unknown: ${e.unknown.slice(0, 3).join(", ")}` : ""}{e.errors ? ` · ${e.errors} row errors` : ""}</span> : <span className="chip chip-bad">{e.error || "failed"}</span>}</td></tr>)}</tbody>
         </table></div>
       )}
     </section>
@@ -730,6 +768,6 @@ function OwnerChat({ store }: { store: string }) {
     import("@/lib/api").then(({ api }) => api.store(store).then(setStore).catch(() => {}));
   }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (err) return <p className="p-4 chip chip-bad">{err}</p>;
-  if (session?.mode !== "owner") return <p className="p-4 text-muted">Starting the owner assistant</p>;
+  if (session?.mode !== "owner") return <p className="px-4 lg:px-6 text-muted">Starting the owner assistant</p>;
   return <div className="h-full"><Chat /></div>;
 }

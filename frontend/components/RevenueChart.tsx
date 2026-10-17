@@ -13,11 +13,11 @@ export default function RevenueChart({ series }: { series: { day: string; revenu
   return (
     <div className="card p-3">
       <div className="flex justify-between items-baseline mb-1">
-        <div className="eyebrow">Daily revenue, last 14 days</div>
+        <div className="label">Daily revenue, last 14 days</div>
         <button onClick={() => setTable(!table)} className="text-xs text-muted underline">{table ? "Chart" : "Table"}</button>
       </div>
       {table ? (
-        <table className="w-full text-sm"><tbody>{series.map((d) => <tr key={d.day} className="border-t border-line"><td className="py-1">{label(d.day)}</td><td className="text-right mono">{money(d.revenue)}</td></tr>)}</tbody></table>
+        <table className="table"><tbody>{series.map((d) => <tr key={d.day}><td>{label(d.day)}</td><td className="num">{money(d.revenue)}</td></tr>)}</tbody></table>
       ) : (
         <div className="relative">
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Daily revenue bar chart">
