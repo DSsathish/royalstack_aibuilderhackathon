@@ -23,8 +23,21 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+export type StoreDoc = { store_id: string; name: string; city: string; currency: string; languages: string[]; self_checkout_item_limit: number;
+  brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string }[] };
+
 export const owner = {
-  me: () => call<{ uid: string; stores: string[] }>("/owner/me"),
+  me: () => call<{ uid: string; stores: string[]; roles: Record<string, "owner" | "staff"> }>("/owner/me"),
+  register: (body: { name: string; city: string; languages: string[]; currency: string }) =>
+    call<{ store: StoreDoc; kiosk_pin: string }>("/owner/register", { method: "POST", body: JSON.stringify(body) }),
+  store: (s: string) => call<StoreDoc>(`/stores/${s}`),
+  patchStore: (s: string, body: Partial<{ name: string; city: string; tagline: string; greeting: string; accent: string; languages: string[]; currency: string; aisles: string[] }>) =>
+    call<StoreDoc>(`/owner/${s}/store`, { method: "PATCH", body: JSON.stringify(body) }),
+  team: (s: string) => call<{ owner_emails: string[]; staff_emails: string[] }>(`/owner/${s}/team`),
+  verifications: (s: string, days = 7) => call<{ summary: Loss["summary"]; items: Loss["recent"] }>(`/owner/${s}/verifications?days=${days}`),
+  addStaff: (s: string, email: string) => call<{ staff_emails: string[] }>(`/owner/${s}/staff`, { method: "POST", body: JSON.stringify({ email }) }),
+  removeStaff: (s: string, email: string) => call<{ staff_emails: string[] }>(`/owner/${s}/staff/${encodeURIComponent(email)}`, { method: "DELETE" }),
+  patchPayments: (s: string, body: { key_id?: string; key_secret?: string }) => call<{ provider: string; key_id: string }>(`/owner/${s}/payments`, { method: "PATCH", body: JSON.stringify(body) }),
   overview: (s: string) => call<Overview>(`/owner/${s}/overview`),
   inventory: (s: string) => call<InvRow[]>(`/owner/${s}/inventory`),
   patchInventory: (s: string, pid: string, body: { reorder_point?: number; reorder_qty?: number }) => call(`/owner/${s}/inventory/${pid}`, { method: "PATCH", body: JSON.stringify(body) }),

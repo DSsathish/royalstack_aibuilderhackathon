@@ -23,9 +23,25 @@ class Aisle(BaseModel):
     h: float
 
 
+class Brand(BaseModel):
+    accent: str = "#27a36e"
+    tagline: str = ""
+    greeting: str = ""
+
+
+class Payments(BaseModel):
+    provider: Literal["mock", "razorpay"] = "mock"
+    key_id: str = ""              # public key id; the secret lives in Secret Manager as razorpay-{store_id}
+
+
 class Store(BaseModel):
     store_id: str
     name: str
+    city: str = ""
+    brand: Brand = Brand()
+    payments: Payments = Payments()
+    staff_emails: list[str] = []
+    created_at: datetime = Field(default_factory=now)
     currency: str = "INR"
     languages: list[str] = ["en", "ta", "hi"]
     self_checkout_item_limit: int = 15

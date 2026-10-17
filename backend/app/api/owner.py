@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.domain.models import now
 from app.services import db, insights, reorder, sessions, verification
-from app.services.auth import STORE_ID, current_uid, owned_stores, require_owner
+from app.services.auth import STORE_ID, current_uid, require_owner, require_staff, roles_for
 
 router = APIRouter(tags=["owner"])
 PID = Path(pattern=r"^[a-z0-9-]{3,80}$")
@@ -16,7 +16,8 @@ PID = Path(pattern=r"^[a-z0-9-]{3,80}$")
 
 @router.get("/owner/me")
 def me(uid: str = Depends(current_uid)):
-    return {"uid": uid, "stores": owned_stores(uid)}
+    roles = roles_for(uid)
+    return {"uid": uid, "stores": sorted(roles), "roles": roles}
 
 
 @router.post("/owner/{store_id}/session")
@@ -34,7 +35,7 @@ def overview(store_id: str = STORE_ID, uid: str = Depends(current_uid)):
 
 @router.get("/owner/{store_id}/inventory")
 def inventory(store_id: str = STORE_ID, uid: str = Depends(current_uid)):
-    require_owner(store_id, uid)
+    require_staff(store_id, uid)          # staff count shelves from this list; edits stay owner-only
     return insights.inventory(store_id)
 
 
@@ -60,7 +61,7 @@ class CountIn(BaseModel):
 
 @router.post("/owner/{store_id}/counts")
 def quick_count(body: CountIn, store_id: str = STORE_ID, uid: str = Depends(current_uid)):
-    require_owner(store_id, uid)
+    require_staff(store_id, uid)
     insights.record_count(store_id, body.product_id, counted=body.counted, by=uid)
     return {"ok": True}
 

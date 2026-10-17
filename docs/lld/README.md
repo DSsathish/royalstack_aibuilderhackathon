@@ -25,3 +25,4 @@ Rules we follow in code:
 | forecasts, reorder drafts, insights, owner API, forecast job, owner dashboard | [phase-6-owner.md](phase-6-owner.md) | done |
 | universal normalizer (column mapping agent), dataset import | [normalizer.md](normalizer.md) | done; dataset import awaits a Kaggle file |
 | conversation memory, voice tuning, reconnect, named voice | [voice-memory.md](voice-memory.md) | done |
+| R1 self-service shops: registration, setup, roles, per-store payments | [r1-self-service.md](r1-self-service.md) | done |

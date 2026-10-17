@@ -32,21 +32,55 @@ def current_uid(authorization: str | None = Header(default=None),
     return claims["sub"]
 
 
-def owned_stores(uid: str) -> list[str]:
-    """Stores from users/{uid}; if none, bootstrap from stores whose owner_emails list this user's email."""
-    doc = db.users().document(uid).get()
-    stores = doc.to_dict().get("stores", []) if doc.exists else []
+def _bootstrap(uid: str, field: str, role: str) -> list[str]:
+    """Stores whose {field} lists this user's verified email; records membership on first sight."""
     email = _EMAILS.get(uid)
-    if not stores and email:
-        from google.cloud.firestore_v1 import FieldFilter
-        stores = [d.id for d in db.client().collection("stores").where(filter=FieldFilter("owner_emails", "array_contains", email)).stream()]
-        if stores:
-            db.users().document(uid).set({"stores": stores, "email": email}, merge=True)
-    return stores
+    if not email:
+        return []
+    from google.cloud.firestore_v1 import FieldFilter
+    found = [d.id for d in db.client().collection("stores").where(filter=FieldFilter(field, "array_contains", email)).stream()]
+    if found:
+        doc = db.users().document(uid).get()
+        data = doc.to_dict() if doc.exists else {}
+        roles = {**data.get("roles", {}), **{s: role for s in found if data.get("roles", {}).get(s) != "owner"}}
+        db.users().document(uid).set({"stores": sorted(set(data.get("stores", [])) | set(found)), "roles": roles, "email": email}, merge=True)
+    return found
+
+
+def roles_for(uid: str) -> dict[str, str]:
+    """store_id -> owner | staff, bootstrapping from owner_emails / staff_emails on first sign-in."""
+    doc = db.users().document(uid).get()
+    roles = dict(doc.to_dict().get("roles", {})) if doc.exists else {}
+    if doc.exists and not roles and doc.to_dict().get("stores"):      # memberships created before roles existed
+        roles = {s: "owner" for s in doc.to_dict()["stores"]}
+    if not roles:
+        for s in _bootstrap(uid, "owner_emails", "owner"):
+            roles[s] = "owner"
+        for s in _bootstrap(uid, "staff_emails", "staff"):
+            roles.setdefault(s, "staff")
+    return roles
+
+
+def owned_stores(uid: str) -> list[str]:
+    return [s for s, r in roles_for(uid).items() if r == "owner"]
 
 
 def require_owner(store_id: str, uid: str) -> str:
     """Returns uid if it owns store_id, else 403."""
-    if store_id not in owned_stores(uid):
+    if roles_for(uid).get(store_id) != "owner":
         raise HTTPException(403, "not an owner of this store")
     return uid
+
+
+def require_staff(store_id: str, uid: str) -> str:
+    """Owner or staff of the store."""
+    if roles_for(uid).get(store_id) not in ("owner", "staff"):
+        raise HTTPException(403, "not a member of this store")
+    return uid
+
+
+def verified_email(uid: str) -> str:
+    email = _EMAILS.get(uid)
+    if not email:
+        raise HTTPException(403, "a verified Google email is required")
+    return email

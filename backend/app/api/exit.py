@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.api.agent import _read_upload
 from app.services import checkout, db, verification
-from app.services.auth import STORE_ID, current_uid, require_owner
+from app.services.auth import STORE_ID, current_uid, require_staff
 
 router = APIRouter(tags=["exit"])
 HEX_ID = r"^[a-f0-9]{32}$"
@@ -74,6 +74,6 @@ def review(body: ReviewIn, store_id: str = Depends(kiosk_auth), verification_id:
 
 @router.get("/owner/{store_id}/verifications")
 def owner_verifications(store_id: str = STORE_ID, days: int = Query(default=7, ge=1, le=90), uid: str = Depends(current_uid)):
-    require_owner(store_id, uid)
+    require_staff(store_id, uid)
     return {"summary": verification.summary(store_id, days),
             "items": [v.model_dump() for v in verification.recent(store_id, days)[:200]]}
