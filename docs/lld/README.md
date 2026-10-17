@@ -29,3 +29,4 @@ Rules we follow in code:
 | R3 scan-first cart, owner add-by-scan with barcode lookup | [r3-scan-first.md](r3-scan-first.md) | done |
 | R4 optional shopper identity: phone OTP, profile, history, export and delete, customers for owners | [r4-identity.md](r4-identity.md) | done |
 | R5 segments, owner-created offers applied automatically, reward points ledger, nightly customer job | [r5-customers-offers-points.md](r5-customers-offers-points.md) | done |
+| R2 sync core: signed inbound webhooks, pull endpoint, outbound sale events with retries, scheduled CSV feed, cross-instance catalog version | [r2-sync.md](r2-sync.md) | done; Shopify adapter next |

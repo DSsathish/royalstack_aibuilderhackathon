@@ -11,7 +11,8 @@ from app.domain.models import DemandSignal, Location, Product
 from app.services import db, gemini, inventory
 
 CACHE_TTL_S = 60
-_cache: dict[str, tuple[float, list[Product], dict[str, Location]]] = {}
+VERSION_CHECK_S = 2       # how often an instance asks Firestore whether the catalog changed elsewhere
+_cache: dict[str, dict] = {}
 
 
 class ProductView(Product):
@@ -23,13 +24,31 @@ def invalidate(store_id: str) -> None:
     _cache.pop(store_id, None)
 
 
+def bump(store_id: str) -> None:
+    """Every product write ends here: the version counter tells every API instance to reload its cache."""
+    from google.cloud import firestore
+    db.store_ref(store_id).update({"catalog_version": firestore.Increment(1)})
+    invalidate(store_id)
+
+
+def _version(store_id: str) -> int:
+    doc = db.store_ref(store_id).get(field_paths=["catalog_version"])
+    return int((doc.to_dict() or {}).get("catalog_version", 0)) if doc.exists else 0
+
+
 def _load(store_id: str) -> tuple[list[Product], dict[str, Location]]:
+    t = time.time()
     hit = _cache.get(store_id)
-    if hit and time.time() - hit[0] < CACHE_TTL_S:
-        return hit[1], hit[2]
+    if hit and t - hit["at"] < CACHE_TTL_S:
+        if t - hit["checked"] < VERSION_CHECK_S:
+            return hit["products"], hit["locations"]
+        if _version(store_id) == hit["version"]:
+            hit["checked"] = t
+            return hit["products"], hit["locations"]
+    version = _version(store_id)
     products = [Product(**d.to_dict()) for d in db.products(store_id).stream()]
     locations = {d.id: Location(**d.to_dict()) for d in db.locations(store_id).stream()}
-    _cache[store_id] = (time.time(), products, locations)
+    _cache[store_id] = {"at": t, "checked": t, "version": version, "products": products, "locations": locations}
     return products, locations
 
 

@@ -22,6 +22,12 @@ export type Customer = { uid: string; phone_last4: string; name: string; languag
 export type OfferDoc = { offer_id: string; name: string; kind: "product" | "category" | "cart"; product_id: string; category: string; min_total: number;
   percent_off: number; amount_off: number; segment: "all" | "signed_in" | "new" | "regular" | "vip" | "at_risk"; active: boolean; starts_at: string | null; ends_at: string | null; detail: string; created_at: string };
 
+export type SyncView = {
+  settings: { webhook_url: string; feed_url: string; feed_mapping: Record<string, string>; feed_every_min: number; last_pull_at: string | null; has_secret: boolean; catalog_version: number };
+  endpoints: { inventory: string; products: string; pull: string };
+  log: { at: string; direction: "in" | "out"; kind: string; rows: number; changed: number; ok: boolean; error?: string; unknown?: string[]; errors?: number }[];
+  outbox: { pending: number; dead: number } };
+
 export type StoreDoc = { store_id: string; name: string; city: string; currency: string; languages: string[]; self_checkout_item_limit: number;
   brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string }[] };
 
@@ -54,6 +60,11 @@ export const owner = {
   createOffer: (s: string, body: Omit<OfferDoc, "offer_id" | "detail" | "created_at" | "active" | "starts_at"> & { active?: boolean }) => call<OfferDoc>(`/owner/${s}/offers`, { method: "POST", body: JSON.stringify(body) }),
   patchOffer: (s: string, id: string, body: Partial<Pick<OfferDoc, "active" | "name" | "ends_at">>) => call<OfferDoc>(`/owner/${s}/offers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteOffer: (s: string, id: string) => call<{ deleted: boolean }>(`/owner/${s}/offers/${id}`, { method: "DELETE" }),
+  sync: (s: string) => call<SyncView>(`/owner/${s}/sync`),
+  patchSync: (s: string, body: Partial<{ webhook_url: string; feed_url: string; feed_mapping: Record<string, string>; feed_every_min: number }>) => call<SyncView>(`/owner/${s}/sync`, { method: "PATCH", body: JSON.stringify(body) }),
+  rotateSyncSecret: (s: string) => call<{ secret: string }>(`/owner/${s}/sync/secret`, { method: "POST" }),
+  pullNow: (s: string) => call<Record<string, unknown>>(`/owner/${s}/sync/pull`, { method: "POST" }),
+  testWebhook: (s: string) => call<{ ok: boolean; error?: string }>(`/owner/${s}/sync/test`, { method: "POST" }),
   searchProducts: (s: string, q: string) => call<{ product_id: string; name: string; category: string; price: number }[]>(`/stores/${s}/search?q=${encodeURIComponent(q)}&k=6`),
   signals: (s: string, days = 7) => call<Signals>(`/owner/${s}/signals?days=${days}`),
   loss: (s: string) => call<Loss>(`/owner/${s}/loss`),

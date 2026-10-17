@@ -9,7 +9,7 @@ import httpx
 from app.config import settings
 from app.domain.models import Order, Session, now
 from app.services import cart as cart_svc
-from app.services import customers, db, inventory, payments, qr
+from app.services import customers, db, inventory, payments, qr, sync
 from app.services import points as points_svc
 
 
@@ -121,4 +121,5 @@ def confirm(order_id: str, *, payment_id: str, signature: str) -> Order:
         o.points_earned = points_svc.earn(o.store_id, o.customer_id, o.total, o.order_id)
     db.orders().document(o.order_id).set(o.model_dump())
     customers.record_order(o)
+    sync.notify_sale_async(o)
     return o

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { money } from "@/lib/api";
 import { signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
-import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, owner } from "@/lib/owner";
+import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
 import { useApp } from "@/lib/store";
@@ -559,12 +559,74 @@ function ConnectorsTab({ store }: { store: string }) {
         <button onClick={run} disabled={!file} className="btn btn-ink">Import with this mapping</button>
         {result && <p className="text-sm">{result}</p>}
       </section>
+      <LiveSync store={store} mapping={mapping} />
       <section className="space-y-2">
         <h2 className="text-base font-semibold">Printable QR codes</h2>
         <button onClick={() => owner.qr(store).then(setQr)} className="btn btn-ghost">Show entrance and aisle links</button>
         {qr && <ul className="text-xs break-all space-y-1"><li><b>Entrance:</b> {qr.entrance_url}</li>{qr.aisles.map((a) => <li key={a.aisle}><b>{a.aisle}:</b> {a.url}</li>)}</ul>}
       </section>
     </div>
+  );
+}
+
+/** Keep the assistant in step with the shop's own system: signed webhooks in, sale events out, a CSV feed on a schedule. */
+function LiveSync({ store, mapping }: { store: string; mapping: Record<string, string> }) {
+  const [view, setView] = useState<SyncView | null>(null);
+  const [form, setForm] = useState({ webhook_url: "", feed_url: "", feed_every_min: "15" });
+  const [secret, setSecret] = useState("");
+  const [msg, setMsg] = useState("");
+  const load = () => owner.sync(store).then((v) => { setView(v); setForm({ webhook_url: v.settings.webhook_url, feed_url: v.settings.feed_url, feed_every_min: String(v.settings.feed_every_min) }); }).catch((e) => setMsg(e.message));
+  useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  async function save(withMapping = false) {
+    try {
+      const clean = Object.fromEntries(Object.entries(mapping).filter(([, v]) => v));
+      setView(await owner.patchSync(store, { webhook_url: form.webhook_url, feed_url: form.feed_url, feed_every_min: Number(form.feed_every_min), ...(withMapping ? { feed_mapping: clean } : {}) }));
+      setMsg(withMapping ? "Saved with the mapping above." : "Saved.");
+    } catch (e) { setMsg((e as Error).message); }
+  }
+  async function rotate() {
+    if (view?.settings.has_secret && !confirm("Rotating the secret breaks the shop system's current signature until it is updated there. Continue?")) return;
+    try { setSecret((await owner.rotateSyncSecret(store)).secret); load(); } catch (e) { setMsg((e as Error).message); }
+  }
+  if (!view) return <section className="space-y-2"><h2 className="text-base font-semibold">Live sync</h2><p className="text-sm text-muted">{msg || "Loading"}</p></section>;
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-base font-semibold">Live sync with your billing system</h2>
+        <p className="text-xs text-muted">Your software posts stock changes to us the moment they happen, pulls our stock, and receives every sale we take. Requests are signed with a shared secret (HMAC-SHA256 over the timestamp and body). Catalog version {view.settings.catalog_version}.</p>
+      </div>
+      <div className="card p-3 text-xs space-y-1 break-all">
+        <div><b>Stock in:</b> POST {view.endpoints.inventory} <span className="text-muted">· body {"{event_id, rows:[{sku, on_hand, price?}]}"}</span></div>
+        <div><b>Products in:</b> POST {view.endpoints.products} <span className="text-muted">· rows use the import columns (sku, name, price, on_hand, …)</span></div>
+        <div><b>Stock out:</b> GET {view.endpoints.pull} <span className="text-muted">· Authorization: Bearer &lt;secret&gt;</span></div>
+        <div className="text-muted">Headers for POSTs: X-Sync-Timestamp (unix seconds) and X-Sync-Signature: sha256=HMAC_SHA256(secret, timestamp + {'"."'} + body). Repeated event_ids are ignored.</div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className={`chip ${view.settings.has_secret ? "chip-good" : "chip-warn"}`}>{view.settings.has_secret ? "Secret set" : "No secret yet"}</span>
+        <button onClick={rotate} className="btn btn-ghost py-1.5 text-xs">{view.settings.has_secret ? "Rotate secret" : "Generate secret"}</button>
+        {secret && <span className="mono text-xs break-all card px-2 py-1">{secret}</span>}
+        {secret && <span className="text-xs text-warn">Shown once. Copy it into your billing software now.</span>}
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2 text-sm">
+        <label className="text-xs sm:col-span-2">Sale webhook URL (we POST each paid order here)<input value={form.webhook_url} onChange={(e) => setForm({ ...form, webhook_url: e.target.value })} placeholder="https://your-system.example/royalstack" className="field mt-1 py-1.5 text-sm" /></label>
+        <label className="text-xs">CSV feed URL (a Sheet published as CSV, or a POS export)<input value={form.feed_url} onChange={(e) => setForm({ ...form, feed_url: e.target.value })} placeholder="https://docs.google.com/…/pub?output=csv" className="field mt-1 py-1.5 text-sm" /></label>
+        <label className="text-xs">Pull every (minutes)<input value={form.feed_every_min} onChange={(e) => setForm({ ...form, feed_every_min: e.target.value })} inputMode="numeric" className="field mt-1 py-1.5 text-sm" /></label>
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <button onClick={() => save(false)} className="btn btn-primary py-2">Save</button>
+        <button onClick={() => save(true)} className="btn btn-ghost py-2" title="Uses the column mapping from the import section above">Save with current mapping</button>
+        <button onClick={() => owner.pullNow(store).then((r) => { setMsg(`Pull: ${JSON.stringify(r)}`); load(); })} disabled={!view.settings.feed_url} className="btn btn-ghost py-2">Pull now</button>
+        <button onClick={() => owner.testWebhook(store).then((r) => { setMsg(r.ok ? "Test event delivered." : `Test failed: ${r.error}`); load(); })} disabled={!view.settings.webhook_url || !view.settings.has_secret} className="btn btn-ghost py-2">Send test event</button>
+        {msg && <span className="text-xs text-muted">{msg}</span>}
+      </div>
+      <div className="text-xs text-muted">Feed mapping: {Object.keys(view.settings.feed_mapping).length ? Object.entries(view.settings.feed_mapping).map(([k, v]) => `${k}←${v}`).join(", ") : "not set"} · last pull {view.settings.last_pull_at ? new Date(view.settings.last_pull_at).toLocaleString() : "never"} · outbox {view.outbox.pending} waiting{view.outbox.dead ? `, ${view.outbox.dead} given up` : ""}</div>
+      {view.log.length > 0 && (
+        <div className="overflow-x-auto"><table className="w-full text-xs">
+          <thead className="text-left text-muted"><tr><th className="py-1 pr-2">When</th><th className="pr-2">Direction</th><th className="pr-2">Kind</th><th className="pr-2">Rows</th><th className="pr-2">Changed</th><th>Result</th></tr></thead>
+          <tbody>{view.log.map((e, i) => <tr key={i} className="border-t border-line"><td className="py-1 pr-2">{new Date(e.at).toLocaleString()}</td><td className="pr-2">{e.direction === "in" ? "In" : "Out"}</td><td className="pr-2">{e.kind}</td><td className="mono pr-2">{e.rows}</td><td className="mono pr-2">{e.changed}</td><td>{e.ok ? <span className="chip chip-good">ok{e.unknown?.length ? ` · unknown: ${e.unknown.slice(0, 3).join(", ")}` : ""}{e.errors ? ` · ${e.errors} row errors` : ""}</span> : <span className="chip chip-bad">{e.error || "failed"}</span>}</td></tr>)}</tbody>
+        </table></div>
+      )}
+    </section>
   );
 }
 

@@ -34,12 +34,23 @@ class Payments(BaseModel):
     key_id: str = ""              # public key id; the secret lives in Secret Manager as razorpay-{store_id}
 
 
+class Sync(BaseModel):
+    webhook_url: str = ""                 # we POST signed sale events here
+    feed_url: str = ""                    # CSV we pull on a schedule (a Sheet published as CSV, a POS export URL)
+    feed_mapping: dict[str, str] = {}
+    feed_every_min: int = 15
+    last_pull_at: datetime | None = None
+    has_secret: bool = False              # the inbound secret itself lives in Secret Manager as sync-{store_id}
+
+
 class Store(BaseModel):
     store_id: str
     name: str
     city: str = ""
     brand: Brand = Brand()
     payments: Payments = Payments()
+    sync: Sync = Sync()
+    catalog_version: int = 0              # bumped on every product write; API instances reload their cache on change
     staff_emails: list[str] = []
     created_at: datetime = Field(default_factory=now)
     currency: str = "INR"

@@ -34,7 +34,7 @@ async def import_csv(store_id: str = STORE_ID, file: UploadFile = File(...), map
 
     result = csvc.upsert(store_id, rows, high_value_threshold=store.to_dict()["high_value_threshold"])
     result.errors = errors
-    catalog.invalidate(store_id)
+    catalog.bump(store_id)
     db.audit(store_id).document(uuid.uuid4().hex).set({
         "actor": uid, "action": "import_csv", "created_at": now(),
         "payload": {"created": result.created, "updated": result.updated, "errors": len(errors)},
