@@ -92,13 +92,25 @@ def extra_actions(name: str, result: dict, state: dict) -> list[dict]:
     return []
 
 
+def _coerce(fn, args: dict) -> dict:
+    """The live model sometimes sends numbers as strings; cast to the annotated type where it is int or float."""
+    out = {}
+    for k, v in args.items():
+        ann = inspect.signature(fn).parameters.get(k)
+        try:
+            out[k] = (int(v) if ann and ann.annotation is int else float(v) if ann and ann.annotation is float else v)
+        except (TypeError, ValueError):
+            out[k] = v
+    return out
+
+
 def dispatch(name: str, args: dict, state: dict) -> dict:
     fn = next((f for f in TOOLS_BY_MODE[state["mode"]] if f.__name__ == name), None)
     if not fn:
         return {"error": "unknown_tool"}
     log.info("live tool %s %s", name, {k: str(v)[:80] for k, v in args.items()})
     try:
-        return fn(**args, tool_context=SimpleNamespace(state=state))
+        return fn(**_coerce(fn, args), tool_context=SimpleNamespace(state=state))
     except Exception as exc:
         log.warning("tool %s failed: %s", name, exc)
         return {"error": str(exc)[:200]}

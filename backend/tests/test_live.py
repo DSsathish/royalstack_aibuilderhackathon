@@ -123,3 +123,15 @@ def test_search_in_store_also_highlights_the_top_product_on_the_map():
     assert live.extra_actions("search_products", result, {"mode": "online"}) == []
     assert live.extra_actions("search_products", {"products": [], "signal": "not_carried"}, {"mode": "instore"}) == []
     assert live.extra_actions("get_product", result, {"mode": "instore"}) == []
+
+
+def test_dispatch_coerces_string_numbers(monkeypatch):
+    from app.agent import tools
+    seen = {}
+    def fake_add(product_id: str, qty: int, tool_context) -> dict:
+        seen.update(product_id=product_id, qty=qty)
+        return {"ok": True}
+    monkeypatch.setitem(live.TOOLS_BY_MODE, "online", [fake_add])
+    fake_add.__name__ = "fake_add"
+    assert live.dispatch("fake_add", {"product_id": "x", "qty": "2"}, {"mode": "online"}) == {"ok": True}
+    assert seen == {"product_id": "x", "qty": 2}

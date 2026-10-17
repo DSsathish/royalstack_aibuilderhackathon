@@ -86,8 +86,9 @@ def navigate_to(product_id: str, tool_context: ToolContext) -> dict:
 
 
 def add_to_cart(product_id: str, qty: int, tool_context: ToolContext) -> dict:
-    """Add qty units of a product to the shopper's cart. Use the product_id from search_products; a product name
-    also works and is matched to the catalog. Fails with out_of_stock, item_limit or unknown_product."""
+    """Add qty units of a product to the shopper's cart. Pass the product_id from a search_products result, or,
+    when you only know the product from the conversation, its exact name (for example "India Gate Basmati Rice 5kg").
+    Never invent an id. Fails with out_of_stock, item_limit or unknown_product."""
     s = tool_context.state
     resolved = None
     if not catalog.get_product(s["store_id"], product_id):
