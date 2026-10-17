@@ -16,12 +16,14 @@ export function signInWithGoogle() { return signInWithPopup(auth(), new GoogleAu
 export function signOutOwner() { return signOut(auth()); }
 /** Email and password for owners and staff. A new account gets a verification link; the API accepts the email only once verified. */
 export function signInWithEmail(email: string, password: string) { return signInWithEmailAndPassword(auth(), email.trim(), password); }
+/** The verification page Firebase shows gets a "Continue" button back to the dashboard. */
+const backToDashboard = () => ({ url: `${window.location.origin}/owner/` });
 export async function createOwnerAccount(email: string, password: string) {
   const cred = await createUserWithEmailAndPassword(auth(), email.trim(), password);
-  await sendEmailVerification(cred.user);
+  await sendEmailVerification(cred.user, backToDashboard());
   return cred.user;
 }
-export function resendVerification() { const u = auth().currentUser; return u ? sendEmailVerification(u) : Promise.resolve(); }
+export function resendVerification() { const u = auth().currentUser; return u ? sendEmailVerification(u, backToDashboard()) : Promise.resolve(); }
 export function resetPassword(email: string) { return sendPasswordResetEmail(auth(), email.trim()); }
 /** Re-read the user after they clicked the link, and mint a token that carries email_verified. */
 export async function refreshVerified(): Promise<boolean> {

@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { money } from "@/lib/api";
 import { createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
@@ -27,6 +27,7 @@ export default function OwnerPage() {
   const [loadedMe, setLoadedMe] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [verifiedTick, setVerifiedTick] = useState(0);
+  const onVerified = useCallback(() => setVerifiedTick((t) => t + 1), []);
 
   useEffect(() => watchUser(setUser), []);
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function OwnerPage() {
 
   if (user === undefined) return <main className="p-6 text-muted">Loading…</main>;
   if (!user?.email) return <OwnerSignIn />;          // shoppers signed in by phone are not owners
-  if (isPasswordUser(user) && !user.emailVerified) return <VerifyEmail email={user.email} onVerified={() => setVerifiedTick((t) => t + 1)} />;
+  if (isPasswordUser(user) && !user.emailVerified) return <VerifyEmail email={user.email} onVerified={onVerified} />;
   if (!store) {
     if (!loadedMe) return <main className="p-6 text-muted">Loading</main>;
     return <RegisterForm email={user.email ?? ""} error={error} onDone={(s, pin) => { setStores([s.store_id]); setRoles({ [s.store_id]: "owner" }); setStore(s.store_id); setNewPin(pin); setTab("setup"); }} />;
@@ -107,16 +108,42 @@ function OwnerSignIn() {
   );
 }
 
+/** Waits for the address to be verified: checks on load, every few seconds, and whenever the tab regains focus,
+ *  so clicking the link in the mail is enough. An account that no longer exists drops back to the sign-in page. */
 function VerifyEmail({ email, onVerified }: { email: string; onVerified: () => void }) {
   const [msg, setMsg] = useState("");
+  const [checking, setChecking] = useState(false);
+  const check = useCallback(async (manual = false) => {
+    setChecking(true);
+    try {
+      if (await refreshVerified()) { onVerified(); return; }
+      if (manual) setMsg("Not verified yet. Open the link in the email, then this page continues by itself.");
+    } catch (e) {
+      const code = (e as { code?: string }).code ?? "";
+      if (code.includes("user-token-expired") || code.includes("user-not-found") || code.includes("user-disabled")) {
+        await signOutOwner();                                  // the account is gone: back to the sign-in page
+        return;
+      }
+      setMsg(authMessage(e));
+    } finally { setChecking(false); }
+  }, [onVerified]);
+  useEffect(() => {
+    check();
+    const id = setInterval(() => check(), 5000);
+    const onFocus = () => check();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onFocus); };
+  }, [check]);
   return (
     <main className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
       <div><div className="eyebrow">One more step</div><h1 className="text-2xl font-semibold">Verify your email</h1></div>
-      <p className="text-muted max-w-sm">We sent a verification link to <b>{email}</b>. Open it, then come back and tap Continue. The address must be verified before it can own or join a store.</p>
+      <p className="text-muted max-w-sm">We sent a verification link to <b>{email}</b>. Open it in your mail app; this page continues on its own once the address is verified. The address must be verified before it can own or join a store.</p>
+      <p className="text-xs text-muted max-w-sm">If the link page says it has expired or was already used, the address is usually verified anyway (some mail apps open links ahead of you); tap Continue.</p>
       <div className="flex flex-wrap justify-center gap-2">
-        <button onClick={async () => { if (await refreshVerified()) onVerified(); else setMsg("Not verified yet. Open the link in the email first."); }} className="btn btn-primary">Continue</button>
-        <button onClick={() => resendVerification().then(() => setMsg("Sent again.")).catch((e) => setMsg(authMessage(e)))} className="btn btn-ghost">Resend link</button>
-        <button onClick={() => signOutOwner()} className="btn btn-ghost">Sign out</button>
+        <button onClick={() => check(true)} disabled={checking} className="btn btn-primary">{checking ? "Checking" : "Continue"}</button>
+        <button onClick={() => resendVerification().then(() => setMsg("Sent again. Check spam too.")).catch((e) => setMsg(authMessage(e)))} className="btn btn-ghost">Resend link</button>
+        <button onClick={() => signOutOwner()} className="btn btn-ghost">Use a different email</button>
       </div>
       {msg && <p className="chip chip-muted whitespace-normal max-w-sm">{msg}</p>}
     </main>
