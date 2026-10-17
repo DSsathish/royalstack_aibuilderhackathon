@@ -60,6 +60,8 @@ def seed_products(store: Store) -> None:
     if errors:
         raise SystemExit(f"products.csv has errors: {errors[:3]}")
     res = csvc.upsert(store.store_id, rows, high_value_threshold=store.high_value_threshold)
+    from app.services import catalog
+    catalog.bump(store.store_id)      # running API instances reload within two seconds
     print(f"products: created={res.created} updated={res.updated}")
 
 
