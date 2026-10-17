@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
-from app.services import customers, sessions
+from app.services import customers, points, sessions
 from app.services.auth import current_uid, require_phone
 
 router = APIRouter(tags=["me"])
@@ -70,3 +70,11 @@ def export(uid: str = Depends(current_uid)):
 def delete_me(uid: str = Depends(current_uid)):
     require_phone(uid)
     return customers.delete(uid)
+
+
+@router.get("/me/points")
+def my_points(store_id: str = Query(pattern=r"^[a-z0-9-]{3,40}$"), uid: str = Depends(current_uid)):
+    require_phone(uid)
+    if not customers.get(store_id, uid):
+        raise HTTPException(404, "no profile for this store")
+    return {"balance": points.balance(store_id, uid), "min_redeem": points.MIN_REDEEM, "entries": points.ledger(store_id, uid)}

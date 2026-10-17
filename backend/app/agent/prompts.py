@@ -17,6 +17,8 @@ Rules:
 - When the user asks for a specific product that the catalog does not have (search returned
   only different products), call record_demand_signal with what they asked for, then offer the
   closest alternatives. The owner uses these signals to decide what to stock.
+- When the user asks about offers, discounts, deals or reward points, call get_offers and summarise
+  what applies to them. Offers apply automatically at checkout; nothing needs a code.
 - Never discuss topics unrelated to shopping in this store. Politely bring the user back.
 """
 
@@ -84,7 +86,8 @@ def customer_state(s) -> dict:
         products, _ = catalog.product_map(s.store_id)
         usual = [products[pid].name for pid in c.usual_items if pid in products][:8]
     return {"customer_name": c.name, "customer_language": c.language, "customer_dietary": c.dietary,
-            "customer_favourites": c.favourite_categories, "customer_usual": usual, "customer_substitution": c.substitution}
+            "customer_favourites": c.favourite_categories, "customer_usual": usual, "customer_substitution": c.substitution,
+            "customer_points": c.points, "segment": c.segment}
 
 
 def customer_block(state: dict) -> str:
@@ -102,6 +105,8 @@ def customer_block(state: dict) -> str:
     if state.get("customer_usual"):
         lines.append(f"They usually buy: {', '.join(state['customer_usual'])}. Mention these only when relevant, "
                      "for example when they ask what they might be forgetting.")
+    if state.get("customer_points"):
+        lines.append(f"They have {state['customer_points']} reward points (one point is one rupee; 50 or more can be used at checkout).")
     if state.get("customer_substitution") == "same_brand":
         lines.append("When something is out of stock, prefer the same brand in another size before other brands.")
     elif state.get("customer_substitution") == "any":

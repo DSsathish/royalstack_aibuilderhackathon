@@ -35,6 +35,7 @@ ACTION_FOR_TOOL = {
     "forecast_demand": "show_forecast",
     "draft_purchase_order": "drafts_created",
     "get_anomalies": "show_anomalies",
+    "get_offers": "show_offers",
 }
 
 _sessions = InMemorySessionService()
@@ -84,7 +85,7 @@ async def _fresh_session(s: Session) -> str:
     sid = uuid.uuid4().hex
     await _sessions.create_session(
         app_name=APP_NAME, user_id=s.session_id, session_id=sid,
-        state={"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id,
+        state={"store_id": s.store_id, "mode": s.mode, "cart_id": s.cart_id, "session_id": s.session_id, "customer_id": s.customer_id,
                "language": s.language, "history": conversation.history_text(s), **prompts.store_state(s.store_id), **prompts.customer_state(s)})
     return sid
 

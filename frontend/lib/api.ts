@@ -17,12 +17,16 @@ export type Product = { product_id: string; name: string; brand: string; price: 
   unit: string; available: number; aisle?: string; bay?: number; image_url?: string; location?: Location | null;
   substitutes?: string[]; barcode?: string; category?: string };
 export type CartItem = { product_id: string; name: string; qty: number; unit_price: number; mrp: number; via: string };
-export type CartView = { cart_id: string; items: CartItem[]; count: number; subtotal: number; savings: number; total: number; status: string };
+export type DiscountLine = { offer_id: string; name: string; amount: number };
+export type CartView = { cart_id: string; items: CartItem[]; count: number; subtotal: number; savings: number; total: number; status: string;
+  discounts: DiscountLine[]; discount_total: number; points_redeemed: number; points_value: number; points_balance: number | null; segment: string };
+export type Offer = { offer_id: string; name: string; kind: string; detail: string; segment: string; ends_at: string | null };
 export type Verification = { verification_id: string; verdict: "clear" | "spot_check" | "flag"; reasons: string[];
   layers: { receipt_ok: boolean; order_ok: boolean; count_ok: boolean | null; limit_ok: boolean; high_value: string[]; random_audit: boolean };
   vision: { confidence: number; unexpected_items: string[]; skipped: boolean } | null;
   order_summary: { items: { name: string; qty: number }[]; total: number; paid_at: string | null } | null };
 export type Order = { order_id: string; items: CartItem[]; subtotal: number; savings: number; total: number;
+  discounts: DiscountLine[]; discount_total: number; points_redeemed: number; points_value: number; points_earned: number;
   status: string; receipt_token: string; paid_at: string | null; created_at: string };
 
 export function entranceParams(search: string): { store: string; token: string; aisle?: string } | null {
@@ -78,9 +82,12 @@ export const api = {
     fetch(`${API}/carts/${s.cart_id}/items`, { method: "POST", headers: h(s), body: JSON.stringify({ product_id, qty, via }) }).then(json<CartView>),
   removeItem: (s: Session, product_id: string) =>
     fetch(`${API}/carts/${s.cart_id}/items/${product_id}`, { method: "DELETE", headers: h(s) }).then(json<CartView>),
-  checkoutIntent: (s: Session) =>
-    fetch(`${API}/checkout/intent`, { method: "POST", headers: h(), body: JSON.stringify({ session_id: s.session_id }) })
-      .then(json<{ order_id: string; amount: number; provider: "mock" | "razorpay"; razorpay_key_id?: string; razorpay_order_id?: string }>),
+  offers: (store_id: string, s?: Session) => fetch(`${API}/stores/${store_id}/offers`, { headers: h(s) }).then(json<Offer[]>),
+  /** `points` needs a token from a phone verification done in the last ten minutes. */
+  checkoutIntent: (s: Session, points = 0, token?: string) =>
+    fetch(`${API}/checkout/intent`, { method: "POST", headers: { ...h(), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ session_id: s.session_id, points }) })
+      .then(json<{ order_id: string; amount: number; provider: "mock" | "razorpay"; razorpay_key_id?: string; razorpay_order_id?: string; discount_total: number; points_redeemed: number }>),
   checkoutConfirm: (s: Session, order_id: string, payment_id: string, signature: string) =>
     fetch(`${API}/checkout/confirm`, { method: "POST", headers: h(), body: JSON.stringify({ order_id, payment_id, signature, session_id: s.session_id }) }).then(json<Order>),
   order: (s: Session, order_id: string) => fetch(`${API}/orders/${order_id}`, { headers: h(s) }).then(json<Order>),

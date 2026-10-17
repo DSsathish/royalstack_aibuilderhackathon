@@ -8,7 +8,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from app.domain.models import Customer, Order, Session, now
-from app.services import conversation, db
+from app.services import conversation, db, segments
 
 PROFILE_FIELDS = ("name", "language", "dietary", "favourite_categories", "usual_items", "substitution")
 
@@ -45,12 +45,24 @@ def record_order(o: Order) -> None:
     """Called once per paid order: visits, spend, last seen and the refreshed usual-items list."""
     if not o.customer_id:
         return
+    c = get(o.store_id, o.customer_id)
+    if not c:
+        return      # account deleted after the session was linked; the sale stays anonymous
+    after = c.model_copy(update={"visits": c.visits + 1, "spend": c.spend + o.total, "last_seen": now()})
     try:
         db.customers(o.store_id).document(o.customer_id).update({
             "visits": firestore.Increment(1), "spend": firestore.Increment(o.total), "last_seen": now(),
-            "usual_items": _usual_items(o.store_id, o.customer_id)})
+            "usual_items": _usual_items(o.store_id, o.customer_id), "segment": segments.classify(after)})
     except NotFound:
-        pass    # account deleted after the session was linked; the sale stays anonymous
+        pass
+
+
+def segment_of(store_id: str, uid: str | None) -> str:
+    """The shopper's stored segment; guests and unknown ids are "guest"."""
+    if not uid:
+        return "guest"
+    c = get(store_id, uid)
+    return c.segment if c else "guest"
 
 
 def _usual_items(store_id: str, uid: str) -> list[str]:

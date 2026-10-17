@@ -1,17 +1,24 @@
 """Owner dashboard endpoints and the scheduled jobs trigger."""
 
 import hmac
+from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.domain.models import now
+from app.domain.models import Offer, Segment, now
 from app.services import db, insights, reorder, sessions, verification
 from app.services.auth import STORE_ID, current_uid, require_owner, require_staff, roles_for
 
 router = APIRouter(tags=["owner"])
 PID = Path(pattern=r"^[a-z0-9-]{3,80}$")
+
+
+def _audit(store_id: str, actor: str, action: str, payload: dict) -> None:
+    import uuid
+    db.audit(store_id).document(uuid.uuid4().hex).set({"actor": actor, "action": action, "created_at": now(), "payload": payload})
 
 
 @router.get("/owner/me")
@@ -110,8 +117,98 @@ def customers_list(store_id: str = STORE_ID, uid: str = Depends(current_uid)):
     require_owner(store_id, uid)
     from google.cloud import firestore
     rows = [d.to_dict() for d in db.customers(store_id).order_by("spend", direction=firestore.Query.DESCENDING).limit(500).stream()]
-    keep = ("uid", "phone_last4", "name", "language", "dietary", "favourite_categories", "visits", "spend", "points", "last_seen", "created_at")
+    keep = ("uid", "phone_last4", "name", "language", "dietary", "favourite_categories", "visits", "spend", "points", "segment", "last_seen", "created_at")
     return [{k: r.get(k) for k in keep} for r in rows]
+
+
+class PointsAdjust(BaseModel):
+    delta: int = Field(ge=-100_000, le=100_000)
+    reason: str = Field(min_length=1, max_length=120)
+
+
+@router.post("/owner/{store_id}/customers/{uid}/points")
+def adjust_points(body: PointsAdjust, store_id: str = STORE_ID, uid: str = Path(max_length=128), owner_uid: str = Depends(current_uid)):
+    require_owner(store_id, owner_uid)
+    from app.services import points
+    try:
+        balance = points.adjust(store_id, uid, body.delta, body.reason, by=owner_uid)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
+    _audit(store_id, owner_uid, "points_adjusted", {"customer": uid, "delta": body.delta, "reason": body.reason})
+    return {"uid": uid, "points": balance}
+
+
+# --- offers -----------------------------------------------------------------
+
+class OfferIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    kind: Literal["product", "category", "cart"]
+    product_id: str = Field(default="", max_length=80)
+    category: str = Field(default="", max_length=40)
+    min_total: float = Field(default=0, ge=0, le=1_000_000)
+    percent_off: float = Field(default=0, ge=0, le=90)
+    amount_off: float = Field(default=0, ge=0, le=1_000_000)
+    segment: Segment = "all"
+    active: bool = True
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+
+
+class OfferPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    kind: Literal["product", "category", "cart"] | None = None
+    product_id: str | None = Field(default=None, max_length=80)
+    category: str | None = Field(default=None, max_length=40)
+    min_total: float | None = Field(default=None, ge=0, le=1_000_000)
+    percent_off: float | None = Field(default=None, ge=0, le=90)
+    amount_off: float | None = Field(default=None, ge=0, le=1_000_000)
+    segment: Segment | None = None
+    active: bool | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+
+
+@router.get("/owner/{store_id}/offers")
+def list_offers(store_id: str = STORE_ID, uid: str = Depends(current_uid)):
+    require_owner(store_id, uid)
+    from app.services import offers
+    return [o.model_dump() | {"detail": offers.describe(store_id, o)} for o in offers.list_all(store_id)]
+
+
+@router.post("/owner/{store_id}/offers")
+def create_offer(body: OfferIn, store_id: str = STORE_ID, uid: str = Depends(current_uid)):
+    require_owner(store_id, uid)
+    from app.services import offers
+    try:
+        o = offers.create(store_id, Offer(offer_id="", store_id=store_id, created_by=uid, **body.model_dump()))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    _audit(store_id, uid, "offer_created", {"offer_id": o.offer_id, "name": o.name, "kind": o.kind})
+    return o.model_dump() | {"detail": offers.describe(store_id, o)}
+
+
+@router.patch("/owner/{store_id}/offers/{offer_id}")
+def patch_offer(body: OfferPatch, store_id: str = STORE_ID, offer_id: str = Path(pattern=r"^[a-f0-9]{32}$"), uid: str = Depends(current_uid)):
+    require_owner(store_id, uid)
+    from app.services import offers
+    try:
+        o = offers.update(store_id, offer_id, body.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    if not o:
+        raise HTTPException(404, "offer not found")
+    _audit(store_id, uid, "offer_changed", {"offer_id": offer_id, "fields": sorted(body.model_dump(exclude_unset=True))})
+    return o.model_dump() | {"detail": offers.describe(store_id, o)}
+
+
+@router.delete("/owner/{store_id}/offers/{offer_id}")
+def delete_offer(store_id: str = STORE_ID, offer_id: str = Path(pattern=r"^[a-f0-9]{32}$"), uid: str = Depends(current_uid)):
+    require_owner(store_id, uid)
+    from app.services import offers
+    if not offers.delete(store_id, offer_id):
+        raise HTTPException(404, "offer not found")
+    _audit(store_id, uid, "offer_deleted", {"offer_id": offer_id})
+    return {"deleted": True}
 
 
 @router.get("/owner/{store_id}/signals")
@@ -148,9 +245,23 @@ def patch_settings(body: SettingsPatch, store_id: str = STORE_ID, uid: str = Dep
     return changes
 
 
-@router.post("/jobs/forecast")
-def forecast_job(store_id: str = Query(pattern=r"^[a-z0-9-]{3,40}$"), x_job_key: str | None = Header(default=None)):
+def _job_key(x_job_key: str | None) -> None:
     if not settings.job_key or not x_job_key or not hmac.compare_digest(x_job_key, settings.job_key):
         raise HTTPException(401, "job key required")
+
+
+@router.post("/jobs/forecast")
+def forecast_job(store_id: str | None = Query(default=None, pattern=r"^[a-z0-9-]{3,40}$"), x_job_key: str | None = Header(default=None)):
+    """One store when given, otherwise every store (the nightly schedule)."""
+    _job_key(x_job_key)
     from app.jobs import forecast as job
-    return job.run(store_id)
+    if store_id:
+        return job.run(store_id)
+    return {"stores": [job.run(d.id) for d in db.client().collection("stores").select([]).stream()]}
+
+
+@router.post("/jobs/customers")
+def customers_job(x_job_key: str | None = Header(default=None)):
+    _job_key(x_job_key)
+    from app.jobs import customers as job
+    return job.run()

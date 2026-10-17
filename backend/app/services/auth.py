@@ -19,6 +19,7 @@ def verify_id_token(token: str) -> dict:
 
 _EMAILS: dict[str, str] = {}   # uid -> email seen on the last verified token (for owner bootstrap)
 _PHONES: dict[str, str] = {}   # uid -> phone number from a phone sign-in token (shopper identity)
+_AUTH_TIMES: dict[str, int] = {}   # uid -> auth_time of the last verified token (freshness for points)
 
 
 def current_uid(authorization: str | None = Header(default=None),
@@ -32,6 +33,8 @@ def current_uid(authorization: str | None = Header(default=None),
         _EMAILS[claims["sub"]] = claims["email"].lower()
     if claims.get("phone_number"):
         _PHONES[claims["sub"]] = claims["phone_number"]
+    if claims.get("auth_time"):
+        _AUTH_TIMES[claims["sub"]] = int(claims["auth_time"])
     return claims["sub"]
 
 
@@ -40,6 +43,19 @@ def require_phone(uid: str) -> str:
     phone = _PHONES.get(uid)
     if not phone:
         raise HTTPException(403, "a phone sign-in is required")
+    return phone
+
+
+RECENT_S = 600
+
+
+def require_recent_phone(uid: str) -> str:
+    """A phone sign-in whose code was verified in the last ten minutes: the OTP step before spending points."""
+    import time
+    phone = require_phone(uid)
+    at = _AUTH_TIMES.get(uid)
+    if not at or time.time() - at > RECENT_S:
+        raise HTTPException(403, "verify your number again to use points")
     return phone
 
 

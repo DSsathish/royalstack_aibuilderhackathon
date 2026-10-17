@@ -1,7 +1,9 @@
 """Cart lines and totals. Reserves stock on add, releases on remove."""
 
-from app.domain.models import Cart, CartItem, Mode
-from app.services import catalog, db, inventory
+from pydantic import BaseModel
+
+from app.domain.models import Cart, CartItem, DiscountLine, Mode
+from app.services import catalog, db, inventory, offers
 
 
 def get(store_id: str, cart_id: str) -> Cart:
@@ -49,8 +51,22 @@ def remove(store_id: str, cart_id: str, product_id: str) -> Cart:
     return _save(c)
 
 
-def totals(c: Cart) -> tuple[float, float, float]:
-    """(subtotal, savings vs MRP, total). Total equals subtotal until discounts exist."""
+class Pricing(BaseModel):
+    subtotal: float
+    savings: float                  # versus MRP
+    discounts: list[DiscountLine] = []
+    discount_total: float = 0
+    points_redeemed: int = 0
+    points_value: float = 0         # one rupee per point
+    total: float
+
+
+def pricing(store_id: str, c: Cart, segment: str = "guest", points: int = 0) -> Pricing:
+    """Subtotal, offers for this shopper's segment, then points capped at the amount due."""
     subtotal = round(sum(i.unit_price * i.qty for i in c.items), 2)
     savings = round(sum((i.mrp - i.unit_price) * i.qty for i in c.items), 2)
-    return subtotal, savings, subtotal
+    lines, discount = offers.apply(store_id, c, segment)
+    due = round(subtotal - discount, 2)
+    redeemed = max(0, min(int(points), int(due)))
+    return Pricing(subtotal=subtotal, savings=savings, discounts=lines, discount_total=discount,
+                   points_redeemed=redeemed, points_value=float(redeemed), total=round(due - redeemed, 2))

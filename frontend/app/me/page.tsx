@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Order, api, money } from "@/lib/api";
 import { firstAuthState, signOutShopper } from "@/lib/firebase";
-import { Profile, linkShopper, me } from "@/lib/me";
+import { LedgerEntry, Profile, linkShopper, me } from "@/lib/me";
 import { useApp } from "@/lib/store";
 import PhoneSignIn from "@/components/PhoneSignIn";
 
@@ -12,6 +12,7 @@ const DIETARY = ["Vegetarian", "Vegan", "Jain", "Halal", "No sugar", "Gluten-fre
 const CATEGORIES = ["Dairy", "Staples", "Snacks", "Beverages", "Fruits & Vegetables", "Bakery", "Personal care", "Household", "Baby"];
 const LANGS = [["auto", "Auto"], ["en", "English"], ["ta", "தமிழ்"], ["hi", "हिन्दी"]] as const;
 const SUBS = [["ask", "Ask me first"], ["same_brand", "Same brand, another size"], ["any", "Any equivalent"]] as const;
+const LEDGER: Record<LedgerEntry["kind"], string> = { earn: "Earned on a purchase", redeem: "Used at checkout", release: "Returned from an unpaid checkout", adjust: "Adjusted by the store", expire: "Expired" };
 
 /** /me: the signed-in shopper's preferences, receipts and data controls. Guests are offered phone sign-in. */
 export default function MePage() {
@@ -23,6 +24,7 @@ export default function MePage() {
   const [form, setForm] = useState<Partial<Profile>>({});
   const [msg, setMsg] = useState("");
   const [aisles, setAisles] = useState<Record<string, string>>({});
+  const [ledger, setLedger] = useState<{ balance: number; min_redeem: number; entries: LedgerEntry[] } | null>(null);
 
   useEffect(() => { firstAuthState().then((u) => setSignedIn(!!u?.phoneNumber)); }, []);
   useEffect(() => {
@@ -36,6 +38,7 @@ export default function MePage() {
         setForm({ name: p.name, language: p.language, dietary: p.dietary, favourite_categories: p.favourite_categories, substitution: p.substitution });
         setCustomer({ uid: p.uid, name: p.name });
         setOrders(await me.orders(session.store_id));
+        setLedger(await me.points(session.store_id));
       } catch (e) { setMsg((e as Error).message); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,6 +141,16 @@ export default function MePage() {
             {o.items.some((i) => aisles[i.product_id]) && <ul className="text-xs text-muted mt-1">{o.items.map((i) => aisles[i.product_id] && <li key={i.product_id}>{i.name}: {aisles[i.product_id]}</li>)}</ul>}
           </div>
         ))}
+      </section>
+
+      <section className="card p-4 space-y-2">
+        <div className="eyebrow">Reward points</div>
+        <p className="text-sm">Balance <b className="mono">{ledger?.balance ?? profile.points}</b> · one point is one rupee · use {ledger?.min_redeem ?? 50} or more at checkout · points expire after a year.</p>
+        {ledger && ledger.entries.length > 0 && (
+          <ul className="text-xs text-muted space-y-0.5">{ledger.entries.slice(0, 20).map((e) => (
+            <li key={e.entry_id} className="flex gap-2"><span className="mono w-12 text-right">{e.delta > 0 ? "+" : ""}{e.delta}</span><span className="flex-1">{LEDGER[e.kind]}{e.reason ? `: ${e.reason}` : ""}</span><span>{new Date(e.created_at).toLocaleDateString()}</span></li>
+          ))}</ul>
+        )}
       </section>
 
       <section className="card p-4 space-y-2 text-sm">

@@ -14,7 +14,7 @@ export default function TotalBar() {
       <div className="min-w-0">
         <div className="eyebrow">Your receipt</div>
         <div className="mono text-base leading-tight">{count} item{count === 1 ? "" : "s"} · {money(cart?.total ?? 0)}</div>
-        {(cart?.savings ?? 0) > 0 && <div className="text-xs text-good">You save {money(cart!.savings)}</div>}
+        {((cart?.savings ?? 0) > 0 || (cart?.discount_total ?? 0) > 0) && <div className="text-xs text-good">You save {money((cart?.savings ?? 0) + (cart?.discount_total ?? 0))}{(cart?.discount_total ?? 0) > 0 ? " with offers" : ""}</div>}
         {lines >= limit && <div className="text-xs text-warn">Self-checkout limit reached ({limit} lines)</div>}
       </div>
       <Link href="/checkout" aria-disabled={count === 0} className={`btn ${count ? "btn-primary" : "btn-ghost pointer-events-none text-muted"}`}>Checkout</Link>

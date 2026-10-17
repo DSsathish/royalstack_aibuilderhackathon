@@ -4,7 +4,8 @@ import { CartView, Location, Product, Session, Store, loadSession, saveSession }
 
 export type Msg = { id: number; role: "user" | "assistant"; text: string; products?: Product[]; map?: Location; status?: string; checkout?: boolean; fromPhoto?: boolean;
   lowStock?: { product_id: string; name: string; available: number; reorder_point: number }[];
-  drafts?: { po_id: string; supplier: string; lines: number; summary: string }[] };
+  drafts?: { po_id: string; supplier: string; lines: number; summary: string }[];
+  offers?: { name: string; detail: string }[] };
 
 type State = {
   session: Session | null;

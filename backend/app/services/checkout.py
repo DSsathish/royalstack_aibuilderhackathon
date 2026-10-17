@@ -10,6 +10,7 @@ from app.config import settings
 from app.domain.models import Order, Session, now
 from app.services import cart as cart_svc
 from app.services import customers, db, inventory, payments, qr
+from app.services import points as points_svc
 
 
 class CheckoutError(ValueError):
@@ -33,7 +34,7 @@ def get(order_id: str) -> Order | None:
     return Order(**doc.to_dict()) if doc.exists else None
 
 
-def intent(s: Session) -> Order:
+def intent(s: Session, points: int = 0) -> Order:
     if s.mode not in ("instore", "online"):
         raise CheckoutError("this session mode cannot check out")
     c = cart_svc.get(s.store_id, s.cart_id)
@@ -43,15 +44,40 @@ def intent(s: Session) -> Order:
         limit = db.store_ref(s.store_id).get().to_dict().get("self_checkout_item_limit", 15)
         if len(c.items) > limit:
             raise CheckoutError(f"self-checkout limit is {limit} items")
-    subtotal, savings, total = cart_svc.totals(c)
+    _release_held_points(c.cart_id)
+    if points:
+        if not s.customer_id:
+            raise CheckoutError("sign in to use points")
+        if points < points_svc.MIN_REDEEM:
+            raise CheckoutError(f"redeem at least {points_svc.MIN_REDEEM} points")
+        if points > points_svc.balance(s.store_id, s.customer_id):
+            raise CheckoutError("not enough points")
+    p = cart_svc.pricing(s.store_id, c, customers.segment_of(s.store_id, s.customer_id), points)
     provider, key_id, key_secret = _keys(s.store_id)
     o = Order(order_id=uuid.uuid4().hex, store_id=s.store_id, session_id=s.session_id, cart_id=c.cart_id,
               channel="store" if s.mode == "instore" else "online", items=c.items,
-              subtotal=subtotal, savings=savings, total=total, payment_provider=provider, customer_id=s.customer_id)
+              subtotal=p.subtotal, savings=p.savings, discounts=p.discounts, discount_total=p.discount_total,
+              points_redeemed=p.points_redeemed, points_value=p.points_value, total=p.total,
+              payment_provider="mock" if p.total <= 0 else provider, customer_id=s.customer_id)
+    if p.points_redeemed:
+        try:
+            points_svc.redeem(s.store_id, s.customer_id, p.points_redeemed, o.order_id)     # held until paid or released
+        except ValueError as exc:
+            raise CheckoutError(str(exc))
     if o.payment_provider == "razorpay":
         o.payment_ref = _razorpay_order(o, key_id, key_secret)
     db.orders().document(o.order_id).set(o.model_dump())
     return o
+
+
+def _release_held_points(cart_id: str) -> None:
+    """A retry on the same cart cancels earlier pending orders that hold points and gives the points back."""
+    from google.cloud.firestore_v1 import FieldFilter
+    for d in db.orders().where(filter=FieldFilter("cart_id", "==", cart_id)).stream():
+        o = d.to_dict()
+        if o.get("status") == "pending" and o.get("points_redeemed", 0) > 0 and o.get("customer_id"):
+            points_svc.release(o["store_id"], o["customer_id"], o["order_id"])
+            d.reference.update({"status": "cancelled"})
 
 
 def _razorpay_order(o: Order, key_id: str, key_secret: str) -> str:
@@ -73,6 +99,8 @@ def confirm(order_id: str, *, payment_id: str, signature: str) -> Order:
     o = get(order_id)
     if not o:
         raise CheckoutError("order not found")
+    if o.status == "cancelled":
+        raise CheckoutError("order was cancelled, start checkout again")
     if o.status != "pending":
         return o  # already paid: idempotent
     if o.payment_provider == "mock":
@@ -89,6 +117,8 @@ def confirm(order_id: str, *, payment_id: str, signature: str) -> Order:
     db.carts().document(o.cart_id).update({"status": "checked_out"})
     o.status, o.payment_id, o.paid_at = "paid", payment_id, now()
     o.receipt_token = qr.receipt_token(o.order_id, o.store_id, sum(i.qty for i in o.items))
+    if o.customer_id:
+        o.points_earned = points_svc.earn(o.store_id, o.customer_id, o.total, o.order_id)
     db.orders().document(o.order_id).set(o.model_dump())
     customers.record_order(o)
     return o

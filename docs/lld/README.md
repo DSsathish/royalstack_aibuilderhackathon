@@ -28,3 +28,4 @@ Rules we follow in code:
 | R1 self-service shops: registration, setup, roles, per-store payments | [r1-self-service.md](r1-self-service.md) | done |
 | R3 scan-first cart, owner add-by-scan with barcode lookup | [r3-scan-first.md](r3-scan-first.md) | done |
 | R4 optional shopper identity: phone OTP, profile, history, export and delete, customers for owners | [r4-identity.md](r4-identity.md) | done |
+| R5 segments, owner-created offers applied automatically, reward points ledger, nightly customer job | [r5-customers-offers-points.md](r5-customers-offers-points.md) | done |
