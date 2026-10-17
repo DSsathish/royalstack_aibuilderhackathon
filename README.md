@@ -55,8 +55,8 @@ frontend/                Next.js 16 static export, TypeScript, Tailwind
   lib/                   api.ts, sse.ts, voice.ts, live.ts, store.ts, firebase.ts, authed.ts, owner.ts, me.ts
   public/pcm-worklet.js  microphone -> 16 kHz PCM for live voice
 infra/seed/              demo store generator (170 products, 90 days of sales), seed script,
-                         kaggle_bigbasket.py (real Kaggle BigBasket catalogue into any store), import_dataset.py
-infra/scripts/           reset_demo.py, sync_example.py (how a billing system signs and pushes stock)
+                         kaggle_catalog.py (Kaggle BigBasket grocery or Myntra fashion catalogues into any store), import_dataset.py
+infra/scripts/           reset_demo.py, delete_store.py, sync_example.py (how a billing system signs and pushes stock)
 docs/                    hld.md, security.md, demo-script.md, submission-checklist.md, lld/ (one per module group), plan/
 ```
 
@@ -79,8 +79,9 @@ cd frontend && npm ci && npm run dev    # NEXT_PUBLIC_API_URL defaults to http:/
 cd backend && .venv/bin/python ../infra/seed/seed.py --store demo-grocery --embed --owner-email you@example.com
 .venv/bin/python -m app.jobs.forecast --store demo-grocery
 
-# a store from the public Kaggle BigBasket dataset (27,555 real Indian grocery products; no Kaggle account needed)
-.venv/bin/python ../infra/seed/kaggle_bigbasket.py --store my-mart --name "My Mart" --owner-email you@example.com --limit 300
+# a store from a public Kaggle catalogue (no Kaggle account needed): bigbasket = 27,555 grocery products, myntra = 12,491 fashion items
+.venv/bin/python ../infra/seed/kaggle_catalog.py --dataset bigbasket --store my-mart --name "My Mart" --owner-email you@example.com --limit 300
+.venv/bin/python ../infra/seed/kaggle_catalog.py --dataset myntra --store my-textiles --name "My Textiles" --owner-email you@example.com --limit 250
 .venv/bin/python -m app.jobs.forecast --store my-mart
 ```
 

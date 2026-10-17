@@ -42,6 +42,7 @@ def main() -> None:
     ap.add_argument("--owner-email", action="append", default=[])
     ap.add_argument("--limit", type=int, default=5000, help="max products to import")
     ap.add_argument("--mapping", help="JSON mapping to skip the normalizer")
+    ap.add_argument("--append-sales", action="store_true", help="keep the store's existing BigQuery sales rows")
     a = ap.parse_args()
 
     raw = Path(a.file).read_bytes()
@@ -130,7 +131,7 @@ def main() -> None:
             if pid in price_of:
                 out.append({"store_id": a.store, "product_id": pid, "day": row[col_d][:10], "channel": "store", "qty": int(float(row[col_q] or 0)), "unit_price": price_of[pid]})
         print(f"sales rows: {len(out)}")
-        seed_bigquery_rows(a.store, out)
+        seed_bigquery_rows(a.store, out, replace=not a.append_sales)
     print("done. Next: python -m app.jobs.forecast --store", a.store)
 
 
