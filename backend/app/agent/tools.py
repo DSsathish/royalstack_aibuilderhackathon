@@ -3,6 +3,7 @@
 Every tool reads store_id / mode / cart_id from tool_context.state and returns a small dict.
 """
 
+import re
 import uuid
 
 from types import SimpleNamespace
@@ -15,11 +16,59 @@ from app.services import catalog, db, forecast as forecast_svc, insights, reorde
 from app.services.catalog import ProductView
 
 
+_UNITS = {"kg": "kg", "kgs": "kg", "g": "g", "gm": "g", "gms": "g", "gram": "g", "grams": "g", "l": "l", "ltr": "l", "litre": "l", "liter": "l",
+          "litres": "l", "liters": "l", "ml": "ml", "pc": "pc", "pcs": "pc", "piece": "pc", "pieces": "pc", "nos": "pc", "tablets": "pc", "tablet": "pc",
+          "capsules": "pc", "sachets": "pc", "bags": "pc", "pack": "pc"}
+_PACK = re.compile(r"(?:(\d+)\s*[x×]\s*)?(\d+(?:\.\d+)?)\s*(" + "|".join(sorted(_UNITS, key=len, reverse=True)) + r")\b", re.I)
+
+
+def pack_size(name: str) -> dict | None:
+    """The pack size written in a product name: "Rice 5kg" -> 5 kg, "12 x 70 g" -> 840 g. None when there is none."""
+    m = _PACK.search(name)
+    if not m:
+        return None
+    count, size = int(m.group(1) or 1), float(m.group(2))
+    total = count * size
+    return {"size": int(total) if total.is_integer() else total, "unit": _UNITS[m.group(3).lower()]}
+
+
+def _stock_note(available: int) -> str:
+    return "out of stock" if available <= 0 else f"only {available} left" if available <= 3 else "in stock"
+
+
 def _row(v: ProductView) -> dict:
     loc = v.location
-    return {"product_id": v.product_id, "name": v.name, "brand": v.brand, "price": v.price, "mrp": v.mrp,
-            "unit": v.unit, "available": v.available,
-            "aisle": loc.aisle if loc else "", "bay": loc.bay if loc else 0}
+    row = {"product_id": v.product_id, "name": v.name, "brand": v.brand, "price": v.price, "mrp": v.mrp,
+           "unit": v.unit, "available": v.available, "in_stock": v.available > 0, "stock_note": _stock_note(v.available),
+           "aisle": loc.aisle if loc else "", "bay": loc.bay if loc else 0}
+    pack = pack_size(v.name)
+    if pack:
+        row["pack"] = pack
+    return row
+
+
+def _alternatives(store_id: str, v: ProductView, limit: int = 4) -> list[ProductView]:
+    """In-stock stand-ins for a product: its listed substitutes, then the same subcategory, then the same category."""
+    found = [s for s in (catalog.get_product(store_id, sid) for sid in v.substitutes) if s and s.available > 0]
+    products, _ = catalog.product_map(store_id)
+    for attr in ("subcategory", "category"):          # exact matches, not keyword hits: soya milk never falls back to dairy
+        key = getattr(v, attr)
+        if len(found) >= 3 or not key:
+            continue
+        for p in sorted(products.values(), key=lambda p: p.name):
+            if p.product_id != v.product_id and getattr(p, attr) == key and p.product_id not in {f.product_id for f in found}:
+                alt = catalog.get_product(store_id, p.product_id)
+                if alt and alt.available > 0:
+                    found.append(alt)
+    return found[:limit]
+
+
+def _brief(v: ProductView) -> dict:
+    row = {"product_id": v.product_id, "name": v.name, "price": v.price, "available": v.available}
+    pack = pack_size(v.name)
+    if pack:
+        row["pack"] = pack
+    return row
 
 
 def _cart_summary(c, segment: str = "guest") -> dict:
@@ -37,16 +86,25 @@ def _segment(state) -> str:
 
 def search_products(query: str, tool_context: ToolContext, max_results: int = 6) -> dict:
     """Search the store catalog by product name, brand, category or a need (e.g. "headache", "breakfast").
-    Works in English, Tamil and Hindi. Returns products with price, available stock and aisle.
-    signal is "found", "out_of_stock" (all matches have no stock) or "not_carried" (no match)."""
-    hits = catalog.search(tool_context.state["store_id"], query, k=max(1, min(max_results, 10)))
+    Works in English, Tamil and Hindi. Each product carries price, in_stock, stock_note ("out of stock", "only 2 left",
+    "in stock"), aisle, pack (size and unit read from the name, e.g. 5 kg) and, when it is out of stock, alternatives
+    that are in stock. out_of_stock lists the names with no stock. signal is "found", "out_of_stock" (every match has
+    no stock) or "not_carried" (no match)."""
+    store_id = tool_context.state["store_id"]
+    hits = catalog.search(store_id, query, k=max(1, min(max_results, 10)))
     if not hits:
         signal = "not_carried"
     elif all(h.available == 0 for h in hits):
         signal = "out_of_stock"
     else:
         signal = "found"
-    return {"products": [_row(h) for h in hits], "signal": signal}
+    rows = []
+    for h in hits:
+        row = _row(h)
+        if h.available <= 0:
+            row["alternatives"] = [_brief(a) for a in _alternatives(store_id, h, limit=3)]
+        rows.append(row)
+    return {"products": rows, "signal": signal, "out_of_stock": [h.name for h in hits if h.available <= 0]}
 
 
 def get_product(product_id: str, tool_context: ToolContext) -> dict:
@@ -66,13 +124,7 @@ def suggest_substitutes(product_id: str, tool_context: ToolContext) -> dict:
     v = catalog.get_product(store_id, product_id)
     if not v:
         return {"error": "unknown_product"}
-    found = [catalog.get_product(store_id, s) for s in v.substitutes]
-    found = [s for s in found if s and s.available > 0]
-    if len(found) < 3 and v.subcategory:
-        for alt in catalog.search(store_id, v.subcategory, k=10):
-            if alt.product_id != product_id and alt.available > 0 and alt.product_id not in {f.product_id for f in found}:
-                found.append(alt)
-    return {"products": [_row(f) for f in found[:4]]}
+    return {"products": [_row(f) for f in _alternatives(store_id, v)]}
 
 
 def navigate_to(product_id: str, tool_context: ToolContext) -> dict:
@@ -88,15 +140,21 @@ def navigate_to(product_id: str, tool_context: ToolContext) -> dict:
 def add_to_cart(product_id: str, qty: int, tool_context: ToolContext) -> dict:
     """Add qty units of a product to the shopper's cart. Pass the product_id from a search_products result, or,
     when you only know the product from the conversation, its exact name (for example "India Gate Basmati Rice 5kg").
-    Never invent an id. Fails with out_of_stock, item_limit or unknown_product."""
+    Never invent an id. Fails with out_of_stock (alternatives included), insufficient_stock (available tells how many
+    are left), item_limit or unknown_product."""
     s = tool_context.state
     resolved = None
-    if not catalog.get_product(s["store_id"], product_id):
+    view = catalog.get_product(s["store_id"], product_id)
+    if not view:
         exact = catalog.get_by_sku(s["store_id"], product_id)
         hits = [exact] if exact else [h for h in catalog.search(s["store_id"], product_id.replace("-", " ").replace("_", " "), k=3) if h.available > 0]
         if not hits:
             return {"ok": False, "error": "unknown_product"}
-        resolved, product_id = product_id, hits[0].product_id
+        resolved, product_id, view = product_id, hits[0].product_id, hits[0]
+    if view.available <= 0:
+        return {"ok": False, "error": "out_of_stock", "name": view.name, "alternatives": [_brief(a) for a in _alternatives(s["store_id"], view, limit=3)]}
+    if qty > view.available:
+        return {"ok": False, "error": "insufficient_stock", "name": view.name, "available": view.available, "requested": qty}
     res = cart_svc.add(s["store_id"], s["cart_id"], product_id, qty, via="chat", mode=s.get("mode", "online"))
     if isinstance(res, str):
         return {"ok": False, "error": res}

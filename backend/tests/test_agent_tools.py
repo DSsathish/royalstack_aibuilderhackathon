@@ -41,7 +41,7 @@ def test_search_products_returns_compact_rows_and_signal(shop):
     assert out["signal"] == "found"
     row = out["products"][0]
     assert row["product_id"] == f"{shop}-milk" and row["available"] == 10 and row["aisle"] == "A2"
-    assert set(row) <= {"product_id", "name", "brand", "price", "mrp", "unit", "available", "aisle", "bay"}
+    assert set(row) <= {"product_id", "name", "brand", "price", "mrp", "unit", "available", "in_stock", "stock_note", "pack", "aisle", "bay"}
 
 
 def test_search_products_not_carried(shop):
@@ -81,7 +81,7 @@ def test_add_view_remove_cart(shop):
 
 def test_add_to_cart_out_of_stock_error(shop):
     out = tools.add_to_cart(f"{shop}-soya", 1, tool_context=ctx(shop))
-    assert out == {"ok": False, "error": "out_of_stock"}
+    assert out["ok"] is False and out["error"] == "out_of_stock" and out["alternatives"]
 
 
 def test_start_checkout_summarises_cart(shop):
@@ -153,3 +153,42 @@ def test_add_to_cart_accepts_snake_case_and_sku(shop):
     assert out["ok"] and out["cart"]["items"][0]["product_id"] == f"{shop}-milk"
     out = tools.add_to_cart("MILK", 1, tool_context=ctx(shop, cart_id="c2"))         # the SKU echoed back
     assert out["ok"] and out["resolved_from"] == "MILK"
+
+
+def test_pack_size_parsing():
+    assert tools.pack_size("India Gate Basmati Rice 5kg") == {"size": 5, "unit": "kg"}
+    assert tools.pack_size("Amul Taaza Toned Milk 500 ml") == {"size": 500, "unit": "ml"}
+    assert tools.pack_size("Tata Salt 1 Kg") == {"size": 1, "unit": "kg"}
+    assert tools.pack_size("Maggi Noodles 12 x 70 g") == {"size": 840, "unit": "g"}
+    assert tools.pack_size("Fortune Sunflower Oil 1L") == {"size": 1, "unit": "l"}
+    assert tools.pack_size("Dolo 650 15 tablets") == {"size": 15, "unit": "pc"}
+    assert tools.pack_size("Toothbrush") is None
+
+
+def test_search_rows_state_stock_plainly_and_carry_alternatives(shop):
+    out = tools.search_products("plant milk", tool_context=ctx(shop))
+    rows = {r["name"]: r for r in out["products"]}
+    assert rows["Soya Milk"]["in_stock"] is False and rows["Soya Milk"]["stock_note"] == "out of stock"
+    assert rows["Almond Milk"]["in_stock"] is True and rows["Almond Milk"]["stock_note"] == "in stock"
+    assert [a["name"] for a in rows["Soya Milk"]["alternatives"]] == ["Almond Milk"]        # listed substitute, in stock
+    assert "alternatives" not in rows["Almond Milk"]
+    assert out["out_of_stock"] == ["Soya Milk", "Oat Milk"] or set(out["out_of_stock"]) == {"Soya Milk", "Oat Milk"}
+    salt = tools.search_products("salt", tool_context=ctx(shop))["products"][0]
+    assert salt["stock_note"] == "only 2 left"
+
+
+def test_add_to_cart_reports_insufficient_stock_with_what_is_left(shop):
+    out = tools.add_to_cart(f"{shop}-salt", 5, tool_context=ctx(shop, mode="online"))
+    assert out == {"ok": False, "error": "insufficient_stock", "name": "Salt", "available": 2, "requested": 5}
+    out = tools.add_to_cart(f"{shop}-soya", 1, tool_context=ctx(shop, mode="online"))
+    assert out["ok"] is False and out["error"] == "out_of_stock" and [a["name"] for a in out["alternatives"]] == ["Almond Milk"]
+
+
+def test_suggest_substitutes_falls_back_to_the_category(shop):
+    put(shop, "ghee", "Cow Ghee 500 ml", 300, 0, subcategory="")
+    db.products(shop).document(f"{shop}-ghee").update({"category": "Dairy"})
+    put(shop, "butter", "Butter 100 g", 60, 7, subcategory="")
+    db.products(shop).document(f"{shop}-butter").update({"category": "Dairy"})
+    catalog.invalidate(shop)
+    out = tools.suggest_substitutes(f"{shop}-ghee", tool_context=ctx(shop))
+    assert [p["name"] for p in out["products"]] == ["Butter 100 g"]
