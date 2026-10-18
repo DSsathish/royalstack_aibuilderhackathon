@@ -23,6 +23,7 @@ class ProductView(Product):
 
 def invalidate(store_id: str) -> None:
     _cache.pop(store_id, None)
+    _sections_cache.pop(store_id, None)
 
 
 def bump(store_id: str) -> None:
@@ -62,6 +63,36 @@ def blocks(store_id: str) -> dict[str, dict]:
     """Floor-map blocks by name (kind and floor), read fresh: the owner edits them rarely, the assistant reads them often."""
     doc = db.store_ref(store_id).get().to_dict() or {}
     return {b["aisle"]: b for b in doc.get("floor_map", [])}
+
+
+SECTIONS_TTL_S = 600
+_sections_cache: dict[str, tuple[float, dict]] = {}
+
+
+def sections(store_id: str) -> dict:
+    """The whole shop at a glance: every category and subcategory with how many products it holds and how many are in
+    stock. Feeds the assistant's prompt and the store_overview tool, so it is cached for a minute."""
+    hit = _sections_cache.get(store_id)
+    if hit and time.time() - hit[0] < SECTIONS_TTL_S:
+        return hit[1]
+    products, _ = product_map(store_id)
+    stock = {d.id: max(0, (d.to_dict() or {}).get("on_hand", 0) - (d.to_dict() or {}).get("reserved", 0)) for d in db.inventory(store_id).stream()}
+    cats: dict[str, dict] = {}
+    for p in products.values():
+        cat = cats.setdefault(p.category or "General", {"category": p.category or "General", "total": 0, "in_stock": 0, "subs": {}})
+        sub = cat["subs"].setdefault(p.subcategory or "Other", {"name": p.subcategory or "Other", "total": 0, "in_stock": 0})
+        available = stock.get(p.product_id, 0) > 0
+        for bucket in (cat, sub):
+            bucket["total"] += 1
+            bucket["in_stock"] += 1 if available else 0
+    out = {"total": len(products), "in_stock": sum(c["in_stock"] for c in cats.values()), "categories": []}
+    out["out_of_stock"] = out["total"] - out["in_stock"]
+    for c in sorted(cats.values(), key=lambda c: -c["total"]):
+        subs = sorted(c["subs"].values(), key=lambda s: -s["total"])
+        out["categories"].append({"category": c["category"], "total": c["total"], "in_stock": c["in_stock"], "out_of_stock": c["total"] - c["in_stock"],
+                                  "subcategories": [{**s, "out_of_stock": s["total"] - s["in_stock"]} for s in subs]})
+    _sections_cache[store_id] = (time.time(), out)
+    return out
 
 
 def product_map(store_id: str) -> tuple[dict[str, Product], dict[str, Location]]:
@@ -128,7 +159,15 @@ def search(store_id: str, query: str, k: int = 6) -> list[ProductView]:
         if kw > 0 or sem > 0.6:
             scored.append((kw + 5 * sem, p))
     scored.sort(key=lambda t: t[0], reverse=True)
-    hits = [_view(store_id, p, locations) for _, p in scored[:k]]
+    seen, picked = set(), []
+    for _, p in scored:                     # the same name twice (two listings of one product) shows once
+        name = " ".join(p.name.lower().split())
+        if name in seen:
+            continue
+        seen.add(name); picked.append(p)
+        if len(picked) == k:
+            break
+    hits = [_view(store_id, p, locations) for p in picked]
 
     _record_signal(store_id, query, hits)
     return hits

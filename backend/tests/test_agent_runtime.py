@@ -29,7 +29,7 @@ def ev(parts, partial=False, author="agent"):
 
 def test_translate_function_call_to_status():
     e = ev([types.Part(function_call=types.FunctionCall(name="search_products", args={"query": "milk"}))])
-    assert list(agent.translate(e)) == [{"type": "status", "tool": "search_products"}]
+    assert list(agent.translate(e)) == [{"type": "status", "tool": "search_products", "label": "Checking the shelves"}]
 
 
 def test_translate_function_response_to_action():

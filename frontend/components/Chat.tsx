@@ -14,17 +14,6 @@ import VoiceOrb, { OrbState } from "./VoiceOrb";
 import VoiceNote from "./VoiceNote";
 import { peaksOf } from "@/lib/voiceClip";
 
-const STATUS: Record<string, string> = {
-  search_products: "Checking the shelves", list_category: "Listing the section", product_facts: "Looking up facts", navigate_to: "Finding the aisle", add_to_cart: "Adding to your cart",
-  suggest_substitutes: "Looking for alternatives", view_cart: "Opening your cart", start_checkout: "Preparing checkout",
-  get_low_stock: "Checking stock levels", forecast_demand: "Reading the forecast", draft_purchase_order: "Drafting orders",
-  get_anomalies: "Checking exits and counts", record_demand_signal: "Noting your request", get_offers: "Checking offers",
-  store_snapshot: "Pulling today's figures", find_products: "Searching the inventory", sales_report: "Totting up sales", reorder_drafts: "Opening the drafts",
-  demand_signals: "Reading demand signals", customers_overview: "Looking at customers", list_offers: "Listing offers", exit_summary: "Checking exits",
-  sync_status: "Checking the sync", floor_map_summary: "Reading the floor map", set_reorder_rule: "Updating the reorder rule", adjust_stock: "Updating stock",
-  record_shelf_count: "Recording the count", update_price: "Updating the price", move_product: "Moving the product", create_offer: "Creating the offer",
-  set_offer_active: "Updating the offer", adjust_points: "Updating points", approve_purchase_order: "Approving the order",
-};
 const SUGGESTIONS = ["Where is atta?", "பால் எங்கே இருக்கு?", "Do you have oat milk?", "Something for a headache"];
 const OWNER_SUGGESTIONS = ["How are we doing today?", "What should I reorder?", "Which products are not selling?", "Create 10% off on Dairy for everyone", "Who are my VIP customers?", "What did shoppers ask for that we don't have?"];
 
@@ -64,7 +53,7 @@ export default function Chat() {
     try {
       for await (const e of stream) {
         if (e.type === "transcript" && userMsgId) patch(userMsgId, { text: e.text });
-        else if (e.type === "status") patch(id, { status: e.label ?? STATUS[e.tool] ?? "Working" });   // a hand-over between teammates carries its own label
+        else if (e.type === "status") patch(id, { status: e.label ?? "Working" });   // the label comes with the event: one wording for every surface
         else if (e.type === "token") { buffer += e.text; patch(id, { text: buffer, status: undefined }); }
         else if (e.type === "done") { buffer = e.text || buffer; patch(id, { text: buffer, status: undefined }); }
         else if (e.type === "action") handleAction(e.name, e.data, id);

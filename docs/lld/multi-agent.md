@@ -37,6 +37,10 @@ connect_source / apply_source (the normalizer agent proposes the mapping).
 ## Contracts that do not change
 - Tool functions and their gating (`TOOLS_BY_MODE`), the live-voice bridge (declarations and dispatch read the flat
   lists; voice latency unchanged), `ACTION_FOR_TOOL` and the UI's action handling, conversation memory, rate limits.
+- Labels the screen shows while a tool or a teammate works come from one map, `agent/labels.py`, attached to every
+  status event on the text, voice and press-to-talk paths; the clients carry no wording of their own. The rosters
+  (`prompts.SHOPPER_TEAM`, `prompts.OWNER_TEAM`) and the teammate hand-over text are written once from the agent
+  descriptions, and language-specific words live in `domain/lexicon.py`.
 - The event translation adds one mapping: a `transfer_to_agent` call becomes a `status` with the target's label
   ("Finding products", "Checking the map", "Updating your cart", "Preparing your briefing"); its response is not an action.
 - `MAX_LLM_CALLS` rises from 8 to 12: a turn now spends one call on routing before the specialist's tool loop.

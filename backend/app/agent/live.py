@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from fastapi import WebSocket, WebSocketDisconnect
 from google.genai import types
 
-from app.agent import prompts
+from app.agent import labels, prompts
 from app.agent.agent import ACTION_FOR_TOOL
 from app.agent.tools import TOOLS_BY_MODE
 from app.config import settings
@@ -315,7 +315,7 @@ async def _run(ws: WebSocket, s: Session) -> None:
                   if msg.tool_call:
                       responses = []
                       for call in msg.tool_call.function_calls:
-                          await ws.send_text(json.dumps({"type": "status", "tool": call.name}))
+                          await ws.send_text(json.dumps({"type": "status", "tool": call.name, "label": labels.for_tool(call.name)}))
                           result = await asyncio.to_thread(dispatch, call.name, dict(call.args or {}), state)
                           await ws.send_text(json.dumps({"type": "action", "name": ACTION_FOR_TOOL.get(call.name, call.name), "data": result}, ensure_ascii=False))
                           for extra in extra_actions(call.name, result, state):

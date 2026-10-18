@@ -1,6 +1,7 @@
 """Thin wrapper over the google-genai client. All Gemini calls go through here."""
 
 import logging
+from collections import OrderedDict
 from functools import lru_cache
 
 from google import genai
@@ -39,25 +40,51 @@ def live_client() -> genai.Client:
     if settings.gemini_live_api_key:
         return genai.Client(vertexai=False, api_key=settings.gemini_live_api_key)    # explicit: the Vertex env flag must not win
     return client()
+QUERY_CACHE = 4096
+_query_vectors: "OrderedDict[str, list[float]]" = OrderedDict()   # the same question embeds once per instance
+
+
+@lru_cache(maxsize=4)
+def _embed_client(location: str | None) -> genai.Client:
+    kw = client_kwargs()
+    if location and kw.get("vertexai"):
+        kw["location"] = location
+    return genai.Client(**kw)
+
+
+def embed_locations() -> list[str | None]:
+    """The project's own region first (its own quota, a second away), the global endpoint as the fallback."""
+    if not settings.google_genai_use_vertexai:
+        return [None]
+    out = [settings.google_cloud_location, settings.gemini_location]
+    return [loc for i, loc in enumerate(out) if loc and loc not in out[:i]]
+
+
 def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float]]:
-    """Returns one vector per text, or [] when Gemini is not configured or fails."""
+    """Returns one vector per text, or [] when Gemini is not configured or every endpoint fails (keyword search then)."""
     if not texts or not configured():
         return []
-    try:
-        res = client().models.embed_content(
-            model=EMBEDDING_MODEL,
-            contents=texts,
-            config=types.EmbedContentConfig(
-                task_type="RETRIEVAL_QUERY" if for_query else "RETRIEVAL_DOCUMENT",
-                output_dimensionality=768,
-                # a query embed sits on the shopper's critical path: answer fast or fall back to keywords
-                http_options=types.HttpOptions(timeout=2500, retry_options=types.HttpRetryOptions(attempts=1)) if for_query else None,
-            ),
-        )
-        return [e.values for e in res.embeddings]
-    except Exception as exc:  # network, quota, bad key: degrade to keyword search
-        log.warning("embed_texts failed: %s", exc)
-        return []
+    key = " ".join(texts[0].lower().split()) if for_query and len(texts) == 1 else None
+    if key and key in _query_vectors:
+        _query_vectors.move_to_end(key)
+        return [_query_vectors[key]]
+    cfg = types.EmbedContentConfig(
+        task_type="RETRIEVAL_QUERY" if for_query else "RETRIEVAL_DOCUMENT", output_dimensionality=768,
+        # a query embed sits on the shopper's critical path: answer fast or fall back to keywords
+        http_options=types.HttpOptions(timeout=2500, retry_options=types.HttpRetryOptions(attempts=1)) if for_query else None)
+    vectors: list[list[float]] = []
+    for loc in embed_locations():
+        try:
+            res = _embed_client(loc).models.embed_content(model=EMBEDDING_MODEL, contents=texts, config=cfg)
+            vectors = [e.values for e in res.embeddings]
+            break
+        except Exception as exc:  # quota, network, bad key: try the next endpoint, then degrade to keywords
+            log.warning("embed_texts failed at %s: %s", loc or "api", str(exc)[:160])
+    if key and vectors:
+        _query_vectors[key] = vectors[0]
+        if len(_query_vectors) > QUERY_CACHE:
+            _query_vectors.popitem(last=False)
+    return vectors
 
 
 

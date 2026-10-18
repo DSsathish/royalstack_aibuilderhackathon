@@ -12,7 +12,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from app.agent import prompts, team
+from app.agent import labels, prompts, team
 from app.agent.tools import TOOLS_BY_MODE
 from app.services import conversation, gemini
 from app.config import settings
@@ -26,6 +26,7 @@ ACTION_FOR_TOOL = {
     "search_products": "show_products",
     "product_facts": "show_facts",
     "list_category": "show_rows",
+    "store_overview": "show_rows",
     "connectors_status": "show_rows",
     "suggest_substitutes": "show_products",
     "get_product": "show_product",
@@ -87,9 +88,9 @@ def translate(event: Event) -> Iterator[dict]:
                 continue  # streaming repeats the call in the final event; report it once
             if part.function_call.name == TRANSFER:
                 target = str((part.function_call.args or {}).get("agent_name", ""))
-                yield {"type": "status", "tool": TRANSFER, "agent": target, "label": team.LABELS.get(target, "Working")}
+                yield {"type": "status", "tool": TRANSFER, "agent": target, "label": labels.for_agent(target)}
             else:
-                yield {"type": "status", "tool": part.function_call.name}
+                yield {"type": "status", "tool": part.function_call.name, "label": labels.for_tool(part.function_call.name)}
         elif part.function_response:
             name = part.function_response.name
             if name == TRANSFER:

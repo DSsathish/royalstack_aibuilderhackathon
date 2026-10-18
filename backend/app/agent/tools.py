@@ -100,19 +100,35 @@ def _segment(state) -> str:
     return state.get("segment") or customers.segment_of(state["store_id"], state.get("customer_id"))
 
 
+SECTION_STOPWORDS = frozenset({"and", "the", "of", "all", "list", "full"})
+
+
 def _section_tokens(text: str) -> list[str]:
+    """Catalog section names are English; the tokens are singularised so "dals" meets "Dals and Pulses"."""
     toks = re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower()).split()
-    return [t[:-1] if len(t) > 3 and t.endswith("s") else t for t in toks if t not in ("and", "the", "of", "all", "list", "full")]
+    return [t[:-1] if len(t) > 3 and t.endswith("s") else t for t in toks if t not in SECTION_STOPWORDS]
 
 
-def list_category(category: str, tool_context: ToolContext, in_stock_only: bool = True, limit: int = 40) -> dict:
+def store_overview(tool_context: ToolContext) -> dict:
+    """The whole shop at a glance: every section with its subsections, how many products each holds, how many are in
+    stock and out of stock, and the totals. For "what do you sell", "which sections do you have", "how many products",
+    "what is out of stock". The screen shows the table; name the biggest sections and offer to list any of them."""
+    s = catalog.sections(tool_context.state["store_id"])
+    rows = [{"Section": c["category"], "Products": c["total"], "In stock": c["in_stock"], "Out of stock": c["out_of_stock"],
+             "Subsections": ", ".join(f"{x['name']} ({x['in_stock']}/{x['total']})" for x in c["subcategories"][:12]) + (" …" if len(c["subcategories"]) > 12 else "")}
+            for c in s.get("categories", [])]
+    return {"total": s.get("total", 0), "in_stock": s.get("in_stock", 0), "out_of_stock": s.get("out_of_stock", 0),
+            "sections": len(rows), "columns": ["Section", "Products", "In stock", "Out of stock", "Subsections"], "rows": rows, "count": len(rows)}
+
+
+def list_category(category: str, tool_context: ToolContext, status: str = "in_stock", page: int = 1, limit: int = 40) -> dict:
     """Every product in one section of the store, for requests like "list all the vegetables you have", "what dals are
-    there", "full list of shampoos". category is the section as the shopper says it; give it in English when you can
-    (காய்கறிகள் or सब्ज़ी -> "vegetables", பருப்பு or दाल -> "dal"), though any language works. It is matched against
-    the catalog's categories and subcategories, else inferred from a product search. Returns total, in_stock, the rows
-    shown (Product, Price, Stock) and more (how many were not shown). Say the total, read the first ten names, and offer
-    to continue; the screen shows the whole list. If total is 0 the section was not found: say so and ask for a product
-    name; never say it is out of stock."""
+    there", "what is out of stock in dairy". category is the section's name from the sections paragraph when you can
+    name it; the shopper's own words in any language also work. status is in_stock (default), out_of_stock or all;
+    page is 1, 2, ... for "next" or "more" (limit rows per page). Returns total, in_stock, out_of_stock, the rows shown
+    (Product, Price, Stock), page, pages and more. Say the count, read the first ten names, and offer to continue; the
+    screen shows the list. If total is 0 the section was not found: say so and ask for a product name; never say it is
+    out of stock."""
     store_id = tool_context.state["store_id"]
     products, _ = catalog.product_map(store_id)
     want = _section_tokens(category)
@@ -139,10 +155,15 @@ def list_category(category: str, tool_context: ToolContext, in_stock_only: bool 
     stock = {d.id: max(0, (d.to_dict() or {}).get("on_hand", 0) - (d.to_dict() or {}).get("reserved", 0)) for d in db.inventory(store_id).stream()}
     items = sorted(((p, stock.get(p.product_id, 0)) for p in picked), key=lambda x: x[0].name.lower())
     in_stock = [(p, n) for p, n in items if n > 0]
-    shown = (in_stock if in_stock_only else items)[:max(1, min(limit, 100))]
+    out_of_stock = [(p, n) for p, n in items if n == 0]
+    status = status if status in ("in_stock", "out_of_stock", "all") else "in_stock"
+    wanted = {"in_stock": in_stock, "out_of_stock": out_of_stock, "all": items}[status]
+    per = max(1, min(limit, 100)); page = max(1, page); pages = max(1, -(-len(wanted) // per))
+    shown = wanted[(page - 1) * per: page * per]
     sections = sorted({p.subcategory or p.category for p in picked})[:4]
-    return {"category": ", ".join(sections) if matched_by == "section" else category, "matched_by": matched_by,
-            "total": len(items), "in_stock": len(in_stock), "shown": len(shown), "more": max(0, (len(in_stock) if in_stock_only else len(items)) - len(shown)),
+    return {"category": ", ".join(sections) if matched_by == "section" else category, "matched_by": matched_by, "status": status,
+            "total": len(items), "in_stock": len(in_stock), "out_of_stock": len(out_of_stock), "shown": len(shown),
+            "page": page, "pages": pages, "more": max(0, len(wanted) - page * per),
             "columns": ["Product", "Price", "Stock"],
             "rows": [{"Product": p.name, "Price": f"₹{float(p.price):g}", "Stock": n if n > 0 else "out of stock"} for p, n in shown],
             "signal": "found" if items else "not_carried",
@@ -334,9 +355,9 @@ def product_facts(question: str, product_id: str = "", tool_context: ToolContext
 
 
 TOOLS_BY_MODE = {
-    "instore": [search_products, list_category, get_product, suggest_substitutes, navigate_to, record_demand_signal,
+    "instore": [search_products, list_category, store_overview, get_product, suggest_substitutes, navigate_to, record_demand_signal,
                 remove_from_cart, view_cart, start_checkout, get_offers, product_facts],      # items enter the cart only by scanning
-    "online": [search_products, list_category, get_product, suggest_substitutes, record_demand_signal,
+    "online": [search_products, list_category, store_overview, get_product, suggest_substitutes, record_demand_signal,
                add_to_cart, remove_from_cart, view_cart, start_checkout, get_offers, product_facts],
     "owner": [],      # filled below from owner_tools: a separate agent with full access to the store
 }

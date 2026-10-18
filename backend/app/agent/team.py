@@ -12,17 +12,10 @@ from app.config import settings
 from app.domain.models import Mode
 from app.services import gemini
 
-# What the UI shows while a turn is being routed, by agent name.
-LABELS = {
-    "catalog_agent": "Finding products", "navigation_agent": "Checking the map", "cart_agent": "Updating your cart",
-    "briefing": "Preparing your briefing", "inventory_planner": "Checking stock and forecasts",
-    "customers_offers": "Looking at customers and offers", "data_connector": "Checking your data sources",
-    "store_ops": "Checking sales and exits",
-}
 SCOUTS = ("stock_scout", "sales_scout")     # their text is working notes, not an answer
 
 SHOPPER_TOOLS = {
-    "catalog_agent": [t.search_products, t.list_category, t.get_product, t.suggest_substitutes, t.record_demand_signal, t.get_offers, t.product_facts],
+    "catalog_agent": [t.search_products, t.list_category, t.store_overview, t.get_product, t.suggest_substitutes, t.record_demand_signal, t.get_offers, t.product_facts],
     "navigation_agent": [t.search_products, t.navigate_to],
     "cart_agent": [t.search_products, t.add_to_cart, t.remove_from_cart, t.view_cart, t.start_checkout],
 }
@@ -67,9 +60,9 @@ def build_team(mode: Mode) -> LlmAgent:
             _llm("briefing_writer", mode, "Writes the briefing from the scouts' notes", prompts.FOCUS["briefing_writer"], []),
         ])
         specialists = [briefing] + [_llm(n, mode, prompts.DESCRIPTIONS[n], prompts.FOCUS[n], tools_for(mode, n))
-                                    for n in ("inventory_planner", "customers_offers", "data_connector", "store_ops")]
+                                    for n in prompts.OWNER_TEAM if n != "briefing"]
     else:
-        names = ["catalog_agent", "cart_agent"] + (["navigation_agent"] if mode == "instore" else [])
+        names = [n for n in prompts.SHOPPER_TEAM if n != "navigation_agent" or mode == "instore"]
         specialists = [_llm(n, mode, prompts.DESCRIPTIONS[n], prompts.FOCUS[n], tools_for(mode, n)) for n in names]
     return _llm(f"retail_{mode}", mode, "Routes every request to the right specialist", prompts.coordinator_focus(mode), [],
                 leaf=False, sub_agents=specialists)

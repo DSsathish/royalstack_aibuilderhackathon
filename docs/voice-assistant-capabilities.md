@@ -18,7 +18,8 @@ below also works by typing, and the screen always shows what the assistant found
 | Ask | What happens | On screen |
 |---|---|---|
 | "Do you have atta?", "Price of Aavin milk", "Basmati rice 5 kg" | Searches the live catalog; answers stock, price, sizes, pack maths ("10 kg" = two 5 kg packs) | Product cards |
-| "Give me the full list of vegetables in stock", "What dals are there?" | Lists a whole section; says the total, reads ten names, offers to continue | The full list as a table |
+| "What do you sell?", "Which sections do you have?", "How many products?", "What is out of stock?" | Knows the whole shop: every section and subsection with in-stock and out-of-stock counts, in its prompt and as a table on request | Sections table |
+| "Give me the full list of vegetables in stock", "What dals are there?", "What is out of stock in dairy?", "next ten" | Lists a whole section in any language, in stock, out of stock or all, page by page; says the count, reads ten names, offers to continue | The full list as a table |
 | "Is X out of stock? What else?" | Says out of stock plainly and offers in-stock alternatives (same subcategory, then category) | Alternatives as cards |
 | "Where is toned milk?" (in store) | Finds it and lights the aisle and bay on the map; aisle QRs update where you stand | Map highlight |
 | "What is A2 milk?", "Ingredients of this atta", "Does it contain gluten?" | Looks it up in public sources with citations; label data from Open Food Facts for real barcodes; refuses off-topic lookups | Facts card with sources and the disclaimer |

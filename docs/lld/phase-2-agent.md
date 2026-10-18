@@ -132,3 +132,24 @@ Model availability on this key (free tier): 2.5 models return 404, Pro models ha
 `gemini-3.5-flash` is usually 503, `gemini-3-flash-preview` works at ~4 s but is capped at 20 requests before a
 long reset, `gemini-3.1-flash-lite` works at ~12 s. Conclusion: the free tier cannot run a tool-calling agent
 for a demo. Needs AI Studio prepaid credits or Vertex AI on a billed project. Defaults are env-overridable.
+
+
+## Addendum 18 Oct: the query side, checked end to end
+A battery of 29 searches across categories and languages (English product and need queries, Tamil, Hindi) against the
+production catalog found three faults, all fixed:
+- The query embedding went to the `global` Vertex endpoint, whose per-minute quota for the embedding model tripped
+  under a burst, and search degraded silently to keywords (Tamil "dog food" and "headache" returned nothing). Now:
+  embeddings go to the project's own region first (`GOOGLE_CLOUD_LOCATION`, about a second, its own quota), the
+  global endpoint is the fallback, each endpoint gets one quick attempt, and query vectors are cached per instance
+  (4,096 entries, normalised text) so repeated questions never call the model. Document embeddings use the same path.
+- The pet-or-people gate only knew English pet words, so a Tamil or Hindi pet query ("நாய் உணவு", "कुत्ते का खाना") was
+  treated as a people's query and pet products were excluded from the answer. The gate now knows the Tamil and Hindi
+  words, and the query normaliser strips ASCII punctuation only, so vowel signs and viramas survive.
+- Two listings with the same product name (one per subcategory) both appeared; results now show one per name.
+- Shop-wide knowledge: `catalog.sections()` (every category and subcategory with in-stock and total counts, cached ten
+  minutes) is written into every shopper and owner prompt and served by the `store_overview` tool; `list_category`
+  lists any section in any language (section match, else the multilingual search decides the section) with
+  `status` in_stock / out_of_stock / all and `page` for "more".
+Relevance notes from the battery: needs resolve to products ("headache" to Crocin and Dolo, "something for pooja" to
+lamp ghee and a pooja plate, "breakfast" to poha); Tamil and Hindi product words resolve through the multilingual
+embeddings; brand and pack queries rank the exact pack first.

@@ -7,7 +7,7 @@ import { EchoGuard, GuardMode, pcmRms } from "./echoGuard";
 import { Clip, ClipBuffer, notePlaying } from "./voiceClip";
 
 export type LiveFrame =
-  | { type: "ready" } | { type: "interrupted" } | { type: "turn_complete" } | { type: "reconnect" } | { type: "echo" } | { type: "status"; tool: string }
+  | { type: "ready" } | { type: "interrupted" } | { type: "turn_complete" } | { type: "reconnect" } | { type: "echo" } | { type: "status"; tool: string; label?: string }
   | { type: "transcript"; role: "user" | "assistant"; text: string }
   | { type: "action"; name: string; data: Record<string, unknown> } | { type: "error"; text: string };
 

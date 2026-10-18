@@ -14,10 +14,13 @@ Rules:
   search_products with that name. If unsure, give the top candidates and ask which one.
 - Call search_products for any product question before answering. Use get_product only
   when the user asks for details about one specific product.
-- For a whole section ("list all the vegetables you have", "what dals are there", "full list of shampoos") call
-  list_category with the section name (in English when you can), not search_products. Say how many there are, name the
-  first ten, and offer to go on; the screen shows the whole list. If it finds nothing, say you could not find that
-  section and ask for a product name; never say it is out of stock.
+- You know the whole shop: the sections paragraph lists every section with in-stock and total counts. Answer "what do
+  you sell", "which sections do you have", "how many products", "what is out of stock" from it, and call store_overview
+  when the shopper wants the table. Never say a section does not exist without checking that paragraph.
+- For a whole section ("list all the vegetables you have", "what dals are there", "what is out of stock in dairy") call
+  list_category with the section's English name from the sections paragraph, status in_stock, out_of_stock or all, and
+  page for "next" or "more". Say how many there are, name the first ten, and offer to go on; the screen shows the list.
+  If it finds nothing, say you could not find that section and ask for a product name; never say it is out of stock.
 - Product ids come only from tool results. When you refer to a product you have not searched for in
   this conversation, pass its exact name instead of guessing an id.
 - When the user asks for a specific product that the catalog does not have (search returned
@@ -106,8 +109,25 @@ def store_state(store_id: str) -> dict:
     from app.services import db
     doc = db.store_ref(store_id).get().to_dict() or {}
     brand = doc.get("brand") or {}
+    from app.services import catalog
+    try:
+        sections = catalog.sections(store_id)
+    except Exception:          # the prompt still works without the map
+        sections = {}
     return {"store_name": doc.get("name", ""), "store_tagline": brand.get("tagline", ""), "store_greeting": brand.get("greeting", ""),
-            "languages": doc.get("languages") or ["en"]}
+            "languages": doc.get("languages") or ["en"], "sections": sections}
+
+
+def sections_block(sections: dict) -> str:
+    """One paragraph the model can answer "what do you sell" from, and pick English section names from."""
+    if not sections or not sections.get("categories"):
+        return ""
+    parts = []
+    for c in sections["categories"]:
+        subs = ", ".join(f"{s['name']} {s['in_stock']}/{s['total']}" for s in c["subcategories"])
+        parts.append(f"{c['category']} {c['in_stock']}/{c['total']}" + (f": {subs}" if subs else ""))
+    return (f"\nThe shop's sections, as in stock / total products ({sections['in_stock']}/{sections['total']} overall, "
+            f"{sections['out_of_stock']} out of stock): " + "; ".join(parts) + ".\n")
 
 
 def store_block(state: dict) -> str:
@@ -119,7 +139,7 @@ def store_block(state: dict) -> str:
         lines.append(f"The store describes itself as: {state['store_tagline']}.")
     if state.get("store_greeting"):
         lines.append(f"When the conversation starts, greet with: \"{state['store_greeting']}\"")
-    return " ".join(lines) + "\n"
+    return " ".join(lines) + "\n" + sections_block(state.get("sections") or {})
 
 
 def customer_state(s) -> dict:
@@ -191,32 +211,36 @@ DESCRIPTIONS = {
     "store_ops": "Sales reports, exit checks, anomalies and theft flags, facts about products.",
 }
 
-_TEAMMATES_SHOPPER = ("Teammates: catalog_agent (products, stock, prices, offers, facts), navigation_agent (where things are, in "
-                      "store only), cart_agent (cart and checkout). Hand over with transfer_to_agent when the request is theirs; "
-                      "never mention teammates or transfers, the shopper sees one assistant.")
-_TEAMMATES_OWNER = ("Teammates: briefing (how are we doing), inventory_planner (stock, forecasts, reorders, prices, placement), "
-                    "customers_offers (customers, offers, points), data_connector (sheets, feeds, sync), store_ops (sales reports, "
-                    "exits, anomalies, product facts). Hand over with transfer_to_agent when the request is theirs; never mention "
-                    "teammates or transfers.")
+SHOPPER_TEAM = ("catalog_agent", "navigation_agent", "cart_agent")
+OWNER_TEAM = ("briefing", "inventory_planner", "customers_offers", "data_connector", "store_ops")
+
+
+def teammates(names: tuple[str, ...]) -> str:
+    """The hand-over rule every agent in a team carries, written from the same descriptions the router sees."""
+    roster = "; ".join(f"{n}: {DESCRIPTIONS[n]}" for n in names)
+    return (f"Teammates. {roster} Hand over with transfer_to_agent when the request is theirs; never mention teammates "
+            "or transfers, the person sees one assistant.")
+
+
 FOCUS = {
     "catalog_agent": "\nYour job: answer what the store has, at what price, in which sizes, what is out of stock and what to take instead, "
                      "which offers apply, and facts about a product or ingredient (product_facts). Use the catalog tools; you cannot "
-                     "change the cart or show the map. " + _TEAMMATES_SHOPPER + "\n",
+                     "change the cart or show the map. " + teammates(SHOPPER_TEAM) + "\n",
     "navigation_agent": "\nYour job: tell the shopper where a product is and light the map. Always search_products first, then navigate_to "
                         "for the product the shopper means; never answer a location from memory. You cannot change the cart. "
-                        + _TEAMMATES_SHOPPER + "\n",
+                        + teammates(SHOPPER_TEAM) + "\n",
     "cart_agent": "\nYour job: the cart. Resolve the product with search_products when you only know its name, then add, remove, show "
                   "the cart or start checkout. Say what you did in a few words. You cannot answer product-facts or location questions. "
-                  + _TEAMMATES_SHOPPER + "\n",
+                  + teammates(SHOPPER_TEAM) + "\n",
     "inventory_planner": "\nYour job: stock, days of cover, forecasts, reorder drafts and their approval, reorder rules, prices, shelf "
-                         "counts, where products sit and the floor map. Acting tools need confirm, as the rules say. " + _TEAMMATES_OWNER + "\n",
+                         "counts, where products sit and the floor map. Acting tools need confirm, as the rules say. " + teammates(OWNER_TEAM) + "\n",
     "customers_offers": "\nYour job: customers and their segments, offers (create, pause, resume) and reward points. Acting tools need "
-                        "confirm, as the rules say. " + _TEAMMATES_OWNER + "\n",
+                        "confirm, as the rules say. " + teammates(OWNER_TEAM) + "\n",
     "data_connector": "\nYour job: the shop's own data sources. connect_source inspects a Google Sheet or API link and previews the "
                       "changes; apply_source writes after the owner confirms; connectors_status and sync_status report the state. "
-                      "Files and database connections are set up on the Connectors page. " + _TEAMMATES_OWNER + "\n",
+                      "Files and database connections are set up on the Connectors page. " + teammates(OWNER_TEAM) + "\n",
     "store_ops": "\nYour job: sales reports, exit checks and anomalies, a quick store_snapshot when asked for numbers, and facts about "
-                 "products. " + _TEAMMATES_OWNER + "\n",
+                 "products. " + teammates(OWNER_TEAM) + "\n",
     "stock_scout": "\nYou are gathering notes for a briefing, not talking to the owner. Call get_low_stock, reorder_drafts and "
                    "demand_signals, then write terse notes: what is low or out (top items with numbers), drafts waiting, what shoppers "
                    "asked for that we lack. No greetings, no questions, under 120 words.\n",
@@ -233,11 +257,11 @@ def coordinator_focus(mode: Mode) -> str:
     if mode == "owner":
         return ("\nYou are the front desk for the owner. You have no tools: transfer every real request to the teammate who owns it, "
                 "and do it without commentary. A greeting, 'how are we doing', 'morning', or 'what needs attention' goes to briefing. "
-                "Only small talk or thanks you answer yourself, in one short sentence, in the owner's language. " + _TEAMMATES_OWNER + "\n")
+                "Only small talk or thanks you answer yourself, in one short sentence, in the owner's language. " + teammates(OWNER_TEAM) + "\n")
     return ("\nYou are the front desk of the assistant. You have no tools: transfer every product, price, stock, offer, facts, location "
             "or cart request to the teammate who owns it, without commentary. Only a greeting, thanks or small talk you answer "
             "yourself, in one short sentence, in the shopper's language, inviting a question. Off-topic requests you bring back to "
-            "shopping, politely. " + _TEAMMATES_SHOPPER + "\n")
+            "shopping, politely. " + teammates(SHOPPER_TEAM) + "\n")
 
 
 def shared_block(mode: Mode, state: dict) -> str:

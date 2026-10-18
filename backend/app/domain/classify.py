@@ -5,6 +5,8 @@ use: human | pet | household | personal_care keeps pet food out of a biscuit sea
 Rules are keyword lists over name, category, subcategory and tags; an owner can still move a product by hand."""
 
 import re
+
+from app.domain import lexicon
 from typing import Literal
 
 Storage = Literal["ambient", "chilled", "frozen"]
@@ -19,8 +21,7 @@ NOT_CHILLED = ("milk powder", "powder", "coconut milk", "condensed milk", "milk 
                "cheese popcorn", "cheese flavour", "cheese flavor", "egg noodle", "eggless", "egg tray", "egg boiler", "masala",
                "flavour", "flavor", "spread", "seasoning", "soya milk", "soy milk", "almond milk", "oat milk", "soya chunks", "juicer",
                "chicken nuggets", "fish food", "cat ", "dog ", "pet ", "shampoo", "soap", "lotion", "cream biscuit", "cream wafer")
-PET = ("dog ", "dogs", "puppy", "cat ", "cats", "kitten", "pet ", "pets", "aquarium", "fish food", "bird food", "bird seed", "pedigree",
-       "whiskas", "royal canin", "drools", "cat food", "dog food", "cat litter", "chew stick", "pet toy", "animal feed", "cattle feed")
+PET = lexicon.words(lexicon.PET)      # every language in one place: app/domain/lexicon.py
 HOUSEHOLD = ("detergent", "floor cleaner", "dishwash", "dish wash", "toilet cleaner", "mop", "broom", "phenyl", "repellent", "insect",
              "mosquito", "disinfectant", "bleach", "scrubber", "garbage bag", "air freshener", "glass cleaner", "laundry", "fabric conditioner")
 PERSONAL = ("shampoo", "conditioner", "soap", "body wash", "toothpaste", "toothbrush", "face wash", "deodorant", "perfume", "lotion",
@@ -79,7 +80,7 @@ def use_of(name: str, category: str = "", subcategory: str = "", tags: list[str]
 
 def query_use(query: str) -> Use | None:
     """What the shopper asked for, when they said so: "dog biscuits" is pet, "biscuits" is unspecified (people first)."""
-    q = " " + re.sub(r"[^\w\s]", " ", query.lower()) + " "
+    q = " " + re.sub(r"[!-/:-@\[-`{-~]", " ", query.lower()) + " "      # ASCII punctuation only: Tamil and Hindi vowel signs must survive
     if _has(q, PET) and not _has(q, NOT_PET, loose=True):
         return "pet"
     if _has(q, HOUSEHOLD):

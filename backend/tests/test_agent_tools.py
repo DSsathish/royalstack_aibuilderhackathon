@@ -235,8 +235,12 @@ def test_list_category_lists_a_whole_section(shop):
     assert out["matched_by"] == "section" and out["category"] == "Plant milk"
     assert (out["total"], out["in_stock"], out["more"]) == (3, 1, 0) and [r["Product"] for r in out["rows"]] == ["Almond Milk"]
     assert out["columns"] == ["Product", "Price", "Stock"] and out["rows"][0]["Price"] == "₹230"
-    full = tools.list_category("plant milk", in_stock_only=False, tool_context=ctx(shop))
+    full = tools.list_category("plant milk", status="all", tool_context=ctx(shop))
     assert [r["Product"] for r in full["rows"]] == ["Almond Milk", "Oat Milk", "Soya Milk"] and full["rows"][1]["Stock"] == "out of stock"
+    gone = tools.list_category("plant milk", status="out_of_stock", tool_context=ctx(shop))
+    assert [r["Product"] for r in gone["rows"]] == ["Oat Milk", "Soya Milk"] and gone["out_of_stock"] == 2
+    second = tools.list_category("plant milk", status="all", page=2, limit=2, tool_context=ctx(shop))
+    assert [r["Product"] for r in second["rows"]] == ["Soya Milk"] and (second["page"], second["pages"], second["more"]) == (2, 2, 0)
     assert tools.list_category("milk", tool_context=ctx(shop))["total"] == 4          # Milk and Plant milk sections
     assert tools.list_category("milk", limit=1, tool_context=ctx(shop))["more"] == 1
     assert tools.list_category("shoes", tool_context=ctx(shop))["signal"] == "not_carried"
@@ -250,3 +254,18 @@ def test_list_category_infers_the_section_from_a_search_in_another_language(shop
     assert out["matched_by"] == "section" and out["category"] == "Plant milk" and out["total"] == 3
     none = tools.list_category("ஷூ", tool_context=ctx(shop))                      # nothing like it in the shop
     assert none["total"] == 0 and "do not say it is out of stock" in none["note"]
+
+
+def test_store_overview_knows_every_section_and_stock_state(shop):
+    from app.services import catalog
+    s = catalog.sections(shop)
+    assert (s["total"], s["in_stock"], s["out_of_stock"]) == (5, 3, 2)
+    subs = {x["name"]: (x["in_stock"], x["total"]) for x in s["categories"][0]["subcategories"]}
+    assert subs == {"Milk": (1, 1), "Plant milk": (1, 3), "Salt": (1, 1)}
+    out = tools.store_overview(tool_context=ctx(shop))
+    assert out["columns"][0] == "Section" and out["rows"][0]["Products"] == 5 and out["rows"][0]["Out of stock"] == 2
+    assert "Plant milk (1/3)" in out["rows"][0]["Subsections"]
+    from app.agent import prompts
+    block = prompts.store_block({"store_name": "S", "sections": s})
+    assert "Plant milk 1/3" in block and "3/5 overall, 2 out of stock" in block
+    assert "Plant milk 1/3" in prompts.store_block(prompts.store_state(shop))      # the live prompt carries it
