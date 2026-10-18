@@ -255,8 +255,9 @@ export default function Chat() {
           </label>
         )}
         <input id="chat-input" value={text} onChange={(e) => setText(e.target.value)} placeholder={owner ? "Ask about stock, sales, orders" : "Ask about products, prices, aisles"} className="field flex-1 rounded-full py-2.5" />
-        {!canLive && !talking && <button type="button" onClick={toggleVoice} className="btn btn-ghost w-11 h-11 p-0 rounded-full" title="Talk"><IconMic /></button>}
-        <button type="submit" disabled={busy || !text.trim()} className="btn btn-primary w-11 h-11 p-0 rounded-full" title="Send"><IconSend /></button>
+        {!owner && session?.mode === "online" && canLive && <VoiceDock variant="composer" />}
+        {!canLive && !talking && <button type="button" onClick={toggleVoice} className="btn btn-ghost btn-icon rounded-full" title="Talk"><IconMic /></button>}
+        <button type="submit" disabled={busy || !text.trim()} className="btn btn-primary btn-icon rounded-full" title="Send"><IconSend /></button>
       </form>
     </div>
   );

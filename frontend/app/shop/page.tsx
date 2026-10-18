@@ -15,6 +15,7 @@ import VoiceStrip from "@/components/VoiceStrip";
 import { useVoice, voice } from "@/lib/voiceSession";
 import { IconBag, IconCart, IconChat, IconMap, IconScan } from "@/components/Icons";
 import OnlineHome from "@/components/OnlineHome";
+import LeaveGuard from "@/components/LeaveGuard";
 
 type Tab = "home" | "chat" | "scan" | "cart" | "map";
 
@@ -63,7 +64,8 @@ export default function Shop() {
           </div>
         )}
       </div>
-      {online && voiceOk && <VoiceDock variant="fab" />}
+      {online && voiceOk && tab !== "chat" && <VoiceDock variant="fab" />}
+      <LeaveGuard storeName={store?.name ?? "the shop"} />
       <VoiceStrip dock={online} />
       {session.mode !== "owner" && <TotalBar />}
       <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr items-end border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">

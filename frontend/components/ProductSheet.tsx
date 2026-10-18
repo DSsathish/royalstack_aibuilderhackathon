@@ -26,8 +26,8 @@ export default function ProductSheet({ p, onClose, onAdd, onAsk }: { p: Product;
     <Modal title={p.name} onClose={onClose}>
       <div className="space-y-4 text-sm">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="mono text-xl font-semibold">{money(p.price)}</span>
-          {p.mrp > p.price && <span className="mono text-sm line-through text-muted">{money(p.mrp)}</span>}
+          <span className="price text-xl font-semibold">{money(p.price)}</span>
+          {p.mrp > p.price && <span className="price text-sm line-through text-muted">{money(p.mrp)}</span>}
           {p.mrp > p.price && <span className="chip chip-good">Save {money(p.mrp - p.price)}</span>}
           <span className={`chip ${out ? "chip-bad" : "chip-good"}`}><span className="dot" />{out ? "Out of stock" : `${p.available} in stock`}</span>
         </div>
@@ -37,9 +37,9 @@ export default function ProductSheet({ p, onClose, onAdd, onAsk }: { p: Product;
         {p.bought_30d ? <div className="text-xs text-muted">Bought {p.bought_30d} times by shoppers this month.</div> : null}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 border border-line rounded-full px-1">
-            <button type="button" onClick={() => setQty((n) => Math.max(1, n - 1))} className="btn btn-ghost w-9 h-9 p-0 rounded-full" aria-label="One less"><IconMinus className="w-4 h-4" /></button>
-            <span className="mono w-6 text-center" aria-live="polite">{qty}</span>
-            <button type="button" onClick={() => setQty((n) => Math.min(20, n + 1))} className="btn btn-ghost w-9 h-9 p-0 rounded-full" aria-label="One more"><IconPlus className="w-4 h-4" /></button>
+            <button type="button" onClick={() => setQty((n) => Math.max(1, n - 1))} className="btn btn-ghost btn-icon-sm rounded-full" aria-label="One less"><IconMinus className="w-4 h-4" /></button>
+            <span className="price w-6 text-center" aria-live="polite">{qty}</span>
+            <button type="button" onClick={() => setQty((n) => Math.min(20, n + 1))} className="btn btn-ghost btn-icon-sm rounded-full" aria-label="One more"><IconPlus className="w-4 h-4" /></button>
           </div>
           <button type="button" disabled={out} onClick={() => onAdd(p, qty)} className="btn btn-primary flex-1 py-2.5">{out ? "Not available" : `Add ${qty} to cart`}</button>
         </div>
@@ -49,11 +49,11 @@ export default function ProductSheet({ p, onClose, onAdd, onAsk }: { p: Product;
           {cmp === "loading" && <div className="text-muted inline-flex items-center gap-2"><span className="dot animate-pulse" />Asking connected providers</div>}
           {Array.isArray(cmp) && (
             <div className="space-y-1">
-              <div className="flex justify-between"><span>This shop</span><span className="mono">{money(p.price)}</span></div>
+              <div className="flex justify-between"><span>This shop</span><span className="price">{money(p.price)}</span></div>
               {cmp.map((r) => (
                 <div key={r.provider || r.label} className="flex justify-between gap-2">
                   <span className="min-w-0 truncate">{r.label}{r.demo && <span className="chip chip-muted ml-1">demo data</span>}</span>
-                  <span className="mono whitespace-nowrap">{r.status === "ok" ? `${money(r.price ?? 0)}${r.available === 0 ? " · out of stock" : ""}` : r.status === "no_match" ? "not listed" : "unavailable"}</span>
+                  <span className="price whitespace-nowrap">{r.status === "ok" ? `${money(r.price ?? 0)}${r.available === 0 ? " · out of stock" : ""}` : r.status === "no_match" ? "not listed" : "unavailable"}</span>
                 </div>
               ))}
               <div className="text-xs text-muted">Live prices come only from providers the shop has connected; demo rows are samples.</div>

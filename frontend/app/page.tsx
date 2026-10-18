@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Session, StoreLite, api, loadSession } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { IconBag, IconStore } from "@/components/Icons";
+import Lottie from "@/components/Lottie";
 
 /** Two front doors (docs/lld/online-shop.md): the store visit, started by the entrance code, and the online shop. */
 export default function Home() {
@@ -35,7 +36,7 @@ export default function Home() {
 
   return (
     <main className="reveal-stagger flex-1 flex flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-      <div className="w-16 h-16 rounded-full bg-accent-soft text-accent-ink flex items-center justify-center"><IconStore /></div>
+      <Lottie slot="hero" fallback={<div className="w-16 h-16 rounded-full bg-accent-soft text-accent-ink flex items-center justify-center"><IconStore /></div>} />
       <div className="space-y-2 max-w-sm">
         <div className="eyebrow">Royal Stack</div>
         <h1 className="text-3xl font-semibold">Shop with an assistant that knows every shelf</h1>

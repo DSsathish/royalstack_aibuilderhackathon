@@ -4,6 +4,7 @@ import { HomeData, Product, api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { toast } from "@/lib/toast";
 import { IconCamera, IconSearch } from "./Icons";
+import Lottie from "./Lottie";
 import ProductCard from "./ProductCard";
 import ProductSheet from "./ProductSheet";
 
@@ -43,17 +44,19 @@ export default function OnlineHome({ onPhoto, onAsk }: { onPhoto: (f: File) => v
         <h1 className="text-lg font-semibold leading-tight truncate">{store?.name ?? "Shop"}</h1>
         <form onSubmit={(e) => { e.preventDefault(); if (q.trim()) show(`Results for "${q.trim()}"`, { q: q.trim() }); }} className="mt-2 flex items-center gap-2">
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products" aria-label="Search products" className="field flex-1 rounded-full py-2.5" />
-          <label className="btn btn-ghost w-11 h-11 p-0 rounded-full cursor-pointer" title="Search with a photo">
+          <label className="btn btn-ghost btn-icon rounded-full cursor-pointer" title="Search with a photo">
             <IconCamera />
             <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onPhoto(f); e.target.value = ""; }} />
           </label>
-          <button type="submit" className="btn btn-primary w-11 h-11 p-0 rounded-full" aria-label="Search"><IconSearch /></button>
+          <button type="submit" className="btn btn-primary btn-icon rounded-full" aria-label="Search"><IconSearch /></button>
         </form>
       </header>
 
       {page ? (
         <Section title={page.title} note={page.loading ? "Searching" : `${page.total} product${page.total === 1 ? "" : "s"}`} action={<button type="button" onClick={() => setPage(null)} className="text-sm text-accent font-semibold">Back</button>}>
-          {page.loading ? <Placeholder /> : page.products.length === 0 ? <p className="px-4 text-sm text-muted">Nothing matched. Try other words, or ask the assistant.</p> : grid(page.products)}
+          {page.loading ? <Placeholder /> : page.products.length === 0
+            ? <div className="px-4 py-6 text-center space-y-2"><Lottie slot="noResults" fallback={<div className="w-14 h-14 rounded-full bg-surface-2 text-muted flex items-center justify-center"><IconSearch /></div>} className="mx-auto" /><p className="text-sm text-muted">Nothing matched. Try other words, or ask the assistant.</p></div>
+            : grid(page.products)}
         </Section>
       ) : err ? (
         <p className="px-4 py-6 text-sm text-bad">{err}</p>
@@ -103,5 +106,10 @@ function Section({ title, note, action, children }: { title: string; note?: stri
 }
 
 function Placeholder() {
-  return <div className="grid grid-cols-2 gap-3 px-4 pt-4">{[0, 1, 2, 3].map((i) => <div key={i} className="card h-44 animate-pulse bg-surface-2" />)}</div>;
+  return (
+    <div className="pt-4">
+      <div className="flex justify-center pb-2"><Lottie slot="loading" fallback={null} /></div>
+      <div className="grid grid-cols-2 gap-3 px-4">{[0, 1, 2, 3].map((i) => <div key={i} className="card h-44 animate-pulse bg-surface-2" />)}</div>
+    </div>
+  );
 }

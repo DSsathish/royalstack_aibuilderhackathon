@@ -6,6 +6,7 @@ import { ApiError, Order, api, money } from "@/lib/api";
 import { freshIdToken } from "@/lib/firebase";
 import { useApp } from "@/lib/store";
 import { IconCheck } from "@/components/Icons";
+import Lottie from "@/components/Lottie";
 import PhoneSignIn from "@/components/PhoneSignIn";
 
 declare global { interface Window { Razorpay?: new (o: Record<string, unknown>) => { open(): void } } }
@@ -65,13 +66,13 @@ export default function Checkout() {
       <div><div className="eyebrow">Self-checkout</div><h1 className="text-2xl font-semibold">Review and pay</h1></div>
       <div className="card divide-y divide-line">
         {cart?.items.map((i) => (
-          <div key={i.product_id} className="flex justify-between p-3 text-sm"><span>{i.name} <span className="text-muted">× {i.qty}</span></span><span className="mono">{money(i.unit_price * i.qty)}</span></div>
+          <div key={i.product_id} className="flex justify-between p-3 text-sm"><span>{i.name} <span className="text-muted">× {i.qty}</span></span><span className="price">{money(i.unit_price * i.qty)}</span></div>
         ))}
         <div className="p-3 receipt-edge space-y-1 text-sm">
-          {cart && cart.savings > 0 && <div className="flex justify-between text-good"><span>Savings vs MRP</span><span className="mono">{money(cart.savings)}</span></div>}
-          {cart?.discounts?.map((d) => <div key={d.offer_id} className="flex justify-between text-good"><span>{d.name}</span><span className="mono">−{money(d.amount)}</span></div>)}
-          {pointsApplied >= 50 && <div className="flex justify-between text-good"><span>Points used ({pointsApplied})</span><span className="mono">−{money(pointsApplied)}</span></div>}
-          <div className="flex justify-between text-lg font-semibold"><span>Total</span><span className="mono">{money(due)}</span></div>
+          {cart && cart.savings > 0 && <div className="flex justify-between text-good"><span>Savings vs MRP</span><span className="price">{money(cart.savings)}</span></div>}
+          {cart?.discounts?.map((d) => <div key={d.offer_id} className="flex justify-between text-good"><span>{d.name}</span><span className="price">−{money(d.amount)}</span></div>)}
+          {pointsApplied >= 50 && <div className="flex justify-between text-good"><span>Points used ({pointsApplied})</span><span className="price">−{money(pointsApplied)}</span></div>}
+          <div className="flex justify-between text-lg font-semibold"><span>Total</span><span className="price">{money(due)}</span></div>
         </div>
       </div>
       {canUsePoints && !verifying && !token && (
@@ -89,7 +90,7 @@ export default function Checkout() {
       {token && canUsePoints && (
         <label className="card p-3 text-sm flex items-center gap-3">
           <span className="flex-1">Points to use (50 to {maxPoints})</span>
-          <input type="number" min={50} max={maxPoints} value={usePoints} onChange={(e) => setUsePoints(Number(e.target.value))} aria-invalid={usePoints > 0 && (usePoints < 50 || usePoints > maxPoints)} className="field w-28 py-1.5 mono" />
+          <input type="number" min={50} max={maxPoints} value={usePoints} onChange={(e) => setUsePoints(Number(e.target.value))} aria-invalid={usePoints > 0 && (usePoints < 50 || usePoints > maxPoints)} className="field w-28 py-1.5 price" />
           {usePoints > 0 && usePoints < 50 && <span role="alert" className="field-error mt-0">Use at least 50 points</span>}
           {usePoints > maxPoints && <span role="alert" className="field-error mt-0">At most {maxPoints} on this bill</span>}
           <button onClick={() => { setToken(null); setUsePoints(0); }} className="btn btn-ghost py-1.5 text-xs">Remove</button>
@@ -107,22 +108,22 @@ export function Receipt({ order }: { order: Order }) {
   const exitUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/exit/?r=${order.receipt_token}`;
   return (
     <main className="flex-1 p-4 space-y-4 max-w-md mx-auto w-full text-center">
-      <div className="w-14 h-14 mx-auto rounded-full bg-good-soft text-good flex items-center justify-center"><IconCheck /></div>
-      <div><div className="eyebrow">Paid</div><h1 className="text-3xl font-semibold mono">{money(order.total)}</h1></div>
+      <Lottie slot="orderPlaced" className="mx-auto" fallback={<div className="w-14 h-14 rounded-full bg-good-soft text-good flex items-center justify-center"><IconCheck /></div>} />
+      <div><div className="eyebrow">Paid</div><h1 className="text-3xl font-semibold price">{money(order.total)}</h1></div>
       <p className="text-sm text-muted">Show this code at the exit.</p>
       <div className="flex justify-center"><div className="bg-white p-3 rounded-[14px]"><QRCodeSVG value={exitUrl} size={220} /></div></div>
       <div className="card text-left text-sm divide-y divide-line">
-        {order.items.map((i) => <div key={i.product_id} className="flex justify-between p-3"><span>{i.name} <span className="text-muted">× {i.qty}</span></span><span className="mono">{money(i.unit_price * i.qty)}</span></div>)}
+        {order.items.map((i) => <div key={i.product_id} className="flex justify-between p-3"><span>{i.name} <span className="text-muted">× {i.qty}</span></span><span className="price">{money(i.unit_price * i.qty)}</span></div>)}
         {(order.discounts?.length > 0 || order.points_redeemed > 0) && (
           <div className="p-3 space-y-1 text-good">
-            {order.discounts?.map((d) => <div key={d.offer_id} className="flex justify-between"><span>{d.name}</span><span className="mono">−{money(d.amount)}</span></div>)}
-            {order.points_redeemed > 0 && <div className="flex justify-between"><span>Points used ({order.points_redeemed})</span><span className="mono">−{money(order.points_value)}</span></div>}
+            {order.discounts?.map((d) => <div key={d.offer_id} className="flex justify-between"><span>{d.name}</span><span className="price">−{money(d.amount)}</span></div>)}
+            {order.points_redeemed > 0 && <div className="flex justify-between"><span>Points used ({order.points_redeemed})</span><span className="price">−{money(order.points_value)}</span></div>}
           </div>
         )}
-        <div className="flex justify-between p-3 font-semibold receipt-edge"><span>Total</span><span className="mono">{money(order.total)}</span></div>
+        <div className="flex justify-between p-3 font-semibold receipt-edge"><span>Total</span><span className="price">{money(order.total)}</span></div>
         {order.points_earned > 0 && <div className="p-3 text-xs text-muted">You earned {order.points_earned} reward point{order.points_earned === 1 ? "" : "s"} on this bill.</div>}
       </div>
-      <p className="text-xs text-muted mono">Order {order.order_id.slice(0, 8)} · {order.paid_at ? new Date(order.paid_at).toLocaleString() : ""}</p>
+      <p className="text-xs text-muted price">Order {order.order_id.slice(0, 8)} · {order.paid_at ? new Date(order.paid_at).toLocaleString() : ""}</p>
       <a href="/shop" className="btn btn-ghost">Continue shopping</a>
     </main>
   );

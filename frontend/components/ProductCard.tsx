@@ -22,8 +22,8 @@ export default function ProductCard({ p, onAdd, onWhere, onOpen, layout = "row" 
         <button type="button" onClick={onOpen ? () => onOpen(p) : undefined} disabled={!onOpen} className="text-sm font-semibold leading-snug line-clamp-2 text-left">{p.name}</button>
         {(p.pack_size || p.brand) && <div className="text-xs text-muted truncate">{[p.brand, p.pack_size].filter(Boolean).join(" · ")}</div>}
         <div className="flex items-baseline gap-2">
-          <span className="mono text-base">{money(p.price)}</span>
-          {p.mrp > p.price && <span className="mono text-xs line-through text-muted">{money(p.mrp)}</span>}
+          <span className="price text-base">{money(p.price)}</span>
+          {p.mrp > p.price && <span className="price text-xs line-through text-muted">{money(p.mrp)}</span>}
         </div>
         <span className={`chip ${out ? "chip-bad" : "chip-good"}`}><span className="dot" />{out ? "Out of stock" : `${p.available} in stock`}</span>
         {p.bought_30d ? <span className="text-[11px] text-muted">Bought {p.bought_30d}× this month</span> : null}
