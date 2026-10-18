@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Offer, Product, api } from "@/lib/api";
+import { ApiError, Offer, Product, api } from "@/lib/api";
 import { GuardMode, LiveFrame, LiveState, liveSupported, startLive } from "@/lib/live";
 import { UiEvent } from "@/lib/sse";
 import { Msg, sayAloud, useApp } from "@/lib/store";
@@ -18,7 +18,7 @@ const SUGGESTIONS = ["Where is atta?", "பால் எங்கே இரு�
 const OWNER_SUGGESTIONS = ["How are we doing today?", "What should I reorder?", "Which products are not selling?", "Create 10% off on Dairy for everyone", "Who are my VIP customers?", "What did shoppers ask for that we don't have?"];
 
 export default function Chat() {
-  const { session, store, messages, push, patch, setCart, setHighlight, language, setLanguage, speak, setSpeak, setAvatar, customer } = useApp();
+  const { session, setSession, store, messages, push, patch, setCart, setHighlight, language, setLanguage, speak, setSpeak, setAvatar, customer } = useApp();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [level, setLevel] = useState(0);
@@ -46,12 +46,23 @@ export default function Chat() {
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  async function consume(stream: AsyncGenerator<UiEvent>, userMsgId?: number) {
+  /** Sessions live four hours. An owner's dead session is replaced silently; a shopper's visit ends and the entrance page returns. */
+  const sessionGone = (e: unknown) => e instanceof ApiError && (e.status === 404 || e.status === 401);
+  async function freshSession(): Promise<typeof session> {
+    if (!session || !owner) return null;
+    const { owner: ownerApi } = await import("@/lib/owner");
+    const next = await ownerApi.session(session.store_id);
+    setSession(next);
+    return next;
+  }
+
+  async function consume(make: (s: NonNullable<typeof session>) => AsyncGenerator<UiEvent>, userMsgId?: number, retried = false) {
+    if (!session) return;
     const id = push({ role: "assistant", text: "" });
     let buffer = "";
     setAvatar("thinking"); setOrb("thinking");
     try {
-      for await (const e of stream) {
+      for await (const e of make(session)) {
         if (e.type === "transcript" && userMsgId) patch(userMsgId, { text: e.text });
         else if (e.type === "status") patch(id, { status: e.label ?? "Working" });   // the label comes with the event: one wording for every surface
         else if (e.type === "token") { buffer += e.text; patch(id, { text: buffer, status: undefined }); }
@@ -67,7 +78,12 @@ export default function Chat() {
       }
       setAvatar("idle"); setOrb(voiceRef.current ? "listening" : "idle");
     } catch (err) {
-      patch(id, { text: `Assistant unavailable: ${(err as Error).message}`, status: undefined });
+      if (sessionGone(err) && owner && !retried) {
+        const next = await freshSession().catch(() => null);
+        if (next) { useApp.setState({ messages: useApp.getState().messages.filter((m) => m.id !== id) }); return consume(make, userMsgId, true); }
+      }
+      if (sessionGone(err) && !owner) { patch(id, { text: "Your visit has ended. Scan the entrance code again to continue.", status: undefined }); setSession(null); }
+      else patch(id, { text: `Assistant unavailable: ${(err as Error).message}`, status: undefined });
       setAvatar("idle"); setOrb("idle");
     }
   }
@@ -93,7 +109,7 @@ export default function Chat() {
     setBusy(true); setText("");
     photoTurn.current = !!image;
     push({ role: "user", text: message || "Photo of a product" });
-    await consume(api.chat(session, message || "What is this product?", image, language));
+    await consume((s) => api.chat(s, message || "What is this product?", image, language));
     setBusy(false);
   }
   async function addFromCard(p: Product, fromPhoto: boolean) {
@@ -110,9 +126,10 @@ export default function Chat() {
     if (liveConnecting.current || !session) return;
     if (voiceRef.current) stopVoice();
     liveConnecting.current = true;
+    const live_session = (owner ? await freshSession().catch(() => null) : null) ?? session;   // an owner's voice session starts on a live id
     let closedEarly = false;
     try {
-      const ctl = await startLive(session.session_id, language, {
+      const ctl = await startLive(live_session.session_id, language, {
         onLevel: (l) => setLevel(l),
         onGuard: setGuard,
         onUserAudio: (clip) => {
@@ -166,7 +183,7 @@ export default function Chat() {
       setBusy(true);
       const userId = push({ role: "user", text: "…", voice: { url: URL.createObjectURL(heard.blob) } });
       voicePeaks(heard.blob, userId);
-      if (session) await consume(api.audio(session, heard.blob, language), userId);
+      await consume((s) => api.audio(s, heard.blob, language), userId);
       setBusy(false);
     }
   }
