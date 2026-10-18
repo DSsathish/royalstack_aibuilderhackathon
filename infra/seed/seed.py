@@ -1,7 +1,8 @@
-"""Seed the demo store into Firestore and BigQuery. Idempotent.
+"""Seed a store into Firestore and BigQuery from products.csv. Idempotent.
 
 Usage (from repo root, with ADC or emulator configured):
-  backend/.venv/bin/python infra/seed/seed.py --store demo-grocery [--embed] [--skip-bq]
+  backend/.venv/bin/python infra/seed/seed.py --store dailygoods --name DailyGoods --owner-email you@example.com [--embed] [--skip-bq]
+Sample activity (orders, customers, signals, counts, exit checks) comes from sample_activity.py afterwards.
 
 Steps: store doc with floor map -> suppliers -> products/inventory/locations via the
 CSV connector -> optional Gemini embeddings -> sales.csv into BigQuery by load job.
@@ -33,7 +34,7 @@ SUPPLIERS = [
 ]
 
 
-def seed_store(store_id: str, owner_emails: list[str]) -> Store:
+def seed_store(store_id: str, owner_emails: list[str], name: str, city: str = "") -> Store:
     existing = db.store_ref(store_id).get()
     if existing.exists:                      # existing store: keep its settings, PIN, branding and owners; add the floor blocks it lacks
         cur = existing.to_dict()
@@ -42,7 +43,7 @@ def seed_store(store_id: str, owner_emails: list[str]) -> Store:
         fm = fm + [a.model_dump() for a in FLOOR_MAP if a.aisle not in names]
         db.store_ref(store_id).update({"floor_map": fm, "owner_emails": sorted(set(cur.get("owner_emails", [])) | {e.lower() for e in owner_emails})})
         return Store(**{**cur, "floor_map": fm})
-    store = Store(store_id=store_id, name="Royal Stack Supermarket", floor_map=FLOOR_MAP, owner_emails=[e.lower() for e in owner_emails])
+    store = Store(store_id=store_id, name=name, city=city, floor_map=FLOOR_MAP, owner_emails=[e.lower() for e in owner_emails])
     data = store.model_dump()
     if not owner_emails:
         data.pop("owner_emails")   # keep whatever is already registered
@@ -145,13 +146,15 @@ def seed_bigquery(store_id: str) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--store", default="demo-grocery")
+    ap.add_argument("--store", required=True)
+    ap.add_argument("--name", default="Royal Stack Supermarket", help="store name when the store is new")
+    ap.add_argument("--city", default="")
     ap.add_argument("--embed", action="store_true", help="compute Gemini embeddings")
     ap.add_argument("--skip-bq", action="store_true")
     ap.add_argument("--owner-email", action="append", default=[], help="Google account allowed into the owner dashboard (repeatable)")
     a = ap.parse_args()
 
-    store = seed_store(a.store, a.owner_email)
+    store = seed_store(a.store, a.owner_email, a.name, a.city)
     seed_products(store)
     if a.embed:
         seed_embeddings(a.store)

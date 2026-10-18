@@ -6,7 +6,7 @@ AI Builder Cup 2026 (Google Cloud JAPAC), theme: Retail & Commerce. A store assi
 |---|---|
 | Live app (shopper) | https://royastacxk-aibuildercup.web.app |
 | Owner dashboard | https://royastacxk-aibuildercup.web.app/owner/ |
-| Exit kiosk | https://royastacxk-aibuildercup.web.app/kiosk/ (store `demo-grocery`, PIN `1234`) |
+| Exit kiosk | https://royastacxk-aibuildercup.web.app/kiosk/ (store `dailygoods`, PIN `1234`) |
 | API | https://retail-api-881917398995.asia-south1.run.app (OpenAPI at `/docs`) |
 
 Scan the entrance QR (see `docs/plan/00-overview.md` or the owner dashboard's Connectors tab) to start an in-store session on a phone.

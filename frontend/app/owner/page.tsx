@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { User } from "firebase/auth";
 import { API, money, type Aisle } from "@/lib/api";
 import { addPassword, changeEmail, changePassword, createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
-import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner, ConnectorDoc, Inspection, SourceInput, InventoryField, UploadCheck } from "@/lib/owner";
+import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner, ConnectorDoc, Inspection, SourceInput, InventoryField, UploadCheck, ProductDetail, ProductEdit } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
 import FloorMapEditor from "@/components/FloorMapEditor";
@@ -702,6 +702,92 @@ function AddInventoryModal({ store, onClose, onSaved }: { store: string; onClose
   );
 }
 
+/** Every field of one product, its stock and its place, editable in one place (docs/lld/owner-product-edit.md). */
+type EditKey = keyof ProductEdit;
+const EDIT_GROUPS: { title: string; fields: { key: EditKey; label: string; kind?: "number" | "integer" | "select" | "textarea"; choices?: string[]; optional?: boolean }[] }[] = [
+  { title: "Identity", fields: [{ key: "name", label: "Name" }, { key: "brand", label: "Brand", optional: true }, { key: "category", label: "Category", optional: true }, { key: "subcategory", label: "Subcategory", optional: true }, { key: "barcode", label: "Barcode", optional: true }, { key: "status", label: "Status", kind: "select", choices: ["active", "inactive", "discontinued", "seasonal"] }] },
+  { title: "Pricing", fields: [{ key: "price", label: "Selling price", kind: "number" }, { key: "mrp", label: "MRP", kind: "number", optional: true }, { key: "cost_price", label: "Cost price", kind: "number", optional: true }, { key: "gst_rate", label: "GST percent", kind: "number", optional: true }] },
+  { title: "Stock", fields: [{ key: "on_hand", label: "On hand", kind: "integer" }, { key: "reorder_point", label: "Reorder point", kind: "integer" }, { key: "reorder_qty", label: "Reorder quantity", kind: "integer" }, { key: "lead_time_days", label: "Lead time, days", kind: "integer" }, { key: "supplier_id", label: "Supplier id", optional: true }] },
+  { title: "Place", fields: [{ key: "aisle", label: "Aisle", kind: "select", optional: true }, { key: "bay", label: "Bay", kind: "integer", optional: true }, { key: "shelf", label: "Shelf", kind: "integer", optional: true }, { key: "side", label: "Side", kind: "select", choices: ["left", "right"], optional: true }] },
+  { title: "Details", fields: [{ key: "unit", label: "Unit" }, { key: "pack_size", label: "Pack size", optional: true }, { key: "shelf_life_days", label: "Shelf life, days", kind: "integer", optional: true }, { key: "origin", label: "Origin", optional: true }, { key: "tags", label: "Tags, comma separated", optional: true }, { key: "image_url", label: "Image URL", optional: true }, { key: "description", label: "Description", kind: "textarea", optional: true }] },
+];
+function ProductDrawer({ store, pid, aisles, onClose, onSaved }: { store: string; pid: string; aisles: string[]; onClose: () => void; onSaved: () => void }) {
+  const [detail, setDetail] = useState<ProductDetail | null>(null);
+  const [initial, setInitial] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [fe, setFe] = useState<Errors>({});
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    owner.product(store, pid).then((d) => {
+      const p = d.product, st = d.stock, loc = p.location;
+      const v: Record<string, string> = {
+        name: p.name, brand: p.brand, category: p.category, subcategory: p.subcategory, barcode: p.barcode, status: p.status,
+        price: String(p.price), mrp: p.mrp ? String(p.mrp) : "", cost_price: p.cost_price == null ? "" : String(p.cost_price), gst_rate: p.gst_rate == null ? "" : String(p.gst_rate),
+        on_hand: String(st.on_hand ?? 0), reorder_point: String(st.reorder_point ?? 0), reorder_qty: String(st.reorder_qty ?? 0), lead_time_days: String(st.lead_time_days ?? 3), supplier_id: st.supplier_id ?? "",
+        aisle: loc?.aisle ?? "", bay: loc ? String(loc.bay) : "", shelf: loc ? String(loc.shelf) : "", side: loc?.side ?? "",
+        unit: p.unit, pack_size: p.pack_size, shelf_life_days: p.shelf_life_days == null ? "" : String(p.shelf_life_days), origin: p.origin, tags: p.tags.join(", "), image_url: p.image_url, description: p.description,
+      };
+      setDetail(d); setInitial(v); setForm(v);
+    }).catch((e) => { toast.error(friendlyApiError(e)); onClose(); });
+  }, [store, pid]);   // eslint-disable-line react-hooks/exhaustive-deps
+  function ruleFor(key: EditKey, kind?: string) {
+    if (key === "price") return rules.number("Selling price", { min: 0.01 });
+    if (key === "mrp") return (v: string) => rules.number("MRP", { min: Number(form.price) || 0.01 })(v);
+    if (key === "barcode") return (v: string) => (/^[0-9]{8,14}$/.test(v.trim()) ? "" : "A barcode has 8 to 14 digits.");
+    if (key === "bay") return rules.number("Bay", { integer: true, min: 1, max: 12 });
+    if (key === "shelf") return rules.number("Shelf", { integer: true, min: 1, max: 8 });
+    if (kind === "integer") return rules.number(key.replace(/_/g, " "), { integer: true });
+    if (kind === "number") return rules.number(key.replace(/_/g, " "), { min: 0 });
+    return undefined;
+  }
+  async function save() {
+    const checks: Parameters<typeof guard>[0] = {};
+    for (const g of EDIT_GROUPS) for (const f of g.fields) checks[f.key] = { label: f.label, value: form[f.key] ?? "", optional: !!f.optional, rule: ruleFor(f.key, f.kind) };
+    if (!guard(checks, setFe)) return;
+    const body: ProductEdit = {};
+    for (const g of EDIT_GROUPS) for (const f of g.fields) {
+      const v = (form[f.key] ?? "").trim();
+      if (v === (initial[f.key] ?? "").trim()) continue;
+      if (f.key === "tags") body.tags = v.split(",").map((t) => t.trim()).filter(Boolean);
+      else if (f.kind === "number" || f.kind === "integer") { if (v !== "") (body as Record<string, unknown>)[f.key] = Number(v); }
+      else (body as Record<string, unknown>)[f.key] = v;
+    }
+    if (Object.keys(body).length === 0) { toast.ok("Nothing changed."); onClose(); return; }
+    setBusy(true);
+    try { await owner.patchProduct(store, pid, body); toast.ok("Product updated."); onSaved(); }
+    catch (e) { toast.error(friendlyApiError(e)); }
+    setBusy(false);
+  }
+  const set = (k: string, v: string) => { setForm({ ...form, [k]: v }); setFe({ ...fe, [k]: "" }); };
+  return (
+    <Modal title={detail ? detail.product.name : "Product"} onClose={onClose}>
+      {!detail ? <Skeleton /> : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2 text-xs text-muted"><span className="mono">SKU {detail.product.sku}</span><span>Available {detail.product.available}</span>{detail.stock.reserved ? <span>Reserved {detail.stock.reserved}</span> : null}</div>
+          {EDIT_GROUPS.map((g) => (
+            <section key={g.title}>
+              <div className="eyebrow mb-1">{g.title}</div>
+              <div className="grid sm:grid-cols-2 gap-2 text-sm">
+                {g.fields.map((f) => (
+                  <label key={f.key} className={`text-xs ${f.kind === "textarea" ? "sm:col-span-2" : ""}`}>{f.label}{!f.optional && <Req />}
+                    {f.kind === "select"
+                      ? <select value={form[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} className="field mt-1 py-1.5 text-sm">{f.optional && <option value="">none</option>}{(f.choices ?? aisles).map((c) => <option key={c} value={c}>{c}</option>)}</select>
+                      : f.kind === "textarea"
+                        ? <textarea value={form[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} rows={2} className="field mt-1 py-1.5 text-sm" />
+                        : <input value={form[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} inputMode={f.kind === "number" || f.kind === "integer" ? "decimal" : undefined} aria-invalid={!!fe[f.key]} className="field mt-1 py-1.5 text-sm" />}
+                    <FieldError msg={fe[f.key]} />
+                  </label>
+                ))}
+              </div>
+            </section>
+          ))}
+          <div className="flex gap-2 justify-end"><button type="button" onClick={onClose} className="btn btn-ghost py-2">Cancel</button><button type="button" onClick={save} disabled={busy} className="btn btn-primary py-2">{busy ? "Saving" : "Save changes"}</button></div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function InventoryTab({ store }: { store: string }) {
   const [rows, setRows] = useState<InvRow[]>([]);
   const [filter, setFilter] = useState<"all" | InvRow["status"]>("all");
@@ -712,6 +798,7 @@ function InventoryTab({ store }: { store: string }) {
   const load = () => owner.inventory(store).then(setRows);
   useEffect(() => { load(); owner.store(store).then((d) => setAisleNames(d.floor_map.map((a) => a.aisle))).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [intake, setIntake] = useState<"upload" | "add" | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
   const [moveErr, setMoveErr] = useState<Errors>({});
   async function move() {
     if (!moving) return;
@@ -750,15 +837,18 @@ function InventoryTab({ store }: { store: string }) {
       </div>
       {intake === "upload" && <UploadInventory store={store} onImported={load} />}
       {intake === "add" && <AddInventoryModal store={store} onClose={() => setIntake(null)} onSaved={() => { setIntake(null); load(); }} />}
+      {detail && <ProductDrawer store={store} pid={detail} aisles={aisleNames} onClose={() => setDetail(null)} onSaved={() => { setDetail(null); load(); }} />}
       {adding && <AddByScan store={store} onSaved={() => { load(); }} />}
       <div className="table-wrap">
         <table className="table">
-          <thead><tr><th>Product</th><th>Status</th><th className="num">On hand</th><th className="num">Sold per day</th><th className="num">Days of cover</th><th className="num">Reorder at</th><th className="num">Order qty</th><th>Aisle</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>Status</th><th className="num">Price</th><th className="num">On hand</th><th className="num">Sold per day</th><th className="num">Days of cover</th><th className="num">Reorder at</th><th className="num">Order qty</th><th>Aisle</th><th></th></tr></thead>
           <tbody>{shown.map((r) => (
             <React.Fragment key={r.product_id}>
             <tr>
-              <td className="font-medium">{r.name}</td>
+              <td><button type="button" onClick={() => setDetail(r.product_id)} className="font-medium text-left hover:underline" title="Open product details">{r.name}</button>
+                <div className="text-[11px] text-muted mono">{r.barcode || r.sku}{r.pack_size ? ` · ${r.pack_size}` : ""}{r.brand ? ` · ${r.brand}` : ""}</div></td>
               <td><span className={`status status-${r.status}`}>{STATUS[r.status]}</span></td>
+              <td className="num">₹{r.price.toLocaleString("en-IN")}</td>
               <td className="num">{r.available}</td><td className="num">{r.avg_daily ?? "–"}</td><td className="num">{r.days_of_cover ?? "–"}</td>
               <td className="text-right"><button onClick={() => edit(r, "reorder_point")} className="mono underline decoration-dotted">{r.reorder_point}</button></td>
               <td className="text-right"><button onClick={() => edit(r, "reorder_qty")} className="mono underline decoration-dotted">{r.reorder_qty}</button></td>
@@ -766,7 +856,7 @@ function InventoryTab({ store }: { store: string }) {
               <td><button onClick={() => count(r)} className="text-xs text-accent font-medium">Count shelf</button></td>
             </tr>
             {moving?.pid === r.product_id && (
-              <tr><td colSpan={9} className="bg-surface-2">
+              <tr><td colSpan={10} className="bg-surface-2">
                 <div className="flex flex-wrap items-center gap-2 text-sm py-1">
                   <span className="text-muted">Place <b className="text-ink">{r.name}</b> in</span>
                   <select value={moving.aisle} onChange={(e) => setMoving({ ...moving, aisle: e.target.value })} className="field w-auto py-1.5">{aisleNames.map((a) => <option key={a} value={a}>{a}</option>)}</select>

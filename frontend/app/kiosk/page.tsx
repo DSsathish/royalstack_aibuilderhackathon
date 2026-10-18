@@ -79,7 +79,7 @@ export default function Kiosk() {
   if (step === "setup") return (
     <main className="flex-1 flex flex-col gap-3 p-6 max-w-sm mx-auto w-full justify-center">
       <div><div className="eyebrow">Exit kiosk</div><h1 className="text-2xl font-semibold">Set up this tablet</h1></div>
-      <label className="text-sm font-medium">Store id<Req /><input id="k-store" value={store} onChange={(e) => { setStore(e.target.value); setKe({ ...ke, store: "" }); }} placeholder="demo-grocery" aria-invalid={!!ke.store} className="field mt-1" /><FieldError msg={ke.store} /></label>
+      <label className="text-sm font-medium">Store id<Req /><input id="k-store" value={store} onChange={(e) => { setStore(e.target.value); setKe({ ...ke, store: "" }); }} placeholder="dailygoods" aria-invalid={!!ke.store} className="field mt-1" /><FieldError msg={ke.store} /></label>
       <label className="text-sm font-medium">Kiosk PIN<Req /><input id="k-pin" value={pin} onChange={(e) => { setPin(e.target.value); setKe({ ...ke, pin: "" }); }} type="password" aria-invalid={!!ke.pin} className="field mt-1" /><FieldError msg={ke.pin} /></label>
       <label className="text-sm font-medium">Kiosk name <span className="text-muted font-normal">(optional)</span><input id="k-name" value={kioskId} onChange={(e) => setKioskId(e.target.value)} placeholder="Exit 1" className="field mt-1" /></label>
       <button onClick={() => {

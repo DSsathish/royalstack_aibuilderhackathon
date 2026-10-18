@@ -80,7 +80,10 @@ def inventory(store_id: str) -> list[dict]:
             status = "overstock"
         else:
             status = "ok"
+        loc = locations.get(d.id)
         rows.append({"product_id": d.id, "name": p.name, "category": p.category, "price": p.price, "available": available,
+                     "sku": p.sku, "barcode": p.barcode, "brand": p.brand, "mrp": p.mrp, "unit": p.unit, "pack_size": p.pack_size,
+                     "bay": loc.bay if loc else None, "shelf": loc.shelf if loc else None, "side": loc.side if loc else None,
                      "on_hand": inv["on_hand"], "reserved": inv.get("reserved", 0), "reorder_point": inv.get("reorder_point", 0),
                      "reorder_qty": inv.get("reorder_qty", 0), "supplier_id": inv.get("supplier_id", ""),
                      "lead_time_days": inv.get("lead_time_days", 3), "avg_daily": avg, "days_of_cover": cover, "status": status,

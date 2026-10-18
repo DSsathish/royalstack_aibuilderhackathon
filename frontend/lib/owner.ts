@@ -8,7 +8,18 @@ export type Overview = { today: { orders: number; revenue: number; by_channel: R
   series: { day: string; revenue: number }[] };
 export type InvRow = { product_id: string; name: string; category: string; price: number; available: number; on_hand: number; reserved: number;
   reorder_point: number; reorder_qty: number; supplier_id: string; lead_time_days: number; avg_daily: number | null; days_of_cover: number | null;
-  status: "ok" | "low" | "out" | "dead" | "overstock"; aisle: string };
+  status: "ok" | "low" | "out" | "dead" | "overstock"; aisle: string;
+  sku: string; barcode: string; brand: string; mrp: number; unit: string; pack_size: string; bay: number | null; shelf: number | null; side: "left" | "right" | null };
+/** Product details and edits (docs/lld/owner-product-edit.md). */
+export type ProductFull = { product_id: string; sku: string; barcode: string; name: string; brand: string; category: string; subcategory: string; description: string;
+  price: number; mrp: number; unit: string; image_url: string; tags: string[]; status: "active" | "inactive" | "discontinued" | "seasonal"; pack_size: string;
+  cost_price: number | null; gst_rate: number | null; shelf_life_days: number | null; origin: string; available: number;
+  location: { aisle: string; bay: number; shelf: number; side: "left" | "right" } | null };
+export type StockDoc = { on_hand?: number; reserved?: number; reorder_point?: number; reorder_qty?: number; lead_time_days?: number; supplier_id?: string };
+export type ProductDetail = { product: ProductFull; stock: StockDoc };
+export type ProductEdit = Partial<{ name: string; brand: string; category: string; subcategory: string; description: string; barcode: string; price: number; mrp: number;
+  cost_price: number; gst_rate: number; unit: string; pack_size: string; shelf_life_days: number; status: ProductFull["status"]; origin: string; tags: string[]; image_url: string;
+  on_hand: number; reorder_point: number; reorder_qty: number; lead_time_days: number; supplier_id: string; aisle: string; bay: number; shelf: number; side: "left" | "right" }>;
 export type Draft = { po_id: string; supplier_id: string; supplier_name: string; summary: string; status: string; email_text: string; reason: string;
   lines: { product_id: string; name: string; qty: number; available: number; reorder_point: number; avg_daily: number | null; reason: string }[]; created_at: string };
 export type Signals = { days: number; not_carried: { query: string; count: number; source: string }[]; out_of_stock: { product_id: string; name: string; count: number; lost_sales: number }[] };
@@ -63,6 +74,8 @@ export const owner = {
   patchPayments: (s: string, body: { key_id?: string; key_secret?: string }) => call<{ provider: string; key_id: string }>(`/owner/${s}/payments`, { method: "PATCH", body: JSON.stringify(body) }),
   overview: (s: string) => call<Overview>(`/owner/${s}/overview`),
   inventory: (s: string) => call<InvRow[]>(`/owner/${s}/inventory`),
+  product: (s: string, pid: string) => call<ProductDetail>(`/owner/${s}/products/${pid}`),
+  patchProduct: (s: string, pid: string, body: ProductEdit) => call<ProductDetail>(`/owner/${s}/products/${pid}`, { method: "PATCH", body: JSON.stringify(body) }),
   patchInventory: (s: string, pid: string, body: { reorder_point?: number; reorder_qty?: number }) => call(`/owner/${s}/inventory/${pid}`, { method: "PATCH", body: JSON.stringify(body) }),
   count: (s: string, product_id: string, counted: number) => call(`/owner/${s}/counts`, { method: "POST", body: JSON.stringify({ product_id, counted }) }),
   reorders: (s: string) => call<Draft[]>(`/owner/${s}/reorders`),

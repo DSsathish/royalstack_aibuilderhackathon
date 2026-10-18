@@ -68,3 +68,30 @@ def test_add_by_scan_places_cold_products_in_the_chiller(shop):
     assert milk["location"]["aisle"] == "Chiller" and milk["storage"] == "chilled"
     rice = client.post(f"/owner/{shop}/products", json={"barcode": "8901234567892", "name": "Ponni Rice 5kg", "price": 400, "on_hand": 5}, headers=h).json()
     assert rice.get("location") is None and rice["storage"] == "ambient"
+
+
+def test_owner_edits_every_record_from_the_drawer(shop):
+    from app.domain.models import Aisle
+    db.store_ref(shop).update({"floor_map": [Aisle(aisle="A1", x=80, y=80, w=90, h=420).model_dump(), Aisle(aisle="A2", x=230, y=80, w=90, h=420).model_dump()]})
+    db.users().document("staff-7").set({"stores": [shop], "roles": {shop: "staff"}})
+    created = client.post(f"/owner/{shop}/products", json={"barcode": "8901234567890", "name": "Edit Me", "price": 50, "on_hand": 5}, headers=H)
+    assert created.status_code == 200, created.text
+    pid = created.json()["product_id"]
+    body = {"name": "Edited Name", "brand": "Brand X", "price": 60, "mrp": 70, "barcode": "8901234567891", "on_hand": 12, "reorder_point": 4,
+            "aisle": "A2", "bay": 3, "side": "right", "status": "seasonal", "tags": ["one", " two ", ""], "pack_size": "1 kg", "gst_rate": 5}
+    res = client.patch(f"/owner/{shop}/products/{pid}", json=body, headers=H)
+    assert res.status_code == 200, res.text
+    detail = client.get(f"/owner/{shop}/products/{pid}", headers={"X-Test-Uid": "staff-7"}).json()      # staff may read
+    p, stock = detail["product"], detail["stock"]
+    assert p["name"] == "Edited Name" and p["brand"] == "Brand X" and p["price"] == 60 and p["mrp"] == 70 and p["barcode"] == "8901234567891"
+    assert p["status"] == "seasonal" and p["tags"] == ["one", "two"] and p["pack_size"] == "1 kg" and p["gst_rate"] == 5
+    assert p["location"]["aisle"] == "A2" and p["location"]["bay"] == 3 and p["location"]["side"] == "right" and p["location"]["shelf"] == 1
+    assert stock["on_hand"] == 12 and stock["reorder_point"] == 4
+    row = next(r for r in client.get(f"/owner/{shop}/inventory", headers=H).json() if r["product_id"] == pid)
+    assert row["barcode"] == "8901234567891" and row["price"] == 60 and row["bay"] == 3 and row["pack_size"] == "1 kg" and row["on_hand"] == 12
+    assert client.patch(f"/owner/{shop}/products/{pid}", json={"price": 61}, headers={"X-Test-Uid": "staff-7"}).status_code == 403
+    assert client.patch(f"/owner/{shop}/products/{pid}", json={"barcode": "12"}, headers=H).status_code == 422
+    assert client.patch(f"/owner/{shop}/products/{pid}", json={"mrp": 10}, headers=H).status_code == 422
+    assert client.patch(f"/owner/{shop}/products/{pid}", json={"aisle": "Z9"}, headers=H).status_code == 422
+    assert client.patch(f"/owner/{shop}/products/{pid}", json={}, headers=H).status_code == 422
+    assert any(a.to_dict()["action"] == "product_edited" for a in db.audit(shop).stream())

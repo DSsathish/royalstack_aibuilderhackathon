@@ -3,12 +3,12 @@
 Record on a laptop with the phone screen mirrored (QuickTime or scrcpy) so both views are visible. Speak the lines; the clicks are listed under each beat. Rehearse once with a timer. Total target: 2 minutes 50 seconds.
 
 ## Before recording
-- Demo store `demo-grocery` seeded and forecast job run (`infra/seed/seed.py --embed`, `python -m app.jobs.forecast --store demo-grocery`).
+- Demo store `dailygoods` seeded and forecast job run (`infra/seed/seed.py --embed`, `python -m app.jobs.forecast --store dailygoods`).
 - Owner signed in to https://royastacxk-aibuildercup.web.app/owner/ in the laptop browser.
 - One offer created in the Offers tab ("Dairy week, 10% off Dairy, everyone") and one targeted at signed-in shoppers ("Members, ₹20 off above ₹300").
 - Shopper phone: Chrome, no existing session (open the site once and clear site data). Test number `+91 99999 00001`, code `123456` (Firebase test number, no SMS). Give that shopper 120 points beforehand from the Customers tab ("Adjust", +120, "demo") after one sign-in.
 - Entrance QR printed or shown from Connectors → "Show entrance and aisle links"; aisle A3 QR ready.
-- A terminal with `python infra/scripts/sync_example.py --store demo-grocery --secret <sync secret> --sku <a visible product's sku> --on-hand 2` typed and ready (secret from Connectors → Live sync → Generate secret).
+- A terminal with `python infra/scripts/sync_example.py --store dailygoods --secret <sync secret> --sku <a visible product's sku> --on-hand 2` typed and ready (secret from Connectors → Live sync → Generate secret).
 - Exit kiosk open on a tablet or second browser window: https://royastacxk-aibuildercup.web.app/kiosk/ (PIN 1234).
 
 ## 0:00 Hook (15 s)

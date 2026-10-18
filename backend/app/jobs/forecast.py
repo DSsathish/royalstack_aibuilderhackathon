@@ -1,6 +1,6 @@
 """Daily job: copy paid orders to BigQuery, train ARIMA_PLUS, write 14-day forecasts to Firestore.
 
-    python -m app.jobs.forecast --store demo-grocery
+    python -m app.jobs.forecast --store <store-id>
 """
 
 import argparse
@@ -101,5 +101,5 @@ def run(store_id: str) -> dict:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--store", default="demo-grocery")
+    ap.add_argument("--store", required=True)
     print(json.dumps(run(ap.parse_args().store)))
