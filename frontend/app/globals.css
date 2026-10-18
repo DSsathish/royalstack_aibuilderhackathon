@@ -176,3 +176,7 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em
 @keyframes voice-wait { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.6; } }
 .voice-text-toggle { display: inline-block; margin-top: 4px; font-size: 12px; text-decoration: underline; opacity: 0.8; }
 @media (prefers-reduced-motion: reduce) { .voice-wave-pending span { animation: none; } }
+
+/* Dialogs: a dimmed page and one card; the card scrolls, the page does not. */
+.modal-backdrop { position: fixed; inset: 0; z-index: 90; background: rgba(21, 48, 42, 0.45); display: grid; place-items: center; padding: 16px; }
+.modal { width: min(640px, 100%); max-height: calc(100dvh - 32px); overflow: auto; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: 0 18px 48px rgba(21, 48, 42, 0.25); }

@@ -65,6 +65,7 @@ class RowError(BaseModel):
 class ImportResult(BaseModel):
     created: int = 0
     updated: int = 0
+    skipped: int = 0              # rows left alone because the product already existed and updates were not allowed
     errors: list[RowError] = []
 
 
@@ -168,13 +169,18 @@ def _row(line: int, rec: dict, mapping: dict[str, str]) -> Row:
     return Row(**kwargs)
 
 
-def upsert(store_id: str, rows: list[Row], *, high_value_threshold: float) -> ImportResult:
+def upsert(store_id: str, rows: list[Row], *, high_value_threshold: float, skip_existing: bool = False) -> ImportResult:
+    """Writes products, stock and locations. With skip_existing, a row whose SKU is already in the catalog is counted
+    as skipped instead of overwriting it."""
     result = ImportResult()
     existing = {d.id for d in db.products(store_id).select([]).stream()}
     batch = db.client().batch()
     pending = 0
 
     for r in rows:
+        if skip_existing and f"{store_id}-{slug(r.sku)}" in existing:
+            result.skipped += 1
+            continue
         p = Product.from_row(
             store_id=store_id, sku=r.sku, name=r.name, price=r.price, threshold=high_value_threshold,
             barcode=r.barcode, brand=r.brand, category=r.category, subcategory=r.subcategory,

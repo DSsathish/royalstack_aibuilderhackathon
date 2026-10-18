@@ -41,7 +41,20 @@ export const owner = {
   setLocation: (s: string, pid: string, body: { aisle: string; bay?: number; shelf?: number; side?: "left" | "right" }) =>
     call<{ aisle: string; bay: number }>(`/owner/${s}/products/${pid}/location`, { method: "PATCH", body: JSON.stringify(body) }),
   lookup: (s: string, code: string) => call<{ found: boolean; name?: string; brand?: string; category?: string; image_url?: string }>(`/owner/${s}/lookup/${code}`),
-  createProduct: (s: string, body: { barcode: string; sku?: string; name: string; brand?: string; category?: string; price: number; mrp?: number; on_hand: number; aisle?: string }) =>
+  inventorySchema: (s: string) => call<{ fields: InventoryField[]; sheet_template_url: string }>(`/owner/${s}/inventory/schema`),
+  downloadTemplate: async (s: string) => {
+    const token = await idToken();
+    const res = await fetch(`${API}/owner/${s}/inventory/template.xlsx`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, res.statusText);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a"); a.href = url; a.download = "inventory-template.xlsx"; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
+  uploadInventory: (s: string, file: File, opts: { apply: boolean; allow_updates: boolean }) => {
+    const form = new FormData(); form.set("file", file); form.set("apply", String(opts.apply)); form.set("allow_updates", String(opts.allow_updates));
+    return multipart<UploadCheck>(`/owner/${s}/inventory/upload`, form);
+  },
+  createProduct: (s: string, body: { barcode?: string; sku?: string; name: string; brand?: string; category?: string; subcategory?: string; price: number; mrp?: number; unit?: string; pack_size?: string; on_hand: number; reorder_point?: number; reorder_qty?: number; aisle?: string }) =>
     call<{ product_id: string; name: string }>(`/owner/${s}/products`, { method: "POST", body: JSON.stringify(body) }),
   team: (s: string) => call<{ owner_emails: string[]; staff_emails: string[] }>(`/owner/${s}/team`),
   verifications: (s: string, days = 7) => call<{ summary: Loss["summary"]; items: Loss["recent"] }>(`/owner/${s}/verifications?days=${days}`),
@@ -124,3 +137,12 @@ async function multipart<T>(path: string, form: FormData): Promise<T> {
   if (!res.ok) { let d = res.statusText; try { d = (await res.json()).detail ?? d; } catch {} throw new ApiError(res.status, String(d)); }
   return res.json() as Promise<T>;
 }
+
+/** Inventory intake (docs/lld/inventory-intake.md): one field table for the template, the upload check and the form. */
+export type InventoryField = { name: string; required: boolean; kind: "text" | "number" | "integer"; description: string; example: string; choices: string[] };
+export type UploadCheck = {
+  ok: boolean; columns: string[]; missing_required: string[]; unknown: string[]; row_count: number;
+  errors: { line: number; message: string }[]; error_count: number; duplicates: { line: number; sku: string; first_line: number }[];
+  preview: { adds: number; updates: number; restocks: number; unchanged: number; errors: number; changes: { kind: string; sku: string; note: string }[] } | null;
+  result: { created: number; updated: number; skipped: number; errors: number; duplicates: number; file: string } | null;
+};

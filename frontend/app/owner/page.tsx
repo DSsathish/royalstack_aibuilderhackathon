@@ -5,11 +5,12 @@ import Link from "next/link";
 import type { User } from "firebase/auth";
 import { API, money, type Aisle } from "@/lib/api";
 import { createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
-import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner, ConnectorDoc, Inspection, SourceInput } from "@/lib/owner";
+import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner, ConnectorDoc, Inspection, SourceInput, InventoryField, UploadCheck } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
 import FloorMapEditor from "@/components/FloorMapEditor";
 import FieldError, { Req } from "@/components/FieldError";
+import Modal from "@/components/Modal";
 import { toast } from "@/lib/toast";
 import { Errors, guard, rules } from "@/lib/validate";
 import { useApp } from "@/lib/store";
@@ -484,6 +485,136 @@ function AddByScan({ store, onSaved }: { store: string; onSaved: () => void }) {
   );
 }
 
+/** The three intake routes share one field table from the API (docs/lld/inventory-intake.md). */
+function useInventorySchema(store: string) {
+  const [schema, setSchema] = useState<{ fields: InventoryField[]; sheet_template_url: string } | null>(null);
+  useEffect(() => { owner.inventorySchema(store).then(setSchema).catch(() => setSchema({ fields: [], sheet_template_url: "" })); }, [store]);
+  return schema;
+}
+
+function TemplateButtons({ store, schema }: { store: string; schema: { sheet_template_url: string } | null }) {
+  const [busy, setBusy] = useState(false);
+  const sheet = schema?.sheet_template_url;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={async () => { setBusy(true); try { await owner.downloadTemplate(store); toast.ok("Template downloaded. Keep the column names as they are."); } catch (e) { toast.error(friendlyApiError(e)); } setBusy(false); }} disabled={busy} className="btn btn-ghost py-1.5 text-sm">{busy ? "Preparing" : "Download template (.xlsx)"}</button>
+      {sheet && <a href={sheet} target="_blank" rel="noreferrer" className="btn btn-ghost py-1.5 text-sm">Use Google Sheets template</a>}
+    </div>
+  );
+}
+
+function UploadInventory({ store, onImported }: { store: string; onImported: () => void }) {
+  const schema = useInventorySchema(store);
+  const [file, setFile] = useState<File | null>(null);
+  const [check, setCheck] = useState<UploadCheck | null>(null);
+  const [allowUpdates, setAllowUpdates] = useState(false);
+  const [busy, setBusy] = useState<"" | "check" | "import">("");
+  const [fe, setFe] = useState<Errors>({});
+  const required = schema?.fields.filter((f) => f.required).map((f) => f.name) ?? [];
+  async function run(apply: boolean) {
+    if (!guard({ file: { label: "File", value: file ? file.name : "", missing: "Choose a .xlsx or .csv file first." } }, setFe)) return;
+    setBusy(apply ? "import" : "check");
+    try {
+      const r = await owner.uploadInventory(store, file!, { apply, allow_updates: allowUpdates });
+      setCheck(r);
+      if (!r.ok) toast.error(`Missing required columns: ${r.missing_required.join(", ")}`);
+      else if (apply && r.result) { toast.ok(`Imported: ${r.result.created} added, ${r.result.updated} updated, ${r.result.skipped} skipped.`); onImported(); }
+    } catch (e) { toast.error(friendlyApiError(e)); }
+    setBusy("");
+  }
+  const pv = check?.preview;
+  return (
+    <section className="section space-y-3">
+      <div>
+        <h2 className="text-base font-semibold">Upload inventory</h2>
+        <p className="text-xs text-muted">Fill the template and upload it as .xlsx or .csv. Required columns: {required.join(", ") || "sku, name, price, on_hand"}. The file is checked before anything is written; existing products are left alone unless you allow updates.</p>
+      </div>
+      <TemplateButtons store={store} schema={schema} />
+      <div className="flex flex-wrap items-center gap-2">
+        <div><input type="file" accept=".xlsx,.csv" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setCheck(null); setFe({}); }} aria-invalid={!!fe.file} className="text-sm" /><FieldError msg={fe.file} /></div>
+        <button type="button" onClick={() => run(false)} disabled={busy !== ""} className="btn btn-primary py-1.5 text-sm">{busy === "check" ? "Checking" : "Check file"}</button>
+      </div>
+      {check && (
+        <div className="card p-3 text-sm space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <span className="chip chip-muted">{check.row_count} rows</span>
+            {check.missing_required.length > 0 && <span className="chip chip-bad">Missing: {check.missing_required.join(", ")}</span>}
+            {check.unknown.length > 0 && <span className="chip chip-warn">Ignored columns: {check.unknown.join(", ")}</span>}
+            {check.error_count > 0 && <span className="chip chip-bad">{check.error_count} rows with errors</span>}
+            {check.duplicates.length > 0 && <span className="chip chip-warn">{check.duplicates.length} duplicate SKUs</span>}
+          </div>
+          {pv && <div className="flex flex-wrap gap-2"><span className="chip chip-good">{pv.adds} to add</span><span className="chip chip-accent">{pv.updates} existing (updated only if allowed)</span><span className="chip chip-muted">{pv.restocks} restocks</span><span className="chip chip-muted">{pv.unchanged} unchanged</span></div>}
+          {check.errors.slice(0, 10).map((e) => <div key={e.line} className="text-bad">Row {e.line}: {e.message}</div>)}
+          {check.error_count > 10 && <div className="text-muted">and {check.error_count - 10} more rows with errors</div>}
+          {check.duplicates.slice(0, 5).map((d) => <div key={d.line} className="text-warn">Row {d.line}: SKU {d.sku} repeats row {d.first_line}; only the first is used</div>)}
+          {check.ok && !check.result && (
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={allowUpdates} onChange={(e) => setAllowUpdates(e.target.checked)} /> Allow updating products that already exist</label>
+              <button type="button" onClick={() => run(true)} disabled={busy !== ""} className="btn btn-ink py-1.5 text-sm">{busy === "import" ? "Importing" : "Import"}</button>
+            </div>
+          )}
+          {check.result && <div className="text-good">Done: {check.result.created} added, {check.result.updated} updated, {check.result.skipped} skipped, {check.result.errors} rows with errors.</div>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const MANUAL_FIELDS = ["sku", "barcode", "name", "brand", "category", "subcategory", "price", "mrp", "unit", "pack_size", "on_hand", "reorder_point", "reorder_qty", "aisle"];
+const fieldLabel = (name: string) => ({ sku: "SKU", mrp: "MRP" } as Record<string, string>)[name] ?? name.replace("_", " ");
+
+function AddInventoryModal({ store, onClose, onSaved }: { store: string; onClose: () => void; onSaved: () => void }) {
+  const schema = useInventorySchema(store);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [fe, setFe] = useState<Errors>({});
+  const [busy, setBusy] = useState(false);
+  const fields = (schema?.fields ?? []).filter((f) => MANUAL_FIELDS.includes(f.name)).sort((a, b) => MANUAL_FIELDS.indexOf(a.name) - MANUAL_FIELDS.indexOf(b.name));
+  function ruleFor(f: InventoryField) {
+    if (f.name === "price") return rules.number("Selling price", { min: 0.01 });
+    if (f.name === "mrp") return (v: string) => rules.number("MRP", { min: Number(form.price) || 0.01 })(v);
+    if (f.name === "barcode") return (v: string) => (/^[0-9]{8,14}$/.test(v.trim()) ? "" : "A barcode has 8 to 14 digits.");
+    if (f.kind === "integer") return rules.number(fieldLabel(f.name), { integer: true });
+    if (f.kind === "number") return rules.number(fieldLabel(f.name), { min: 0 });
+    return undefined;
+  }
+  async function save() {
+    const checks: Parameters<typeof guard>[0] = {};
+    for (const f of fields) checks[f.name] = { label: fieldLabel(f.name), value: form[f.name] ?? "", optional: !f.required, rule: ruleFor(f) };
+    if (!form.sku?.trim() && !form.barcode?.trim()) checks.sku = { label: "SKU", value: "", missing: "Enter a SKU or a barcode." };
+    if (!guard(checks, setFe)) return;
+    setBusy(true);
+    try {
+      await owner.createProduct(store, {
+        sku: form.sku?.trim() || undefined, barcode: form.barcode?.trim() || "", name: form.name.trim(), brand: form.brand?.trim(), category: form.category?.trim(), subcategory: form.subcategory?.trim(),
+        price: Number(form.price), mrp: form.mrp ? Number(form.mrp) : undefined, unit: form.unit?.trim() || undefined, pack_size: form.pack_size?.trim(),
+        on_hand: Number(form.on_hand), reorder_point: form.reorder_point ? Number(form.reorder_point) : undefined, reorder_qty: form.reorder_qty ? Number(form.reorder_qty) : undefined, aisle: form.aisle?.trim() || undefined,
+      });
+      toast.ok(`Saved ${form.name.trim()}.`); onSaved();
+    } catch (e) { toast.error(friendlyApiError(e)); }
+    setBusy(false);
+  }
+  return (
+    <Modal title="Add inventory" onClose={onClose}>
+      {!schema ? <Skeleton /> : (
+        <div className="space-y-3">
+          <p className="text-xs text-muted">One product at a time. A SKU or a barcode is required; everything else can be filled in later from the file upload.</p>
+          <div className="grid sm:grid-cols-2 gap-2 text-sm">
+            {fields.map((f) => (
+              <label key={f.name} className="text-xs capitalize">{fieldLabel(f.name)}{f.required ? <Req /> : <span className="text-muted normal-case"> (optional)</span>}
+                {f.choices.length > 0
+                  ? <select value={form[f.name] ?? ""} onChange={(e) => { setForm({ ...form, [f.name]: e.target.value }); setFe({ ...fe, [f.name]: "" }); }} className="field mt-1 py-1.5 text-sm"><option value="">choose</option>{f.choices.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+                  : <input value={form[f.name] ?? ""} onChange={(e) => { setForm({ ...form, [f.name]: e.target.value }); setFe({ ...fe, [f.name]: "" }); }} placeholder={f.example} inputMode={f.kind === "text" ? undefined : "decimal"} aria-invalid={!!fe[f.name]} title={f.description} className="field mt-1 py-1.5 text-sm" />}
+                <FieldError msg={fe[f.name]} />
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2 justify-end"><button type="button" onClick={onClose} className="btn btn-ghost py-2">Cancel</button><button type="button" onClick={save} disabled={busy} className="btn btn-primary py-2">{busy ? "Saving" : "Save product"}</button></div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function InventoryTab({ store }: { store: string }) {
   const [rows, setRows] = useState<InvRow[]>([]);
   const [filter, setFilter] = useState<"all" | InvRow["status"]>("all");
@@ -493,6 +624,7 @@ function InventoryTab({ store }: { store: string }) {
   const [moving, setMoving] = useState<{ pid: string; aisle: string; bay: string; side: "left" | "right" } | null>(null);
   const load = () => owner.inventory(store).then(setRows);
   useEffect(() => { load(); owner.store(store).then((d) => setAisleNames(d.floor_map.map((a) => a.aisle))).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const [intake, setIntake] = useState<"upload" | "add" | null>(null);
   const [moveErr, setMoveErr] = useState<Errors>({});
   async function move() {
     if (!moving) return;
@@ -525,8 +657,12 @@ function InventoryTab({ store }: { store: string }) {
       <div className="flex flex-wrap gap-2 items-center">
         {FILTERS.map(([f, l]) => <button key={f} onClick={() => setFilter(f)} className={`chip ${filter === f ? "bg-ink text-bg" : "chip-muted"}`}>{l}{f !== "all" && counts[f] ? ` ${counts[f]}` : f === "all" ? ` ${rows.length}` : ""}</button>)}
         <input id="inv-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products" className="field ml-auto w-56" />
-        <button onClick={() => setAdding(!adding)} className="btn btn-primary py-1.5 text-sm">{adding ? "Close" : "Add by scan"}</button>
+        <button onClick={() => setIntake(intake === "upload" ? null : "upload")} className="btn btn-ghost py-1.5 text-sm">{intake === "upload" ? "Close upload" : "Upload inventory"}</button>
+        <button onClick={() => setIntake("add")} className="btn btn-primary py-1.5 text-sm">Add inventory</button>
+        <button onClick={() => setAdding(!adding)} className="btn btn-ghost py-1.5 text-sm">{adding ? "Close scan" : "Add by scan"}</button>
       </div>
+      {intake === "upload" && <UploadInventory store={store} onImported={load} />}
+      {intake === "add" && <AddInventoryModal store={store} onClose={() => setIntake(null)} onSaved={() => { setIntake(null); load(); }} />}
       {adding && <AddByScan store={store} onSaved={() => { load(); }} />}
       <div className="table-wrap">
         <table className="table">
