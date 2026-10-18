@@ -167,3 +167,13 @@ def test_owner_reply_follows_the_language_switch(shop):
     s.language = "ta"
     _, reply, _ = run(s, "How many products are low on stock?")
     assert re.search(r"[\u0B80-\u0BFF]", reply), reply                          # Tamil picked in the app wins
+
+
+def test_multi_intent_turn_crosses_two_specialists(shop):
+    """Where is it, and add it: navigation then cart, in one shopper turn, through the team."""
+    s = sessions.create(shop, "online")
+    tools, reply, events = run(s, "Do you have toned milk? If yes add 2 to my cart.")
+    assert "search_products" in tools and "add_to_cart" in tools, (tools, reply)
+    routes = [e.get("agent") for e in events if e["type"] == "status" and e["tool"] == "transfer_to_agent"]
+    assert routes and routes[0] in ("catalog_agent", "cart_agent"), routes
+    assert "cart_updated" in [e["name"] for e in events if e["type"] == "action"]

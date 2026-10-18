@@ -1,7 +1,7 @@
 /** Server-Sent Events parsing. Pure function plus an async iterator over a fetch body. */
 
 export type UiEvent =
-  | { type: "status"; tool: string }
+  | { type: "status"; tool: string; agent?: string; label?: string }
   | { type: "action"; name: string; data: Record<string, unknown> }
   | { type: "token"; text: string }
   | { type: "done"; text: string }

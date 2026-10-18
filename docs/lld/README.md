@@ -34,3 +34,4 @@ Rules we follow in code:
 | Product classification (storage and use), floor blocks and floors, scan-to-cart, voice language | [classification-floors-scan.md](classification-floors-scan.md) | done |
 - [product-facts.md](product-facts.md): grounded product facts tool with guardrails (18 Oct)
 - [connector-agent.md](connector-agent.md): bring any external data in through one agent, preview then confirm (18 Oct)
+- [multi-agent.md](multi-agent.md): coordinator and specialist teams on ADK, parallel owner briefing (18 Oct)

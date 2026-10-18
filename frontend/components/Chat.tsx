@@ -64,7 +64,7 @@ export default function Chat() {
     try {
       for await (const e of stream) {
         if (e.type === "transcript" && userMsgId) patch(userMsgId, { text: e.text });
-        else if (e.type === "status") patch(id, { status: STATUS[e.tool] ?? "Working" });
+        else if (e.type === "status") patch(id, { status: e.label ?? STATUS[e.tool] ?? "Working" });   // a hand-over between teammates carries its own label
         else if (e.type === "token") { buffer += e.text; patch(id, { text: buffer, status: undefined }); }
         else if (e.type === "done") { buffer = e.text || buffer; patch(id, { text: buffer, status: undefined }); }
         else if (e.type === "action") handleAction(e.name, e.data, id);

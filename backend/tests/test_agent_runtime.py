@@ -7,13 +7,14 @@ from app.agent import agent, prompts
 
 
 def test_build_uses_mode_tools_and_prompt():
+    from app.agent import team
     a = agent.build("instore")
-    names = {t.__name__ for t in a.tools}
+    names = set().union(*({t.__name__ for t in (x.tools or [])} for x in team.agents_of(a).values()))
     assert "navigate_to" in names and "get_low_stock" not in names
     instore, online = agent.instruction_for("instore", {}), agent.instruction_for("online", {})
     assert "aisle" in instore.lower() and "self-checkout" in instore.lower()
     assert "self-checkout" not in online.lower() and "delivery and checkout" in online.lower()
-    assert callable(a.instruction)   # provider: history is read from session state each turn
+    assert callable(a.instruction) and all(callable(x.instruction) for x in team.agents_of(a).values() if hasattr(x, "instruction"))   # providers: history is read from session state each turn
 
 
 def test_prompt_core_rules_present():

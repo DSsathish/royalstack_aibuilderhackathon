@@ -12,14 +12,15 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from app.agent import prompts
+from app.agent import prompts, team
 from app.agent.tools import TOOLS_BY_MODE
 from app.services import conversation, gemini
 from app.config import settings
 from app.domain.models import Mode, Session
 
 APP_NAME = "retail-agent"
-MAX_LLM_CALLS = 8
+MAX_LLM_CALLS = 12          # one call routes the turn to a specialist, then its tool loop
+TRANSFER = "transfer_to_agent"
 
 ACTION_FOR_TOOL = {
     "search_products": "show_products",
@@ -49,12 +50,16 @@ _sessions = InMemorySessionService()
 
 def instruction_for(mode: Mode, state: dict) -> str:
     """Mode prompt, the store's identity, and the conversation so far, read from the session state each turn."""
-    history = state.get("history") or ""
-    return (prompts.for_mode(mode) + prompts.store_block(state) + prompts.customer_block(state)
-            + (f"\n\n{history}\n" if history else "") + prompts.language_block(state.get("language"), mode))   # last: it overrides the history
+    return prompts.shared_block(mode, state) + prompts.language_block(state.get("language"), mode)   # last: it overrides the history
 
 
 def build(mode: Mode) -> LlmAgent:
+    """The team for a mode: a coordinator that routes to specialists (docs/lld/multi-agent.md)."""
+    return team.build_team(mode)
+
+
+def single(mode: Mode) -> LlmAgent:
+    """The previous one-agent-per-mode design, kept for comparison."""
     return LlmAgent(
         name=f"retail_{mode}",
         model=Gemini(model=settings.gemini_flash_model, retry_options=gemini.RETRY,
@@ -71,19 +76,28 @@ def runner(mode: Mode) -> Runner:
 
 
 def translate(event: Event) -> Iterator[dict]:
-    """Map one ADK event to zero or more UI events. Only the agent's own events count."""
+    """Map one ADK event to zero or more UI events. Only the agents' own events count; a hand-over between teammates
+    shows as a status with the specialist's label, and a scout's working notes never reach the screen."""
     if event.author == "user" or not event.content or not event.content.parts:
         return
     for part in event.content.parts:
         if part.function_call:
             if event.partial:
                 continue  # streaming repeats the call in the final event; report it once
-            yield {"type": "status", "tool": part.function_call.name}
+            if part.function_call.name == TRANSFER:
+                target = str((part.function_call.args or {}).get("agent_name", ""))
+                yield {"type": "status", "tool": TRANSFER, "agent": target, "label": team.LABELS.get(target, "Working")}
+            else:
+                yield {"type": "status", "tool": part.function_call.name}
         elif part.function_response:
             name = part.function_response.name
+            if name == TRANSFER:
+                continue
             yield {"type": "action", "name": ACTION_FOR_TOOL.get(name, name),
                    "data": dict(part.function_response.response or {})}
         elif part.text:
+            if event.author in team.SCOUTS:
+                continue
             yield {"type": "token" if event.partial else "done", "text": part.text}
 
 
