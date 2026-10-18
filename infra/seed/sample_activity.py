@@ -82,7 +82,7 @@ def run(store_id: str) -> dict:
             cust = todays.pop() if todays and rnd.random() < 0.9 else None
             if cust:
                 visits_left[cust["uid"]].remove(day)
-            lines = rnd.choices(pop, weights=weights, k=rnd.choice([1, 2, 2, 3, 3, 4, 5, 6, 8]))
+            lines = rnd.choices(pop, weights=weights, k=rnd.choice([5, 6, 8, 10]) if cust and cust["kind"] == "vip" else rnd.choice([1, 2, 2, 3, 3, 4, 5, 6, 8]))
             items, seen = [], set()
             for p, _ in lines:
                 if p["product_id"] in seen:
@@ -133,14 +133,9 @@ def run(store_id: str) -> dict:
     # stock: some lines sold out, some low, so the inventory and reorder tabs have work to show
     out = [p for p, _ in pop[:40:2]]
     low = [p for p, _ in pop[1:70:2]]
-    for p in out:
-        put(db.inventory(store_id).document(p["product_id"]), {"on_hand": 0})
-    for p in low:
-        put(db.inventory(store_id).document(p["product_id"]), {"on_hand": rnd.randint(1, 4)})
     batch.commit(); batch, n = db.client().batch(), 0
-    # (the on_hand writes above must merge: redo them as updates)
     for p in out:
-        db.inventory(store_id).document(p["product_id"]).update({"on_hand": 0})
+        db.inventory(store_id).document(p["product_id"]).update({"on_hand": 0})            # update, so the rest of the record stays
     for p in low:
         db.inventory(store_id).document(p["product_id"]).update({"on_hand": rnd.randint(1, 4)})
 
