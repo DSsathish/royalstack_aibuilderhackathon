@@ -243,3 +243,6 @@ infra/seed/sales.csv
 
 # frontend/lib is application code, not a Python build dir
 !frontend/lib/
+
+# demo video renders (uploaded to Drive, not versioned)
+*.mp4
