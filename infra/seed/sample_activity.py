@@ -20,6 +20,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "backend"))
 
 from app.domain.models import CartItem, Customer, DemandSignal, Layers, Offer, Order, Verification, VisionResult, now  # noqa: E402
+from google.cloud.firestore_v1 import FieldFilter  # noqa: E402
+
 from app.services import db, segments  # noqa: E402
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -41,10 +43,13 @@ def _ts(day_offset: int, hour: float) -> datetime:
 
 
 def _popular(products: list[dict], rnd: random.Random) -> list[tuple[dict, float]]:
-    """Three hundred products with a long-tail weight; everyday categories sell more."""
+    """Every product with a long-tail weight: three hundred everyday lines carry most sales, the rest sell now and
+    then, and about a fifth of the catalog does not sell at all in the period."""
     boost = {"Grocery and Food Products": 3.0, "Dairy, Bread and Eggs": 3.0, "Fruits and Vegetables": 2.5, "Snacks and Branded Foods": 2.0, "Beverages": 1.8}
-    pool = sorted(products, key=lambda p: rnd.random() / boost.get(p.get("category", ""), 1.0))[:300]
-    return [(p, 1.0 / (i + 3)) for i, p in enumerate(pool)]
+    pool = sorted(products, key=lambda p: rnd.random() / boost.get(p.get("category", ""), 1.0))
+    head = [(p, 1.0 / (i + 3)) for i, p in enumerate(pool[:300])]
+    tail = [(p, 0.0012) for p in pool[300:int(len(pool) * 0.8)]]
+    return head + tail
 
 
 def run(store_id: str) -> dict:
@@ -82,7 +87,7 @@ def run(store_id: str) -> dict:
             cust = todays.pop() if todays and rnd.random() < 0.9 else None
             if cust:
                 visits_left[cust["uid"]].remove(day)
-            lines = rnd.choices(pop, weights=weights, k=rnd.choice([5, 6, 8, 10]) if cust and cust["kind"] == "vip" else rnd.choice([1, 2, 2, 3, 3, 4, 5, 6, 8]))
+            lines = rnd.choices(pop, weights=weights, k=rnd.choice([6, 8, 10, 12]) if cust and cust["kind"] == "vip" else rnd.choice([2, 3, 3, 4, 4, 5, 6, 7, 9]))
             items, seen = [], set()
             for p, _ in lines:
                 if p["product_id"] in seen:
@@ -111,6 +116,11 @@ def run(store_id: str) -> dict:
             batch.commit(); batch, n = db.client().batch(), 0
     for o in orders:
         put(db.orders().document(o.order_id), o.model_dump())
+    produced = {o.order_id for o in orders}
+    stale = [d.reference for d in db.orders().where(filter=FieldFilter("store_id", "==", store_id)).select([]).stream()
+             if d.id.startswith("sample-") and d.id not in produced]           # an earlier run's orders that this run did not rewrite
+    for ref in stale:
+        ref.delete()
 
     # customers: visits, spend, usual items and the segment the rules give them
     seg_counts = Counter()
@@ -131,7 +141,7 @@ def run(store_id: str) -> dict:
         put(db.customers(store_id).document(cust.uid), cust.model_dump())
 
     # stock: some lines sold out, some low, so the inventory and reorder tabs have work to show
-    out = [p for p, _ in pop[:40:2]]
+    out = [p for p, _ in pop[:40:2]]                       # everyday lines, so the signals and reorders are about things that sell
     low = [p for p, _ in pop[1:70:2]]
     batch.commit(); batch, n = db.client().batch(), 0
     for p in out:
@@ -181,7 +191,7 @@ def run(store_id: str) -> dict:
         put(db.offers(store_id).document(o.offer_id), o.model_dump())
     if n:
         batch.commit()
-    return {"orders": len(orders), "today": sum(1 for o in orders if (now() - o.created_at).total_seconds() < 86400 * 1), "customers": dict(seg_counts),
+    return {"orders": len(orders), "stale_removed": len(stale), "today": sum(1 for o in orders if (now() - o.created_at).total_seconds() < 86400 * 1), "customers": dict(seg_counts),
             "out_of_stock": len(out), "low": len(low), "signals": len(NOT_CARRIED) + min(14, len(out)), "counts": 12, "exit_checks": min(60, len(store_orders)), "flags": flags, "offers": len(offers)}
 
 

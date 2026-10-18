@@ -29,7 +29,6 @@ SUPPLIERS = [
     ("sup-metro-cash", "Metro Cash & Carry", "orders@metro.example", 3),
     ("sup-aavin", "Aavin Dairy Depot", "depot@aavin.example", 1),
     ("sup-hul", "HUL Distributor", "orders@hul.example", 4),
-    ("sup-apollo", "Apollo Pharma Wholesale", "b2b@apollo.example", 2),
     ("sup-koyambedu", "Koyambedu Market Agent", "agent@koyambedu.example", 1),
 ]
 

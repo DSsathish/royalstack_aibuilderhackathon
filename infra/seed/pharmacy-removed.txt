@@ -1,0 +1,38 @@
+DOLO	Dolo 650 15 tablets
+CROCIN	Crocin Advance 15 tablets
+ORS	Electral ORS 21.8g
+BANDAID	Band-Aid 10pc
+DETTOL	Dettol Antiseptic 250ml
+VICKS	Vicks VapoRub 50ml
+STREPSILS	Strepsils 8 lozenges
+ENO	Eno Fruit Salt 100g
+DIGENE	Digene Tablets 15pc
+MASK	3-ply Face Mask 10pc
+SANITIZER	Dettol Hand Sanitizer 200ml
+GLUCOSE	Glucon-D 500g
+HAF-FIR-001	Band-Aid Washproof Strips 20 pcs
+HAF-FIR-002	Gauze Roll
+HAF-FIR-003	Adhesive Plaster Roll
+HAF-FIR-004	Dettol Antiseptic Liquid 500 ml
+HAF-FIR-005	Savlon Antiseptic Liquid 500 ml
+HAF-FIR-006	Digital Thermometer
+HAF-FIR-007	Omron Thermometer Infrared
+HAF-FIR-008	Hot and Cold Gel Pack
+HAF-FIR-009	First Aid Kit Home
+HAF-FIR-010	Crepe Bandage
+HAF-FIR-011	Volini Pain Relief Spray 60 g
+HAF-FIR-012	Moov Pain Relief Cream 50 g
+HAF-FIR-013	Cotton Wool 100 g
+HAF-FIR-014	Surgical Gloves 10 pairs
+HAF-WAP-001	Face Masks 3-ply 50 pcs
+HAF-WAP-002	N95 Mask 5 pcs
+HAF-WAP-003	Omron Blood Pressure Monitor
+HAF-WAP-004	Accu-Chek Glucometer Kit
+HAF-WAP-005	Pulse Oximeter
+HAF-WAP-006	Knee Cap Support
+HAF-WAP-007	Lumbar Belt
+HAF-WAP-008	Weighing Scale Digital
+HAF-WAP-009	Dabur Honitus Lozenges
+HAF-WAP-010	Electrolyte ORS Sachets 10 pcs
+HAF-WAP-011	Zandu Balm 25 ml
+HAF-WAP-012	Hot Water Bottle Electric
