@@ -5,6 +5,7 @@ Every tool reads store_id / mode / cart_id from tool_context.state and returns a
 
 import re
 import uuid
+from collections import Counter
 
 from types import SimpleNamespace
 
@@ -106,10 +107,12 @@ def _section_tokens(text: str) -> list[str]:
 
 def list_category(category: str, tool_context: ToolContext, in_stock_only: bool = True, limit: int = 40) -> dict:
     """Every product in one section of the store, for requests like "list all the vegetables you have", "what dals are
-    there", "full list of shampoos". category is the section as the shopper says it ("vegetables", "fresh vegetables",
-    "dal"); it is matched loosely against the catalog's categories and subcategories, with a name search as fallback.
-    Returns total, in_stock, the rows shown (Product, Price, Stock) and more (how many were not shown). Say the total,
-    read the first ten names, and offer to continue; the screen shows the whole list."""
+    there", "full list of shampoos". category is the section as the shopper says it; give it in English when you can
+    (காய்கறிகள் or सब्ज़ी -> "vegetables", பருப்பு or दाल -> "dal"), though any language works. It is matched against
+    the catalog's categories and subcategories, else inferred from a product search. Returns total, in_stock, the rows
+    shown (Product, Price, Stock) and more (how many were not shown). Say the total, read the first ten names, and offer
+    to continue; the screen shows the whole list. If total is 0 the section was not found: say so and ask for a product
+    name; never say it is out of stock."""
     store_id = tool_context.state["store_id"]
     products, _ = catalog.product_map(store_id)
     want = _section_tokens(category)
@@ -123,9 +126,16 @@ def list_category(category: str, tool_context: ToolContext, in_stock_only: bool 
     if scored:
         best = max(s for s, _ in scored)
         picked = [p for s, p in scored if s == best]
-    else:
-        matched_by = "search"
-        picked = [h for h in catalog.search(store_id, category, k=max(1, min(limit, 40)))]
+    else:                                       # another language or another word for it: let the search say which section
+        hits = catalog.search(store_id, category, k=8)
+        counts = Counter((h.subcategory or h.category) for h in hits)
+        if counts and counts.most_common(1)[0][1] >= 3:
+            top = counts.most_common(1)[0][0]
+            picked = [p for p in products.values() if (p.subcategory or p.category) == top]
+            matched_by = "section"
+        else:
+            matched_by = "search"
+            picked = list(hits)
     stock = {d.id: max(0, (d.to_dict() or {}).get("on_hand", 0) - (d.to_dict() or {}).get("reserved", 0)) for d in db.inventory(store_id).stream()}
     items = sorted(((p, stock.get(p.product_id, 0)) for p in picked), key=lambda x: x[0].name.lower())
     in_stock = [(p, n) for p, n in items if n > 0]
@@ -135,7 +145,8 @@ def list_category(category: str, tool_context: ToolContext, in_stock_only: bool 
             "total": len(items), "in_stock": len(in_stock), "shown": len(shown), "more": max(0, (len(in_stock) if in_stock_only else len(items)) - len(shown)),
             "columns": ["Product", "Price", "Stock"],
             "rows": [{"Product": p.name, "Price": f"₹{float(p.price):g}", "Stock": n if n > 0 else "out of stock"} for p, n in shown],
-            "signal": "found" if items else "not_carried"}
+            "signal": "found" if items else "not_carried",
+            **({} if items else {"note": "No section or product matched. Say you could not find that section and ask for a product name; do not say it is out of stock."})}
 
 
 def search_products(query: str, tool_context: ToolContext, max_results: int = 6) -> dict:

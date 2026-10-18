@@ -240,3 +240,13 @@ def test_list_category_lists_a_whole_section(shop):
     assert tools.list_category("milk", tool_context=ctx(shop))["total"] == 4          # Milk and Plant milk sections
     assert tools.list_category("milk", limit=1, tool_context=ctx(shop))["more"] == 1
     assert tools.list_category("shoes", tool_context=ctx(shop))["signal"] == "not_carried"
+
+
+def test_list_category_infers_the_section_from_a_search_in_another_language(shop, monkeypatch):
+    from app.services import catalog
+    plant = [catalog.get_by_sku(shop, s) for s in ("soya", "almond", "oat")]
+    monkeypatch.setattr(catalog, "search", lambda store_id, q, k=6: plant if q == "தாவர பால்" else [])
+    out = tools.list_category("தாவர பால்", tool_context=ctx(shop))             # "plant milk" in Tamil
+    assert out["matched_by"] == "section" and out["category"] == "Plant milk" and out["total"] == 3
+    none = tools.list_category("ஷூ", tool_context=ctx(shop))                      # nothing like it in the shop
+    assert none["total"] == 0 and "do not say it is out of stock" in none["note"]
