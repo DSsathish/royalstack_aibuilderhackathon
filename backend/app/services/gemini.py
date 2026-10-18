@@ -44,20 +44,30 @@ QUERY_CACHE = 4096
 _query_vectors: "OrderedDict[str, list[float]]" = OrderedDict()   # the same question embeds once per instance
 
 
+AI_STUDIO = "ai-studio"
+
+
 @lru_cache(maxsize=4)
-def _embed_client(location: str | None) -> genai.Client:
+def _embed_client(endpoint: str) -> genai.Client:
+    if endpoint == AI_STUDIO:
+        return genai.Client(vertexai=False, api_key=settings.gemini_api_key)
     kw = client_kwargs()
-    if location and kw.get("vertexai"):
-        kw["location"] = location
+    if kw.get("vertexai"):
+        kw["location"] = endpoint
     return genai.Client(**kw)
 
 
-def embed_locations() -> list[str | None]:
-    """The project's own region first (its own quota, a second away), the global endpoint as the fallback."""
+def embed_endpoints() -> list[str]:
+    """Where a query embedding is tried, in order: the project's own Vertex region (its own quota, a second away), the
+    global Vertex endpoint, and, when a Gemini API key is configured, the Gemini API as the last resort. All serve the
+    same model, so the vectors match the ones stored with the products."""
     if not settings.google_genai_use_vertexai:
-        return [None]
+        return [AI_STUDIO]
     out = [settings.google_cloud_location, settings.gemini_location]
-    return [loc for i, loc in enumerate(out) if loc and loc not in out[:i]]
+    out = [loc for i, loc in enumerate(out) if loc and loc not in out[:i]]
+    if settings.gemini_api_key:
+        out.append(AI_STUDIO)
+    return out
 
 
 def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float]]:
@@ -73,13 +83,13 @@ def embed_texts(texts: list[str], *, for_query: bool = False) -> list[list[float
         # a query embed sits on the shopper's critical path: answer fast or fall back to keywords
         http_options=types.HttpOptions(timeout=2500, retry_options=types.HttpRetryOptions(attempts=1)) if for_query else None)
     vectors: list[list[float]] = []
-    for loc in embed_locations():
+    for endpoint in embed_endpoints():
         try:
-            res = _embed_client(loc).models.embed_content(model=EMBEDDING_MODEL, contents=texts, config=cfg)
+            res = _embed_client(endpoint).models.embed_content(model=EMBEDDING_MODEL, contents=texts, config=cfg)
             vectors = [e.values for e in res.embeddings]
             break
         except Exception as exc:  # quota, network, bad key: try the next endpoint, then degrade to keywords
-            log.warning("embed_texts failed at %s: %s", loc or "api", str(exc)[:160])
+            log.warning("embed_texts failed at %s: %s", endpoint, str(exc)[:160])
     if key and vectors:
         _query_vectors[key] = vectors[0]
         if len(_query_vectors) > QUERY_CACHE:

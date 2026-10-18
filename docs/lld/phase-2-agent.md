@@ -140,7 +140,7 @@ production catalog found three faults, all fixed:
 - The query embedding went to the `global` Vertex endpoint, whose per-minute quota for the embedding model tripped
   under a burst, and search degraded silently to keywords (Tamil "dog food" and "headache" returned nothing). Now:
   embeddings go to the project's own region first (`GOOGLE_CLOUD_LOCATION`, about a second, its own quota), the
-  global endpoint is the fallback, each endpoint gets one quick attempt, and query vectors are cached per instance
+  global endpoint is the fallback, the Gemini API (AI Studio key) is the last resort, each endpoint gets one quick attempt, and query vectors are cached per instance
   (4,096 entries, normalised text) so repeated questions never call the model. Document embeddings use the same path.
 - The pet-or-people gate only knew English pet words, so a Tamil or Hindi pet query ("நாய் உணவு", "कुत्ते का खाना") was
   treated as a people's query and pet products were excluded from the answer. The gate now knows the Tamil and Hindi

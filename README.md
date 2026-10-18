@@ -121,6 +121,7 @@ Scheduled jobs (Cloud Scheduler, all authenticated with `X-Job-Key`): `POST /job
 | `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` | project and region for Firestore and BigQuery |
 | `GOOGLE_GENAI_USE_VERTEXAI`, `GEMINI_LOCATION` | Vertex AI on the `global` endpoint (default); set `false` plus `GEMINI_API_KEY` for AI Studio |
 | `GEMINI_FLASH_MODEL`, `GEMINI_PRO_MODEL`, `GEMINI_LIVE_MODEL` | model ids |
+| `GEMINI_API_KEY` | Gemini API (AI Studio) key: the whole client when Vertex is off; with Vertex on, the last-resort embedding endpoint after the regional and global Vertex endpoints (secret) |
 | `GEMINI_LIVE_API_KEY`, `GEMINI_LIVE_AFFECTIVE` | optional AI Studio key for the live bridge only (secret); affective dialog off for models that reject it |
 | `QR_SESSION_SIGNING_KEY` | HMAC key for entrance and receipt tokens (secret) |
 | `JOB_KEY` | shared secret for `/jobs/*` (secret) |

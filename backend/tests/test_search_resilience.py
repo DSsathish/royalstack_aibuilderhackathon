@@ -17,10 +17,23 @@ def _fake_client(calls, fail_at=()):
     return make
 
 
-def test_query_embeddings_are_cached_and_fall_back_to_the_global_endpoint(monkeypatch):
+def test_embedding_endpoint_order(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "google_genai_use_vertexai", True)
+    monkeypatch.setattr(settings, "google_cloud_location", "asia-south1")
+    monkeypatch.setattr(settings, "gemini_location", "global")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+    assert gemini.embed_endpoints() == ["asia-south1", "global"]
+    monkeypatch.setattr(settings, "gemini_api_key", "key")
+    assert gemini.embed_endpoints() == ["asia-south1", "global", gemini.AI_STUDIO]      # the Gemini API only as the last resort
+    monkeypatch.setattr(settings, "google_genai_use_vertexai", False)
+    assert gemini.embed_endpoints() == [gemini.AI_STUDIO]
+
+
+def test_query_embeddings_are_cached_and_fall_back_across_endpoints(monkeypatch):
     calls = []
     monkeypatch.setattr(gemini, "configured", lambda: True)
-    monkeypatch.setattr(gemini, "embed_locations", lambda: ["asia-south1", "global"])
+    monkeypatch.setattr(gemini, "embed_endpoints", lambda: ["asia-south1", "global", gemini.AI_STUDIO])
     monkeypatch.setattr(gemini, "_embed_client", _fake_client(calls, fail_at=("asia-south1",)))
     gemini._query_vectors.clear()
     assert len(gemini.embed_texts(["Dog Food"], for_query=True)[0]) == 768
@@ -28,9 +41,12 @@ def test_query_embeddings_are_cached_and_fall_back_to_the_global_endpoint(monkey
     assert gemini.embed_texts(["dog  food"], for_query=True)      # same question, normalised: no call at all
     assert calls == ["asia-south1", "global"]
     monkeypatch.setattr(gemini, "_embed_client", _fake_client(calls, fail_at=("asia-south1", "global")))
-    assert gemini.embed_texts(["something new"], for_query=True) == []      # every endpoint down: keyword search takes over
+    assert gemini.embed_texts(["something new"], for_query=True)  # both Vertex endpoints down: the Gemini API answers
+    assert calls[-3:] == ["asia-south1", "global", gemini.AI_STUDIO]
+    monkeypatch.setattr(gemini, "_embed_client", _fake_client(calls, fail_at=("asia-south1", "global", gemini.AI_STUDIO)))
+    assert gemini.embed_texts(["nothing works"], for_query=True) == []      # every endpoint down: keyword search takes over
     monkeypatch.setattr(gemini, "_embed_client", _fake_client(calls))
-    assert len(gemini.embed_texts(["a", "b"])) == 2 and len(calls) == 5      # documents embed without the cache
+    assert len(gemini.embed_texts(["a", "b"])) == 2                          # documents embed without the cache
 
 
 def test_pet_queries_in_tamil_and_hindi_are_pet_queries():
