@@ -18,7 +18,7 @@ export type LiveHandlers = {
   onLevel?: (level: number, who: "mic" | "ai") => void; onGuard?: (mode: GuardMode) => void;
   onUserAudio?: (clip: Clip) => void;        // the shopper's last spoken turn, as heard by the model, kept in the browser
 };
-export type LiveControl = { stop: () => void; interrupt: () => void };
+export type LiveControl = { stop: () => void; interrupt: () => void; sendText: (text: string) => boolean };
 
 const PREBUFFER_S = 0.15;    // a reply starts playing this far ahead, so late chunks do not open gaps
 const ECHO_TAIL_S = 0.3;     // the room keeps echoing this long after playback stops
@@ -181,5 +181,12 @@ export async function startLive(sessionId: string, language: string, h: LiveHand
     if (!playing()) return;
     flush(); discard = true;
   }
-  return { stop, interrupt };
+  /** A typed line joins the spoken conversation as the next user turn; false when the socket is not ready yet. */
+  function sendText(text: string): boolean {
+    if (!ready || !ws || ws.readyState !== WebSocket.OPEN) return false;
+    interrupt();                                                      // typing over a reply cuts it short, like a tap
+    ws.send(JSON.stringify({ type: "text", text }));
+    return true;
+  }
+  return { stop, interrupt, sendText };
 }

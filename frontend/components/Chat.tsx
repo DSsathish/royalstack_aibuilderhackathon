@@ -31,6 +31,7 @@ export default function Chat() {
   const [canLive, setCanLive] = useState(false);
   useEffect(() => { setTimeout(() => setCanLive(liveSupported()), 0); }, []);
   const liveStop = useRef<(() => void) | null>(null);
+  const liveSend = useRef<((text: string) => boolean) | null>(null);   // set while live voice is on: typed lines go into that conversation
   const liveInterrupt = useRef<(() => void) | null>(null);
   const liveConnecting = useRef(false);
   const liveMsg = useRef<{ user: number | null; assistant: number | null }>({ user: null, assistant: null });
@@ -106,6 +107,13 @@ export default function Chat() {
   const photoTurn = useRef(false);
   async function send(message: string, image?: Blob) {
     if (!session || (!message.trim() && !image)) return;
+    if (!image && liveSend.current?.(message.trim())) {               // live voice is on: the typed line is the next turn of that conversation
+      setText("");
+      push({ role: "user", text: message.trim() });
+      liveMsg.current = { user: null, assistant: null }; pendingVoice.current = null;
+      return;
+    }
+    if (busy) return;                                                 // one text turn at a time; the line stays in the box
     setBusy(true); setText("");
     photoTurn.current = !!image;
     push({ role: "user", text: message || "Photo of a product" });
@@ -140,7 +148,7 @@ export default function Chat() {
           setLive(st);
           setOrb(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" || st === "reconnecting" ? "connecting" : "idle");
           setAvatar(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "closed" ? "idle" : "thinking");
-          if (st === "closed") { closedEarly = true; liveStop.current = null; liveInterrupt.current = null; liveMsg.current = { user: null, assistant: null }; setLevel(0); setGuard("unknown"); }
+          if (st === "closed") { closedEarly = true; liveStop.current = null; liveInterrupt.current = null; liveSend.current = null; liveMsg.current = { user: null, assistant: null }; setLevel(0); setGuard("unknown"); }
         },
         onFrame: (f: LiveFrame) => {
           if (f.type === "transcript") {
@@ -162,7 +170,7 @@ export default function Chat() {
           else if (f.type === "error") push({ role: "assistant", text: f.text });
         },
       });
-      if (closedEarly) ctl.stop(); else { liveStop.current = ctl.stop; liveInterrupt.current = ctl.interrupt; }
+      if (closedEarly) ctl.stop(); else { liveStop.current = ctl.stop; liveInterrupt.current = ctl.interrupt; liveSend.current = ctl.sendText; }
     } catch (e) { push({ role: "assistant", text: `Live voice could not start: ${(e as Error).message}` }); liveStop.current = null; setLive("closed"); setOrb("idle"); }
     liveConnecting.current = false;
   }
@@ -335,7 +343,7 @@ export default function Chat() {
             <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) send(text, f); e.target.value = ""; }} />
           </label>
         )}
-        <input id="chat-input" value={text} onChange={(e) => setText(e.target.value)} placeholder={owner ? "Ask about stock, sales, orders" : "Ask about products, prices, aisles"} className="field flex-1 rounded-full py-2.5" disabled={busy} />
+        <input id="chat-input" value={text} onChange={(e) => setText(e.target.value)} placeholder={owner ? "Ask about stock, sales, orders" : "Ask about products, prices, aisles"} className="field flex-1 rounded-full py-2.5" />
         {!talking && <button type="button" onClick={toggleTalk} className="btn btn-ghost w-11 h-11 p-0 rounded-full" title="Talk"><IconMic /></button>}
         <button type="submit" disabled={busy || !text.trim()} className="btn btn-primary w-11 h-11 p-0 rounded-full" title="Send"><IconSend /></button>
       </form>
