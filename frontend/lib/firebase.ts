@@ -1,7 +1,7 @@
 "use client";
 /** Firebase web app: Google sign-in for owners and staff, phone OTP for shoppers who opt in. */
 import { getApps, initializeApp } from "firebase/app";
-import { ConfirmationResult, GoogleAuthProvider, RecaptchaVerifier, createUserWithEmailAndPassword, getAuth, onAuthStateChanged, reauthenticateWithPhoneNumber, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPhoneNumber, signInWithPopup, signOut, type User } from "firebase/auth";
+import { ConfirmationResult, GoogleAuthProvider, RecaptchaVerifier, createUserWithEmailAndPassword, EmailAuthProvider, getAuth, linkWithCredential, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, verifyBeforeUpdateEmail, onAuthStateChanged, reauthenticateWithPhoneNumber, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPhoneNumber, signInWithPopup, signOut, type User } from "firebase/auth";
 
 const config = {
   apiKey: "AIzaSyD1gsb4UoNpjbCQcyu0gLp6MNwpjxtiXsk",
@@ -34,6 +34,28 @@ export async function refreshVerified(): Promise<boolean> {
   return u.emailVerified;
 }
 export function isPasswordUser(u: User): boolean { return u.providerData.some((p) => p.providerId === "password"); }
+/** Account changes (docs/lld/owner-account.md) re-authenticate first: the current password, or the Google popup. */
+async function reauthenticate(currentPassword = ""): Promise<User> {
+  const u = auth().currentUser;
+  if (!u?.email) throw new Error("auth/not-signed-in");
+  if (isPasswordUser(u)) await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, currentPassword));
+  else await reauthenticateWithPopup(u, new GoogleAuthProvider());
+  return u;
+}
+/** A link goes to the new address; the email switches only when it is opened, so a typo cannot lock the owner out. */
+export async function changeEmail(newEmail: string, currentPassword: string) {
+  const u = await reauthenticate(currentPassword);
+  await verifyBeforeUpdateEmail(u, newEmail.trim(), backToDashboard());
+}
+export async function changePassword(currentPassword: string, newPassword: string) {
+  const u = await reauthenticate(currentPassword);
+  await updatePassword(u, newPassword);
+}
+/** A Google account gains email-and-password sign-in on the same account. */
+export async function addPassword(newPassword: string) {
+  const u = await reauthenticate();
+  await linkWithCredential(u, EmailAuthProvider.credential(u.email!, newPassword));
+}
 export const signOutShopper = signOutOwner;
 export function watchUser(cb: (u: User | null) => void) { return onAuthStateChanged(auth(), cb); }
 export async function idToken(): Promise<string | null> { return (await auth().currentUser?.getIdToken()) ?? null; }

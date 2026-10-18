@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import { API, money, type Aisle } from "@/lib/api";
-import { createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
+import { addPassword, changeEmail, changePassword, createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
 import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner, ConnectorDoc, Inspection, SourceInput, InventoryField, UploadCheck } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
@@ -17,15 +17,16 @@ import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import RevenueChart from "@/components/RevenueChart";
 
-type Tab = "overview" | "inventory" | "reorders" | "signals" | "customers" | "offers" | "loss" | "connectors" | "setup" | "exits" | "chat";
+type Tab = "overview" | "inventory" | "reorders" | "signals" | "customers" | "offers" | "loss" | "connectors" | "setup" | "exits" | "chat" | "account";
 const NAV: { group: string; items: { id: Tab; label: string }[] }[] = [
   { group: "Today", items: [{ id: "overview", label: "Overview" }, { id: "chat", label: "Ask the assistant" }] },
   { group: "Stock", items: [{ id: "inventory", label: "Inventory" }, { id: "reorders", label: "Reorders" }, { id: "signals", label: "Demand signals" }] },
   { group: "Customers", items: [{ id: "customers", label: "Customers" }, { id: "offers", label: "Offers" }] },
   { group: "Trust", items: [{ id: "loss", label: "Loss and shrink" }, { id: "exits", label: "Exit checks" }] },
   { group: "Store", items: [{ id: "setup", label: "Store settings" }, { id: "connectors", label: "Connectors" }] },
+  { group: "You", items: [{ id: "account", label: "Account" }] },
 ];
-const STAFF_IDS: Tab[] = ["inventory", "exits"];
+const STAFF_IDS: Tab[] = ["inventory", "exits", "account"];
 const TITLES: Record<Tab, [string, string]> = {
   overview: ["Today", "Sales so far, stock that needs attention, and decisions waiting for you."],
   chat: ["Ask the assistant", "The same assistant your shoppers use, on your side of the counter. Type or talk."],
@@ -38,6 +39,7 @@ const TITLES: Record<Tab, [string, string]> = {
   exits: ["Exit checks", "Every receipt scanned at the exit kiosk and how it was cleared."],
   setup: ["Store settings", "Products, aisles, branding, QR codes, team and payments."],
   connectors: ["Connectors", "The connector agent brings in files, sheets, API feeds and databases, shows what would change, and keeps them in step. Also webhooks and QR codes."],
+  account: ["Account", "Your own sign-in: email and password. Store details live under Store settings."],
 };
 
 export default function OwnerPage() {
@@ -88,7 +90,7 @@ export default function OwnerPage() {
           ))}
         </nav>
         <div className="px-4 py-3 border-t border-line text-xs text-muted">
-          <div className="truncate" title={user.email}>{user.email}</div>
+          <button type="button" onClick={() => setTab("account")} className="truncate w-full text-left hover:underline" title="Account settings">{user.email}</button>
           <div className="flex gap-3 mt-1"><button onClick={() => signOutOwner()} className="underline">Sign out</button><Link href="/" className="underline">Shopper app</Link></div>
         </div>
       </aside>
@@ -111,6 +113,7 @@ export default function OwnerPage() {
         {tab === "loss" && <LossTab store={store} />}
         {tab === "connectors" && <ConnectorsTab store={store} />}
         {tab === "setup" && <SetupTab store={store} newPin={newPin} />}
+        {tab === "account" && <AccountTab user={user} />}
         {tab === "exits" && <ExitsTab store={store} />}
         {tab === "chat" && <OwnerChat store={store} />}
       </div>
@@ -239,6 +242,90 @@ function VerifyEmail({ email, onVerified }: { email: string; onVerified: () => v
       {msg && <p className="chip chip-muted whitespace-normal">{msg}</p>}
     </AuthShell>
   );
+}
+
+/** The owner's own sign-in (docs/lld/owner-account.md). Everything goes through Firebase Auth after re-authentication;
+ *  the API keys the store to the user id and follows a changed email on its own. */
+function AccountTab({ user }: { user: User }) {
+  const password = isPasswordUser(user);
+  const [em, setEm] = useState({ email: "", current: "" });
+  const [pw, setPw] = useState({ current: "", next: "", again: "" });
+  const [fe, setFe] = useState<Errors>({});
+  const [pe, setPe] = useState<Errors>({});
+  const [busy, setBusy] = useState<"" | "email" | "password" | "reset">("");
+  const [note, setNote] = useState<{ email?: string; password?: string }>({});
+  async function run(kind: "email" | "password" | "reset", fn: () => Promise<void>, done: string, after?: () => void) {
+    setBusy(kind);
+    try { await fn(); setNote((n) => ({ ...n, [kind === "email" ? "email" : "password"]: done })); toast.ok(kind === "password" ? done : "Email sent."); after?.(); }
+    catch (e) { toast.error(accountMessage(e)); }
+    setBusy("");
+  }
+  const sameAsNew = (v: string) => (v === pw.next ? "" : "The two passwords do not match.");
+  const notCurrent = (v: string) => rules.email(v) || (v.trim().toLowerCase() === (user.email ?? "").toLowerCase() ? "That is already your email." : "");
+  const sendEmailLink = () => {
+    if (!guard({ email: { label: "New email", value: em.email, rule: notCurrent }, current: { label: "Current password", value: em.current } }, setFe)) return;
+    run("email", () => changeEmail(em.email, em.current), `We sent a link to ${em.email.trim()}. Open it to switch; until then ${user.email} keeps working, and you will sign in again afterwards.`, () => setEm({ email: "", current: "" }));
+  };
+  const savePassword = () => {
+    const checks: Parameters<typeof guard>[0] = { next: { label: "New password", value: pw.next, rule: rules.minLen(6, "New password") }, again: { label: "Repeat the new password", value: pw.again, rule: sameAsNew } };
+    if (password) checks.current = { label: "Current password", value: pw.current };
+    if (!guard(checks, setPe)) return;
+    run("password", () => (password ? changePassword(pw.current, pw.next) : addPassword(pw.next)),
+        password ? "Password changed." : "Password added. You can now sign in with your email and this password as well as with Google.", () => setPw({ current: "", next: "", again: "" }));
+  };
+  const reset = () => run("reset", () => resetPassword(user.email ?? ""), `We emailed a reset link to ${user.email}.`);
+  const field = (type: string, value: string, onChange: (v: string) => void, autoComplete: string, invalid: boolean) =>
+    <input type={type} value={value} onChange={(e) => onChange(e.target.value)} autoComplete={autoComplete} aria-invalid={invalid} className="field mt-1 py-1.5 text-sm" />;
+  return (
+    <div className="px-4 lg:px-6 pb-10 grid gap-4 max-w-3xl">
+      <section className="section">
+        <h2 className="text-base font-semibold">Signed in as</h2>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <span className="font-medium break-all">{user.email}</span>
+          <span className="chip chip-muted">{password ? "Email and password" : "Google account"}</span>
+          {user.emailVerified && <span className="chip chip-good">verified</span>}
+        </div>
+        <p className="text-xs text-muted mt-2">Your store, team and settings stay with this account whatever the email or password changes to.</p>
+        <button type="button" onClick={() => signOutOwner()} className="btn btn-ghost py-1.5 text-sm mt-3">Sign out</button>
+      </section>
+      <section className="section">
+        <h2 className="text-base font-semibold">Change email</h2>
+        {password ? (
+          <>
+            <p className="text-xs text-muted">We send a link to the new address. The switch happens only when that link is opened, so a typo cannot lock you out.</p>
+            <div className="grid sm:grid-cols-2 gap-2 mt-2">
+              <label className="text-xs">New email<Req />{field("email", em.email, (v) => { setEm({ ...em, email: v }); setFe({ ...fe, email: "" }); }, "email", !!fe.email)}<FieldError msg={fe.email} /></label>
+              <label className="text-xs">Current password<Req />{field("password", em.current, (v) => { setEm({ ...em, current: v }); setFe({ ...fe, current: "" }); }, "current-password", !!fe.current)}<FieldError msg={fe.current} /></label>
+            </div>
+            <button type="button" onClick={sendEmailLink} disabled={busy !== ""} className="btn btn-primary py-2 mt-3">{busy === "email" ? "Sending" : "Send the switch link"}</button>
+            {note.email && <p className="text-sm text-good mt-2">{note.email}</p>}
+          </>
+        ) : <p className="text-sm text-muted mt-1">Your sign-in email comes from your Google account and is managed there.</p>}
+      </section>
+      <section className="section">
+        <h2 className="text-base font-semibold">{password ? "Change password" : "Add a password"}</h2>
+        <p className="text-xs text-muted">{password ? "Your current password confirms it is you." : "Sign in with your email and a password as well as with Google. Google will ask you to confirm first."}</p>
+        <div className="grid sm:grid-cols-3 gap-2 mt-2">
+          {password && <label className="text-xs">Current password<Req />{field("password", pw.current, (v) => { setPw({ ...pw, current: v }); setPe({ ...pe, current: "" }); }, "current-password", !!pe.current)}<FieldError msg={pe.current} /></label>}
+          <label className="text-xs">New password<Req />{field("password", pw.next, (v) => { setPw({ ...pw, next: v }); setPe({ ...pe, next: "" }); }, "new-password", !!pe.next)}<FieldError msg={pe.next} /></label>
+          <label className="text-xs">Repeat the new password<Req />{field("password", pw.again, (v) => { setPw({ ...pw, again: v }); setPe({ ...pe, again: "" }); }, "new-password", !!pe.again)}<FieldError msg={pe.again} /></label>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          <button type="button" onClick={savePassword} disabled={busy !== ""} className="btn btn-primary py-2">{busy === "password" ? "Saving" : password ? "Save new password" : "Add password"}</button>
+          {password && <button type="button" onClick={reset} disabled={busy !== ""} className="text-xs text-muted underline">{busy === "reset" ? "Sending" : "Forgot it? Email me a reset link"}</button>}
+        </div>
+        {note.password && <p className="text-sm text-good mt-2">{note.password}</p>}
+      </section>
+    </div>
+  );
+}
+function accountMessage(e: unknown): string {
+  const code = (e as { code?: string }).code ?? (e as Error).message ?? "";
+  if (code.includes("invalid-credential") || code.includes("wrong-password")) return "The current password is not right.";
+  if (code.includes("requires-recent-login")) return "For safety, sign out, sign in again and retry.";
+  if (code.includes("credential-already-in-use") || code.includes("provider-already-linked")) return "This account already has a password. Use Change password instead.";
+  if (code.includes("popup-blocked")) return "Allow pop-ups for this site so Google can confirm it is you.";
+  return authMessage(e);
 }
 
 function authMessage(e: unknown): string {

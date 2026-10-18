@@ -1,10 +1,13 @@
 """Firebase ID token verification and owner membership checks."""
 
+import uuid
+
 from fastapi import Header, HTTPException, Path
 from google.auth.transport import requests as g_requests
 from google.oauth2 import id_token
 
 from app.config import settings
+from app.domain.models import now
 from app.services import db
 
 STORE_ID = Path(pattern=r"^[a-z0-9-]{3,40}$")
@@ -77,15 +80,36 @@ def _bootstrap(uid: str, field: str, role: str) -> list[str]:
 def roles_for(uid: str) -> dict[str, str]:
     """store_id -> owner | staff, bootstrapping from owner_emails / staff_emails on first sign-in."""
     doc = db.users().document(uid).get()
-    roles = dict(doc.to_dict().get("roles", {})) if doc.exists else {}
-    if doc.exists and not roles and doc.to_dict().get("stores"):      # memberships created before roles existed
-        roles = {s: "owner" for s in doc.to_dict()["stores"]}
+    data = doc.to_dict() if doc.exists else {}
+    roles = dict(data.get("roles", {}))
+    if doc.exists and not roles and data.get("stores"):      # memberships created before roles existed
+        roles = {s: "owner" for s in data["stores"]}
     if not roles:
         for s in _bootstrap(uid, "owner_emails", "owner"):
             roles[s] = "owner"
         for s in _bootstrap(uid, "staff_emails", "staff"):
             roles.setdefault(s, "staff")
+    _follow_email_change(uid, data, roles)
     return roles
+
+
+def _follow_email_change(uid: str, data: dict, roles: dict[str, str]) -> None:
+    """The person changed their sign-in email in Firebase Auth: the first verified token with the new address updates the
+    user record and swaps the address in each store's member list, audited. Roles are keyed by uid and never move."""
+    email, old = _EMAILS.get(uid), (data.get("email") or "").lower()
+    if not email or email == old:
+        return
+    db.users().document(uid).set({"email": email}, merge=True)
+    if not old:
+        return
+    from google.cloud import firestore
+    for store_id, role in roles.items():
+        field = "owner_emails" if role == "owner" else "staff_emails"
+        ref = db.store_ref(store_id)
+        ref.update({field: firestore.ArrayRemove([old])})
+        ref.update({field: firestore.ArrayUnion([email])})
+        db.audit(store_id).document(uuid.uuid4().hex).set({"actor": uid, "action": "member_email_changed", "created_at": now(),
+                                                           "payload": {"from": old, "to": email, "role": role}})
 
 
 def owned_stores(uid: str) -> list[str]:
