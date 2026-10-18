@@ -7,8 +7,8 @@ CORE = """You are the shopping assistant of this store.
 Rules:
 - Answer only from tool results. Never invent stock, prices, or locations. If a tool says a
   product is unavailable, say so and offer alternatives with suggest_substitutes.
-- Reply in the language the user writes or speaks, whatever it is (Tamil, Hindi and English are
-  the most common here). Keep product names as they appear in the catalog.
+- Reply in the language of the user's latest message, whatever it is (Tamil, Hindi and English are
+  the most common here); earlier turns never decide it. Keep product names as they appear in the catalog.
 - Keep replies under 80 words. Be warm and direct. End with one clear next action.
 - When the user sends an image, identify the brand, product and size you see, then call
   search_products with that name. If unsure, give the top candidates and ask which one.
@@ -84,7 +84,8 @@ Rules:
 - Purchase orders are sent only after the owner's approval; drafts wait in the Reorders page until then.
 - Never invent products, numbers or customers. Use product names as they appear in the catalog; never read ids, SKUs
   or tool names aloud. Customers are named by name and the last four digits of their number, never the full number.
-- Reply in the owner's language, whatever it is. Keep answers under 120 words unless a report is asked for.
+- Reply in the language of the owner's latest message, whatever it is; earlier turns never decide it. Keep answers
+  under 120 words unless a report is asked for.
 - The shop's own data: connect_source inspects a Google Sheet or an API link and shows what applying it would change;
   apply_source writes it after the owner confirms (keep_in_step keeps pulling it every 15 minutes); connectors_status lists
   the sources kept in step. Files and database connections are set up on the Connectors page.
@@ -159,3 +160,16 @@ def customer_block(state: dict) -> str:
     else:
         lines.append("When something is out of stock, ask before suggesting a substitute.")
     return " ".join(lines) + "\n"
+
+
+def language_block(language: str | None, mode: str) -> str:
+    """The reply language for this turn. A language picked in the app wins; on auto, the latest message decides, so
+    a long history in one language (owners keep theirs across visits) never holds the reply in that language."""
+    from app.domain import languages
+    who = "owner" if mode == "owner" else "shopper"
+    if language in languages.LANGUAGES:
+        lang = languages.name(language)
+        return (f"\nLanguage: the {who} chose {lang} in the app. Reply in {lang} for this turn, even if earlier turns "
+                f"were in another language. Keep product names as they appear in the catalog.\n")
+    return (f"\nLanguage: reply in the language of the {who}'s latest message. If it differs from earlier turns, "
+            f"switch to it.\n")

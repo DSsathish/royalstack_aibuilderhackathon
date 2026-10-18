@@ -139,3 +139,40 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em
 /* The reCAPTCHA badge is hidden; the required disclosure is printed under the phone form instead. */
 .grecaptcha-badge { visibility: hidden; }
 .border-bad { border-color: var(--bad) !important; }
+
+/* Pointer on everything clickable (Tailwind v4 resets buttons to the default arrow); not-allowed when disabled. */
+@layer base {
+  button:not(:disabled), [role="button"], a[href], select:not(:disabled), summary, label:has(> input[type="checkbox"]),
+  input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled), input[type="file"]:not(:disabled),
+  input[type="color"]:not(:disabled), input[type="date"]:not(:disabled) { cursor: pointer; }
+  button:disabled, select:disabled, input:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+}
+
+/* Mandatory-field errors: red text under the field and a red border on it. */
+.field-error { display: block; margin-top: 4px; font-size: 12px; line-height: 1.35; color: var(--bad); font-weight: 500; }
+.field[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
+
+/* Toasts: fixed light card so they read the same over the shopper and owner themes. */
+.toaster { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 100;
+  display: flex; flex-direction: column; gap: 8px; width: min(440px, calc(100vw - 32px)); }
+.toast { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #ffffff; color: #15302a;
+  border: 1px solid #d7e2da; border-left-width: 4px; box-shadow: 0 6px 24px rgba(21, 48, 42, 0.16); font-size: 14px; line-height: 1.4;
+  animation: toast-in 180ms ease-out; }
+.toast-bad { border-left-color: #d9534f; }
+.toast-good { border-left-color: #1e8e5a; }
+.toast-close { font-size: 18px; line-height: 1; color: #5f7268; padding: 0 2px; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* The shopper's own spoken turn inside the user bubble: play button, waveform, duration, optional transcript. */
+.voice-note { min-width: 210px; }
+.voice-play { width: 32px; height: 32px; flex: none; border-radius: 999px; display: grid; place-items: center; background: var(--bg); color: var(--ink); }
+.voice-play:disabled { opacity: 0.5; }
+.voice-wave { flex: 1; height: 28px; display: flex; align-items: center; gap: 2px; min-width: 110px; }
+.voice-wave span { flex: 1; min-height: 3px; border-radius: 2px; background: currentColor; opacity: 0.4; transition: opacity 120ms; }
+.voice-wave span.on { opacity: 1; }
+.voice-wave-pending span { animation: voice-wait 1.2s ease-in-out infinite; }
+.voice-wave-pending span:nth-child(odd) { animation-delay: 0.3s; }
+@keyframes voice-wait { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.6; } }
+.voice-text-toggle { display: inline-block; margin-top: 4px; font-size: 12px; text-decoration: underline; opacity: 0.8; }
+@media (prefers-reduced-motion: reduce) { .voice-wave-pending span { animation: none; } }

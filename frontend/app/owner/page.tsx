@@ -9,6 +9,9 @@ import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, S
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
 import FloorMapEditor from "@/components/FloorMapEditor";
+import FieldError, { Req } from "@/components/FieldError";
+import { toast } from "@/lib/toast";
+import { Errors, guard, rules } from "@/lib/validate";
 import { useApp } from "@/lib/store";
 import Chat from "@/components/Chat";
 import RevenueChart from "@/components/RevenueChart";
@@ -166,25 +169,30 @@ function OwnerSignIn() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; bad: boolean } | null>(null);
+  const [err, setErr] = useState<Errors>({});
   const run = async (fn: () => Promise<unknown>, okText?: string) => {
     setBusy(true); setMsg(null);
     try { await fn(); if (okText) setMsg({ text: okText, bad: false }); } catch (e) { setMsg({ text: authMessage(e), bad: true }); }
     setBusy(false);
   };
+  const emailField = { label: "Email", value: email, rule: rules.email };
+  const signIn = () => { if (guard({ email: emailField, password: { label: "Password", value: password } }, setErr)) run(() => signInWithEmail(email, password)); };
+  const create = () => { if (guard({ email: emailField, password: { label: "Password", value: password, rule: rules.minLen(6, "Password") } }, setErr)) run(() => createOwnerAccount(email, password), "Account created. Check your inbox for the verification link."); };
+  const forgot = () => { if (guard({ email: { ...emailField, missing: "Enter your email address first, then tap Forgot password." } }, setErr)) run(() => resetPassword(email), "If that address has an account, a reset link is on its way."); };
   return (
     <AuthShell>
       <div><h1 className="text-2xl font-semibold">Sign in</h1><p className="text-muted text-sm mt-1">For shop owners and staff. Use the Google account or email your store knows.</p></div>
       <button onClick={() => run(signInWithGoogle)} disabled={busy} className="btn btn-primary w-full py-3">Continue with Google</button>
       <div className="flex items-center gap-3 text-xs text-muted"><span className="flex-1 border-t border-line" />or with email<span className="flex-1 border-t border-line" /></div>
-      <form onSubmit={(e) => { e.preventDefault(); run(() => signInWithEmail(email, password)); }} className="space-y-3">
-        <label className="block text-sm font-medium">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required className="field mt-1" /></label>
-        <label className="block text-sm font-medium">Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" minLength={6} required className="field mt-1" /></label>
+      <form noValidate onSubmit={(e) => { e.preventDefault(); signIn(); }} className="space-y-3">
+        <label className="block text-sm font-medium">Email<Req /><input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setErr({ ...err, email: "" }); }} autoComplete="email" required aria-invalid={!!err.email} className="field mt-1" /><FieldError msg={err.email} /></label>
+        <label className="block text-sm font-medium">Password<Req /><input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setErr({ ...err, password: "" }); }} autoComplete="current-password" required aria-invalid={!!err.password} className="field mt-1" /><FieldError msg={err.password} /></label>
         <div className="flex gap-2">
-          <button type="submit" disabled={busy || !email || !password} className="btn btn-ink flex-1 py-2.5">Sign in</button>
-          <button type="button" onClick={() => run(() => createOwnerAccount(email, password), "Account created. Check your inbox for the verification link.")} disabled={busy || !email || password.length < 6} className="btn btn-ghost flex-1 py-2.5">Create account</button>
+          <button type="submit" disabled={busy} className="btn btn-ink flex-1 py-2.5">Sign in</button>
+          <button type="button" onClick={create} disabled={busy} className="btn btn-ghost flex-1 py-2.5">Create account</button>
         </div>
       </form>
-      <button onClick={() => run(() => resetPassword(email), "If that address has an account, a reset link is on its way.")} disabled={busy || !email} className="text-xs text-muted underline">Forgot password?</button>
+      <button type="button" onClick={forgot} disabled={busy} className="text-xs text-muted underline self-start">Forgot password?</button>
       {msg && <p className={`chip ${msg.bad ? "chip-bad" : "chip-good"} whitespace-normal`}>{msg.text}</p>}
       <p className="text-xs text-muted">New here? Create an account, verify the email, and the dashboard opens with “Register your shop”. Staff use the email their owner added.</p>
     </AuthShell>
@@ -273,8 +281,11 @@ function OverviewTab({ store }: { store: string }) {
 function RegisterForm({ email, error, onDone }: { email: string; error: string; onDone: (s: StoreDoc, pin: string) => void }) {
   const [name, setName] = useState(""); const [city, setCity] = useState(""); const [langs, setLangs] = useState<string[]>(["en"]);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState(error);
-  const toggle = (l: string) => setLangs(langs.includes(l) ? langs.filter((x) => x !== l) : [...langs, l]);
+  const [fe, setFe] = useState<Errors>({});
+  const toggle = (l: string) => { setLangs(langs.includes(l) ? langs.filter((x) => x !== l) : [...langs, l]); setFe({ ...fe, langs: "" }); };
   async function submit() {
+    if (!guard({ name: { label: "Shop name", value: name, rule: rules.minLen(3, "Shop name") },
+                 langs: { label: "Languages", value: langs.join(","), missing: "Pick at least one language your shoppers use." } }, setFe)) return;
     setBusy(true); setErr("");
     try { const r = await owner.register({ name, city, languages: langs.length ? langs : ["en"], currency: "INR" }); onDone(r.store, r.kiosk_pin); }
     catch (e) { setErr(friendlyApiError(e)); }
@@ -288,11 +299,11 @@ function RegisterForm({ email, error, onDone }: { email: string; error: string; 
         <span className="min-w-0 flex-1 truncate">Signed in as <b>{email}</b></span>
         <button type="button" onClick={() => signOutOwner()} className="text-accent font-medium whitespace-nowrap">Not you? Sign out</button>
       </div>
-      <label className="block text-sm font-medium">Shop name<input id="reg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sri Murugan Stores" className="field mt-1" /><span className="label block mt-1">Shoppers see this name in the app; it also becomes your store’s web address.</span></label>
-      <label className="block text-sm font-medium">City<input id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Chennai" className="field mt-1" /></label>
-      <div className="text-sm font-medium">Languages your shoppers use<div className="flex flex-wrap gap-2 mt-1.5">{LANGUAGES.filter((l) => l.code !== "auto").map((l) => <button key={l.code} type="button" onClick={() => toggle(l.code)} className={`chip px-3 py-1.5 ${langs.includes(l.code) ? "bg-ink text-bg" : "chip-muted"}`}>{l.label}</button>)}</div><span className="label block mt-1">The assistant answers in whatever language a shopper speaks; the first regional language here guides the voice transcript.</span></div>
+      <label className="block text-sm font-medium">Shop name<Req /><input id="reg-name" value={name} onChange={(e) => { setName(e.target.value); setFe({ ...fe, name: "" }); }} placeholder="Sri Murugan Stores" aria-invalid={!!fe.name} className="field mt-1" /><FieldError msg={fe.name} /><span className="label block mt-1">Shoppers see this name in the app; it also becomes your store’s web address.</span></label>
+      <label className="block text-sm font-medium">City <span className="text-muted font-normal">(optional)</span><input id="reg-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Chennai" className="field mt-1" /></label>
+      <div className="text-sm font-medium">Languages your shoppers use<Req /><div className="flex flex-wrap gap-2 mt-1.5">{LANGUAGES.filter((l) => l.code !== "auto").map((l) => <button key={l.code} type="button" onClick={() => toggle(l.code)} className={`chip px-3 py-1.5 ${langs.includes(l.code) ? "bg-ink text-bg" : "chip-muted"}`}>{l.label}</button>)}</div><FieldError msg={fe.langs} /><span className="label block mt-1">The assistant answers in whatever language a shopper speaks; the first regional language here guides the voice transcript.</span></div>
       {err && <p className="chip chip-bad whitespace-normal">{err}</p>}
-      <button onClick={submit} disabled={busy || name.trim().length < 3} className="btn btn-primary w-full py-3">{busy ? "Creating your shop" : "Create my shop"}</button>
+      <button onClick={submit} disabled={busy} className="btn btn-primary w-full py-3">{busy ? "Creating your shop" : "Create my shop"}</button>
       <p className="text-xs text-muted">Already own a store with a different account? <button type="button" onClick={() => signOutOwner()} className="underline">Switch account</button>.</p>
     </AuthShell>
   );
@@ -335,13 +346,21 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
   const [msg, setMsg] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [savingMap, setSavingMap] = useState(false);
+  const [fe, setFe] = useState<Errors>({});
+  const [mapFloor, setMapFloor] = useState(1);
+  const [mapErr, setMapErr] = useState("");
   const load = () => owner.store(store).then((d) => { setDoc(d); setAisles(d.floor_map.map((a) => a.aisle)); setBrand({ tagline: d.brand.tagline, greeting: d.brand.greeting, accent: d.brand.accent }); });
   useEffect(() => {
     load(); owner.team(store).then(setTeam).catch(() => {}); owner.qr(store).then(setQr).catch(() => {});
     owner.inventory(store).then((rows) => setCounts(rows.reduce((m, r) => (r.aisle ? { ...m, [r.aisle]: (m[r.aisle] ?? 0) + 1 } : m), {} as Record<string, number>))).catch(() => {});
   }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   async function save(body: Parameters<typeof owner.patchStore>[1], note: string) { await owner.patchStore(store, body); setMsg(note); load(); owner.qr(store).then(setQr).catch(() => {}); }
-  async function saveMap(fm: Aisle[]) { setSavingMap(true); try { await save({ floor_map: fm }, "Floor map saved. Shoppers see it on their next visit."); } catch (e) { setMsg((e as Error).message); } setSavingMap(false); }
+  async function saveMap(fm: Aisle[]) {
+    setSavingMap(true); setMapErr("");
+    try { await save({ floor_map: fm }, "Floor map saved. Shoppers see it on their next visit."); toast.ok("Floor map saved."); }
+    catch (e) { const m = friendlyApiError(e); setMapErr(m); toast.error(m); }
+    setSavingMap(false);
+  }
   if (!doc) return <div className="px-4 lg:px-6"><Skeleton /></div>;
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-6 max-w-4xl">
@@ -354,16 +373,16 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
       <section className="section space-y-2">
         <h2 className="text-base font-semibold">2. Floor map</h2>
         <p className="text-sm text-muted">Draw your shop the way it is laid out. Shoppers see this map with the route to the product they asked for, and the assistant uses the aisle names in directions. {aisles.length} aisle{aisles.length === 1 ? "" : "s"} so far.</p>
-        <FloorMapEditor key={doc.floor_map.map((a) => `${a.aisle}:${a.x},${a.y},${a.w},${a.h}`).join("|")} aisles={doc.floor_map} counts={counts} saving={savingMap} onSave={saveMap} />
+        <FloorMapEditor key={doc.floor_map.map((a) => `${a.aisle}:${a.x},${a.y},${a.w},${a.h}`).join("|")} aisles={doc.floor_map} counts={counts} saving={savingMap} onSave={saveMap} startFloor={mapFloor} onFloorChange={setMapFloor} error={mapErr} />
       </section>
       <section className="section space-y-2">
         <h2 className="text-base font-semibold">3. Brand</h2>
         <div className="grid sm:grid-cols-2 gap-3 text-sm">
-          <label>Tagline<input value={brand.tagline} onChange={(e) => setBrand({ ...brand, tagline: e.target.value })} placeholder="Fresh every day" className="field mt-1" /></label>
+          <label>Tagline <span className="text-muted">(optional)</span><input value={brand.tagline} onChange={(e) => setBrand({ ...brand, tagline: e.target.value })} placeholder="Fresh every day" className="field mt-1" /></label>
           <label>Accent colour<div className="flex items-center gap-2 mt-1"><input type="color" value={brand.accent} onChange={(e) => setBrand({ ...brand, accent: e.target.value })} className="h-10 w-14 rounded border border-line bg-transparent" /><span className="mono text-xs">{brand.accent}</span></div></label>
-          <label className="sm:col-span-2">Assistant greeting<input value={brand.greeting} onChange={(e) => setBrand({ ...brand, greeting: e.target.value })} placeholder="Vanakkam! Welcome to Sri Murugan Stores." className="field mt-1" /></label>
+          <label className="sm:col-span-2">Assistant greeting <span className="text-muted">(optional)</span><input value={brand.greeting} onChange={(e) => setBrand({ ...brand, greeting: e.target.value })} placeholder="Vanakkam! Welcome to Sri Murugan Stores." className="field mt-1" /></label>
         </div>
-        <button onClick={() => save(brand, "Brand saved")} className="btn btn-primary py-2">Save brand</button>
+        <button onClick={() => save(brand, "Brand saved").then(() => toast.ok("Brand saved.")).catch((e) => toast.error(friendlyApiError(e)))} className="btn btn-primary py-2">Save brand</button>
       </section>
       <section className="section space-y-2">
         <h2 className="text-base font-semibold">4. QR codes</h2>
@@ -385,17 +404,29 @@ function SetupTab({ store, newPin }: { store: string; newPin: string }) {
         <p className="text-sm text-muted">Staff can run the exit kiosk and record shelf counts. They cannot approve orders, change settings or see customers.</p>
         {team && <ul className="text-sm">{team.owner_emails.map((e) => <li key={e} className="flex justify-between py-1 border-t border-line"><span>{e}</span><span className="chip chip-accent">owner</span></li>)}
           {team.staff_emails.map((e) => <li key={e} className="flex justify-between py-1 border-t border-line"><span>{e}</span><button onClick={async () => setTeam({ ...team, ...(await owner.removeStaff(store, e)) })} className="text-xs text-bad underline">remove</button></li>)}</ul>}
-        <div className="flex gap-2"><input value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} placeholder="staff@gmail.com" className="field flex-1" /><button onClick={async () => { if (team) setTeam({ ...team, ...(await owner.addStaff(store, staffEmail)) }); setStaffEmail(""); }} className="btn btn-primary py-2">Add staff</button></div>
+        <div className="flex gap-2 items-start">
+          <label className="flex-1 text-sm">Staff email<Req /><input value={staffEmail} onChange={(e) => { setStaffEmail(e.target.value); setFe({ ...fe, staff: "" }); }} placeholder="staff@gmail.com" aria-invalid={!!fe.staff} className="field mt-1" /><FieldError msg={fe.staff} /></label>
+          <button onClick={async () => {
+            if (!guard({ staff: { label: "Staff email", value: staffEmail, rule: rules.email } }, setFe)) return;
+            try { if (team) setTeam({ ...team, ...(await owner.addStaff(store, staffEmail.trim())) }); setStaffEmail(""); toast.ok("Staff added."); }
+            catch (e) { toast.error(friendlyApiError(e)); }
+          }} className="btn btn-primary py-2 mt-6">Add staff</button>
+        </div>
       </section>
       <section className="section space-y-2">
         <h2 className="text-base font-semibold">Payments</h2>
         <p className="text-sm text-muted">Status: <span className={`chip ${doc.payments.provider === "razorpay" ? "chip-good" : "chip-muted"}`}>{doc.payments.provider === "razorpay" ? `Razorpay · ${doc.payments.key_id}` : "sandbox (no real money)"}</span></p>
         <div className="grid sm:grid-cols-2 gap-3 text-sm">
-          <label>Razorpay key id<input value={pay.key_id} onChange={(e) => setPay({ ...pay, key_id: e.target.value })} className="field mt-1" /></label>
-          <label>Razorpay key secret<input type="password" value={pay.key_secret} onChange={(e) => setPay({ ...pay, key_secret: e.target.value })} className="field mt-1" /></label>
+          <label>Razorpay key id<Req /><input value={pay.key_id} onChange={(e) => { setPay({ ...pay, key_id: e.target.value }); setFe({ ...fe, key_id: "" }); }} aria-invalid={!!fe.key_id} className="field mt-1" /><FieldError msg={fe.key_id} /></label>
+          <label>Razorpay key secret<Req /><input type="password" value={pay.key_secret} onChange={(e) => { setPay({ ...pay, key_secret: e.target.value }); setFe({ ...fe, key_secret: "" }); }} aria-invalid={!!fe.key_secret} className="field mt-1" /><FieldError msg={fe.key_secret} /></label>
         </div>
         <div className="flex gap-2">
-          <button onClick={async () => { await owner.patchPayments(store, pay); setPay({ key_id: "", key_secret: "" }); setMsg("Payment keys saved"); load(); }} disabled={!pay.key_id || !pay.key_secret} className="btn btn-primary py-2">Save keys</button>
+          <button onClick={async () => {
+            if (!guard({ key_id: { label: "Razorpay key id", value: pay.key_id, rule: (v) => (/^rzp_(test|live)_\w+$/.test(v.trim()) ? "" : "A Razorpay key id starts with rzp_test_ or rzp_live_.") },
+                         key_secret: { label: "Razorpay key secret", value: pay.key_secret } }, setFe)) return;
+            try { await owner.patchPayments(store, { key_id: pay.key_id.trim(), key_secret: pay.key_secret.trim() }); setPay({ key_id: "", key_secret: "" }); setMsg("Payment keys saved"); toast.ok("Payment keys saved."); load(); }
+            catch (e) { toast.error(friendlyApiError(e)); }
+          }} className="btn btn-primary py-2">Save keys</button>
           <button onClick={async () => { await owner.patchPayments(store, {}); setMsg("Back to sandbox"); load(); }} className="btn btn-ghost py-2">Use sandbox</button>
         </div>
       </section>
@@ -421,6 +452,7 @@ function AddByScan({ store, onSaved }: { store: string; onSaved: () => void }) {
   const [looking, setLooking] = useState(false);
   const [found, setFound] = useState<boolean | null>(null);
   const [msg, setMsg] = useState("");
+  const [fe, setFe] = useState<Errors>({});
   async function onCode(c: string) {
     setCode(c); setLooking(true); setFound(null);
     try { const r = await owner.lookup(store, c); setFound(r.found); if (r.found) setForm((f) => ({ ...f, name: r.name ?? "", brand: r.brand ?? "", category: r.category ?? "" })); }
@@ -428,21 +460,26 @@ function AddByScan({ store, onSaved }: { store: string; onSaved: () => void }) {
     setLooking(false);
   }
   async function save() {
+    if (!guard({ name: { label: "Product name", value: form.name },
+                 price: { label: "Selling price", value: form.price, rule: rules.number("Selling price", { min: 0.01 }) },
+                 mrp: { label: "MRP", value: form.mrp, optional: true, rule: (v) => rules.number("MRP", { min: Number(form.price) || 0.01 })(v) },
+                 on_hand: { label: "Stock on shelf", value: form.on_hand, rule: rules.number("Stock on shelf", { integer: true }) } }, setFe)) return;
     try {
       await owner.createProduct(store, { barcode: code, name: form.name, brand: form.brand, category: form.category, price: Number(form.price), mrp: form.mrp ? Number(form.mrp) : undefined, on_hand: Number(form.on_hand), aisle: form.aisle || undefined });
       setMsg(`Saved ${form.name}.`); setCode(""); setForm({ name: "", brand: "", category: "", price: "", mrp: "", on_hand: "", aisle: "" }); onSaved();
-    } catch (e) { setMsg(`Could not save: ${(e as Error).message}`); }
+    } catch (e) { setMsg(`Could not save: ${(e as Error).message}`); toast.error(`Could not save: ${friendlyApiError(e)}`); }
   }
+  const REQUIRED_KEYS = ["name", "price", "on_hand"];
   if (!code) return <div className="space-y-2">{msg && <div className="chip chip-good">{msg}</div>}<BarcodeScan onCode={onCode} onClose={onSaved} /></div>;
   return (
     <div className="card p-3 space-y-2 text-sm">
       <div className="flex items-center gap-2"><span className="mono">{code}</span>{looking ? <span className="chip chip-muted">Looking up</span> : found ? <span className="chip chip-good">Found in barcode database</span> : found === false ? <span className="chip chip-warn">Unknown barcode, fill in the details</span> : null}</div>
       <div className="grid sm:grid-cols-2 gap-2">
         {([["name", "Product name"], ["brand", "Brand"], ["category", "Category"], ["price", "Selling price (₹)"], ["mrp", "MRP (₹)"], ["on_hand", "Stock on shelf"], ["aisle", "Aisle"]] as const).map(([k, l]) => (
-          <label key={k} className="text-xs">{l}<input value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} inputMode={["price", "mrp", "on_hand"].includes(k) ? "decimal" : undefined} className="field mt-1 py-1.5 text-sm" /></label>
+          <label key={k} className="text-xs">{l}{REQUIRED_KEYS.includes(k) ? <Req /> : <span className="text-muted"> (optional)</span>}<input value={form[k]} onChange={(e) => { setForm({ ...form, [k]: e.target.value }); setFe({ ...fe, [k]: "" }); }} inputMode={["price", "mrp", "on_hand"].includes(k) ? "decimal" : undefined} aria-invalid={!!fe[k]} className="field mt-1 py-1.5 text-sm" /><FieldError msg={fe[k]} /></label>
         ))}
       </div>
-      <div className="flex gap-2"><button onClick={save} disabled={!form.name || !form.price || form.on_hand === ""} className="btn btn-primary py-2">Save product</button><button onClick={() => setCode("")} className="btn btn-ghost py-2">Scan another</button></div>
+      <div className="flex gap-2"><button onClick={save} className="btn btn-primary py-2">Save product</button><button onClick={() => setCode("")} className="btn btn-ghost py-2">Scan another</button></div>
     </div>
   );
 }
@@ -456,22 +493,32 @@ function InventoryTab({ store }: { store: string }) {
   const [moving, setMoving] = useState<{ pid: string; aisle: string; bay: string; side: "left" | "right" } | null>(null);
   const load = () => owner.inventory(store).then(setRows);
   useEffect(() => { load(); owner.store(store).then((d) => setAisleNames(d.floor_map.map((a) => a.aisle))).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const [moveErr, setMoveErr] = useState<Errors>({});
   async function move() {
     if (!moving) return;
-    try { await owner.setLocation(store, moving.pid, { aisle: moving.aisle, bay: Number(moving.bay) || 1, side: moving.side }); setMoving(null); load(); }
-    catch (e) { alert?.((e as Error).message); }
+    if (!guard({ aisle: { label: "Aisle", value: moving.aisle, missing: "Pick an aisle. Add aisles in Store settings first." },
+                 bay: { label: "Bay", value: moving.bay, rule: rules.number("Bay", { integer: true, min: 1 }) } }, setMoveErr)) return;
+    try { await owner.setLocation(store, moving.pid, { aisle: moving.aisle, bay: Number(moving.bay), side: moving.side }); setMoving(null); toast.ok("Product moved."); load(); }
+    catch (e) { toast.error(friendlyApiError(e)); }
   }
   const shown = rows.filter((r) => (filter === "all" || r.status === filter) && r.name.toLowerCase().includes(q.toLowerCase()));
   const STATUS: Record<InvRow["status"], string> = { ok: "Healthy", low: "Low", out: "Out of stock", dead: "Not selling", overstock: "Overstocked" };
   const FILTERS: [typeof filter, string][] = [["all", "All"], ["low", "Low"], ["out", "Out of stock"], ["dead", "Not selling"], ["overstock", "Overstocked"], ["ok", "Healthy"]];
   const counts = rows.reduce((m, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {} as Record<string, number>);
   async function edit(r: InvRow, field: "reorder_point" | "reorder_qty") {
-    const v = window.prompt?.(`${field.replace("_", " ")} for ${r.name}`, String(r[field]));
-    if (v && /^\d+$/.test(v)) { await owner.patchInventory(store, r.product_id, { [field]: Number(v) }); load(); }
+    const label = field === "reorder_point" ? "Reorder point" : "Reorder quantity";
+    const v = window.prompt?.(`${label} for ${r.name}`, String(r[field]));
+    if (v === null || v === undefined) return;                                   // cancelled
+    const problem = v.trim() === "" ? `${label} is required.` : rules.number(label, { integer: true })(v);
+    if (problem) { toast.error(problem); return; }
+    try { await owner.patchInventory(store, r.product_id, { [field]: Number(v) }); toast.ok(`${label} updated.`); load(); } catch (e) { toast.error(friendlyApiError(e)); }
   }
   async function count(r: InvRow) {
     const v = window.prompt?.(`Counted on shelf for ${r.name} (system says ${r.on_hand})`);
-    if (v && /^\d+$/.test(v)) { await owner.count(store, r.product_id, Number(v)); alert?.("Count recorded. See Loss tab for discrepancies."); }
+    if (v === null || v === undefined) return;
+    const problem = v.trim() === "" ? "The shelf count is required." : rules.number("The shelf count", { integer: true })(v);
+    if (problem) { toast.error(problem); return; }
+    try { await owner.count(store, r.product_id, Number(v)); toast.ok("Count recorded. See the Loss tab for discrepancies."); } catch (e) { toast.error(friendlyApiError(e)); }
   }
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-3">
@@ -500,10 +547,11 @@ function InventoryTab({ store }: { store: string }) {
                 <div className="flex flex-wrap items-center gap-2 text-sm py-1">
                   <span className="text-muted">Place <b className="text-ink">{r.name}</b> in</span>
                   <select value={moving.aisle} onChange={(e) => setMoving({ ...moving, aisle: e.target.value })} className="field w-auto py-1.5">{aisleNames.map((a) => <option key={a} value={a}>{a}</option>)}</select>
-                  <span className="text-muted">bay</span><input value={moving.bay} onChange={(e) => setMoving({ ...moving, bay: e.target.value })} inputMode="numeric" className="field w-16 py-1.5 mono" />
+                  <span className="text-muted">bay</span><input value={moving.bay} onChange={(e) => { setMoving({ ...moving, bay: e.target.value }); setMoveErr({}); }} inputMode="numeric" aria-invalid={!!moveErr.bay} className="field w-16 py-1.5 mono" />
                   <select value={moving.side} onChange={(e) => setMoving({ ...moving, side: e.target.value as "left" | "right" })} className="field w-auto py-1.5"><option value="left">left side</option><option value="right">right side</option></select>
-                  <button onClick={move} disabled={!moving.aisle} className="btn btn-primary py-1.5">Save</button>
-                  <button onClick={() => setMoving(null)} className="btn btn-ghost py-1.5">Cancel</button>
+                  <button onClick={move} className="btn btn-primary py-1.5">Save</button>
+                  <button onClick={() => { setMoving(null); setMoveErr({}); }} className="btn btn-ghost py-1.5">Cancel</button>
+                  <FieldError msg={moveErr.aisle || moveErr.bay} />
                   {aisleNames.length === 0 && <span className="text-xs text-warn">Draw the floor map in Store settings first.</span>}
                 </div>
               </td></tr>
@@ -581,6 +629,7 @@ function CustomersTab({ store }: { store: string }) {
   const [rows, setRows] = useState<Customer[] | null>(null);
   const [filter, setFilter] = useState<Customer["segment"] | "all">("all");
   const [editing, setEditing] = useState<{ uid: string; delta: string; reason: string } | null>(null);
+  const [pe, setPe] = useState<Errors>({});
   const [msg, setMsg] = useState("");
   const load = () => owner.customers(store).then(setRows).catch(() => setRows([]));
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -589,6 +638,8 @@ function CustomersTab({ store }: { store: string }) {
   const shown = rows.filter((r) => filter === "all" || r.segment === filter);
   async function savePoints() {
     if (!editing) return;
+    if (!guard({ delta: { label: "Points", value: editing.delta, rule: rules.number("Points", { integer: true, nonZero: true, min: -100000, max: 100000 }) },
+                 reason: { label: "Reason", value: editing.reason, missing: "A reason is required; it is kept in the audit log." } }, setPe)) return;
     try { await owner.adjustPoints(store, editing.uid, Number(editing.delta), editing.reason); setMsg("Points updated."); setEditing(null); load(); }
     catch (e) { setMsg((e as Error).message); }
   }
@@ -620,10 +671,11 @@ function CustomersTab({ store }: { store: string }) {
               {editing?.uid === r.uid && (
                 <tr><td colSpan={7} className="pb-2">
                   <div className="card p-2 flex flex-wrap items-center gap-2 text-sm">
-                    <input value={editing.delta} onChange={(e) => setEditing({ ...editing, delta: e.target.value })} inputMode="numeric" placeholder="+50 or -20" className="field w-28 py-1.5 mono" />
-                    <input value={editing.reason} onChange={(e) => setEditing({ ...editing, reason: e.target.value })} placeholder="Reason (kept in the audit log)" className="field flex-1 py-1.5 min-w-[200px]" />
-                    <button onClick={savePoints} disabled={!editing.delta || !editing.reason} className="btn btn-primary py-1.5">Save</button>
-                    <button onClick={() => setEditing(null)} className="btn btn-ghost py-1.5">Cancel</button>
+                    <input value={editing.delta} onChange={(e) => { setEditing({ ...editing, delta: e.target.value }); setPe({ ...pe, delta: "" }); }} inputMode="numeric" placeholder="+50 or -20" aria-label="Points" aria-invalid={!!pe.delta} className="field w-28 py-1.5 mono" />
+                    <input value={editing.reason} onChange={(e) => { setEditing({ ...editing, reason: e.target.value }); setPe({ ...pe, reason: "" }); }} placeholder="Reason (kept in the audit log) *" aria-label="Reason" aria-invalid={!!pe.reason} className="field flex-1 py-1.5 min-w-[200px]" />
+                    <button onClick={savePoints} className="btn btn-primary py-1.5">Save</button>
+                    <button onClick={() => { setEditing(null); setPe({}); }} className="btn btn-ghost py-1.5">Cancel</button>
+                    <FieldError msg={pe.delta || pe.reason} />
                   </div>
                 </td></tr>
               )}
@@ -644,41 +696,51 @@ function OffersTab({ store }: { store: string }) {
   const load = () => owner.offers(store).then(setRows).catch((e) => setMsg(e.message));
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   async function find() { try { setFound(await owner.searchProducts(store, query)); } catch { setFound([]); } }
+  const [oe, setOe] = useState<Errors>({});
   async function create() {
+    const fields: Parameters<typeof guard>[0] = {
+      name: { label: "Name shown to shoppers", value: form.name },
+      value: { label: "Discount", value: form.value, rule: rules.number("Discount", { min: 0.01, max: form.value_type === "percent" ? 90 : 100000 }) },
+    };
+    if (form.kind === "product") fields.product = { label: "Product", value: form.product_id, missing: "Search and pick the product this offer is for." };
+    if (form.kind === "category") fields.category = { label: "Category", value: form.category };
+    if (form.kind === "cart") fields.min_total = { label: "Bill amount", value: form.min_total, rule: rules.number("Bill amount", { min: 1 }) };
+    if (!guard(fields, setOe)) return;
     try {
       await owner.createOffer(store, { name: form.name, kind: form.kind, product_id: form.product_id, category: form.category, min_total: Number(form.min_total || 0),
         percent_off: form.value_type === "percent" ? Number(form.value) : 0, amount_off: form.value_type === "amount" ? Number(form.value) : 0,
         segment: form.segment, ends_at: form.ends_at ? new Date(form.ends_at + "T23:59:59").toISOString() : null });
-      setMsg("Offer is live."); setForm({ ...form, name: "", value: "", product_id: "", product_name: "" }); load();
-    } catch (e) { setMsg((e as Error).message); }
+      setMsg("Offer is live."); toast.ok("Offer is live."); setForm({ ...form, name: "", value: "", product_id: "", product_name: "" }); load();
+    } catch (e) { setMsg((e as Error).message); toast.error(friendlyApiError(e)); }
   }
-  const ready = form.name && Number(form.value) > 0 && (form.kind === "cart" || (form.kind === "product" ? !!form.product_id : !!form.category));
   return (
     <div className="px-4 lg:px-6 pb-10 space-y-4 max-w-6xl">
       <section className="card p-4 space-y-3 text-sm">
         <div><div className="eyebrow">New offer</div><p className="text-xs text-muted">Offers apply by themselves in the cart, the best one wins per item and one per bill. No codes.</p></div>
         <div className="grid sm:grid-cols-2 gap-2">
-          <label className="text-xs">Name shown to shoppers<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} className="field mt-1 py-1.5 text-sm" placeholder="Dairy week" /></label>
+          <label className="text-xs">Name shown to shoppers<Req /><input value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setOe({ ...oe, name: "" }); }} maxLength={60} aria-invalid={!!oe.name} className="field mt-1 py-1.5 text-sm" placeholder="Dairy week" /><FieldError msg={oe.name} /></label>
           <label className="text-xs">Kind<select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as OfferDoc["kind"] })} className="field mt-1 py-1.5 text-sm"><option value="product">One product</option><option value="category">A category</option><option value="cart">Whole bill above an amount</option></select></label>
           {form.kind === "product" && (
-            <div className="text-xs sm:col-span-2">Product
+            <div className="text-xs sm:col-span-2">Product<Req />
               <div className="flex gap-2 mt-1"><input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); find(); } }} placeholder="Search by name" className="field py-1.5 text-sm" /><button onClick={find} className="btn btn-ghost py-1.5">Find</button></div>
               {form.product_id && <div className="chip chip-accent mt-1">{form.product_name}</div>}
-              {found.length > 0 && <div className="flex flex-wrap gap-1.5 mt-1">{found.map((p) => <button key={p.product_id} onClick={() => { setForm({ ...form, product_id: p.product_id, product_name: p.name }); setFound([]); }} className="chip chip-muted">{p.name}</button>)}</div>}
+              <FieldError msg={oe.product} />
+              {found.length > 0 && <div className="flex flex-wrap gap-1.5 mt-1">{found.map((p) => <button key={p.product_id} onClick={() => { setForm({ ...form, product_id: p.product_id, product_name: p.name }); setFound([]); setOe({ ...oe, product: "" }); }} className="chip chip-muted">{p.name}</button>)}</div>}
             </div>
           )}
-          {form.kind === "category" && <label className="text-xs">Category<input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} maxLength={40} className="field mt-1 py-1.5 text-sm" placeholder="Dairy" /></label>}
-          {form.kind === "cart" && <label className="text-xs">Bill must be above (₹)<input value={form.min_total} onChange={(e) => setForm({ ...form, min_total: e.target.value })} inputMode="decimal" className="field mt-1 py-1.5 text-sm" placeholder="500" /></label>}
-          <label className="text-xs">Discount
+          {form.kind === "category" && <label className="text-xs">Category<Req /><input value={form.category} onChange={(e) => { setForm({ ...form, category: e.target.value }); setOe({ ...oe, category: "" }); }} maxLength={40} aria-invalid={!!oe.category} className="field mt-1 py-1.5 text-sm" placeholder="Dairy" /><FieldError msg={oe.category} /></label>}
+          {form.kind === "cart" && <label className="text-xs">Bill must be above (₹)<Req /><input value={form.min_total} onChange={(e) => { setForm({ ...form, min_total: e.target.value }); setOe({ ...oe, min_total: "" }); }} inputMode="decimal" aria-invalid={!!oe.min_total} className="field mt-1 py-1.5 text-sm" placeholder="500" /><FieldError msg={oe.min_total} /></label>}
+          <label className="text-xs">Discount<Req />
             <div className="flex gap-2 mt-1">
               <select value={form.value_type} onChange={(e) => setForm({ ...form, value_type: e.target.value as "percent" | "amount" })} className="field w-auto py-1.5 text-sm"><option value="percent">% off</option><option value="amount">₹ off{form.kind !== "cart" ? " each" : ""}</option></select>
-              <input value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} inputMode="decimal" className="field py-1.5 text-sm" placeholder={form.value_type === "percent" ? "10" : "20"} />
+              <input value={form.value} onChange={(e) => { setForm({ ...form, value: e.target.value }); setOe({ ...oe, value: "" }); }} inputMode="decimal" aria-invalid={!!oe.value} className="field py-1.5 text-sm" placeholder={form.value_type === "percent" ? "10" : "20"} />
             </div>
+            <FieldError msg={oe.value} />
           </label>
           <label className="text-xs">Who gets it<select value={form.segment} onChange={(e) => setForm({ ...form, segment: e.target.value as OfferDoc["segment"] })} className="field mt-1 py-1.5 text-sm">{OFFER_SEGMENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
           <label className="text-xs">Ends on (optional)<input type="date" value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} className="field mt-1 py-1.5 text-sm" /></label>
         </div>
-        <div className="flex items-center gap-2"><button onClick={create} disabled={!ready} className="btn btn-primary py-2">Create offer</button>{msg && <span className="text-xs text-muted">{msg}</span>}</div>
+        <div className="flex items-center gap-2"><button onClick={create} className="btn btn-primary py-2">Create offer</button>{msg && <span className="text-xs text-muted">{msg}</span>}</div>
       </section>
       <section className="section space-y-2">
         <div className="eyebrow">Offers</div>
@@ -758,9 +820,14 @@ function ConnectorsTab({ store }: { store: string }) {
   const input = (): SourceInput => ({ kind, file, ...src });
   const loadList = () => owner.connectors(store).then((r) => setList(r.connectors)).catch(() => {});
   useEffect(() => { loadList(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const ready = kind === "file" ? !!file : kind === "db" ? !!src.dsn && !!src.table : !!src.url;
+  const [ce, setCe] = useState<Errors>({});
+  const sourceFields = (): Parameters<typeof guard>[0] =>
+    kind === "file" ? { file: { label: "File", value: file ? file.name : "", missing: "Choose a file to analyse." } }
+    : kind === "db" ? { dsn: { label: "Connection string", value: src.dsn }, table: { label: "Table", value: src.table, missing: "Enter or pick a table (Find tables lists them)." } }
+    : { url: { label: kind === "sheet" ? "Sheet link" : "API link", value: src.url, rule: rules.https } };
 
   async function analyse(withMapping = false) {
+    if (!guard(sourceFields(), setCe)) return;
     setBusy("analyse"); setMsg("");
     try {
       const r = await owner.inspectSource(store, input(), withMapping ? mapping : undefined);
@@ -769,6 +836,10 @@ function ConnectorsTab({ store }: { store: string }) {
     setBusy("");
   }
   async function apply() {
+    const need: Parameters<typeof guard>[0] = {};
+    for (const k of REQUIRED_FIELDS) need[`map_${k}`] = { label: k, value: mapping[k] ?? "", missing: `Choose the column that holds ${k}.` };
+    if (kind !== "file" && keep) need.every = { label: "Interval", value: every, rule: rules.number("The interval", { integer: true, min: 5, max: 1440 }) };
+    if (!guard({ ...sourceFields(), ...need }, setCe)) return;
     setBusy("apply"); setMsg("");
     try {
       const r = await owner.applySource(store, input(), mapping, { label: label || file?.name || src.url || src.table || kind, save: keep && kind !== "file", every_min: Number(every) || 15 });
@@ -778,6 +849,7 @@ function ConnectorsTab({ store }: { store: string }) {
     setBusy("");
   }
   async function discover() {
+    if (!guard({ dsn: { label: "Connection string", value: src.dsn, missing: "Enter the connection string first." } }, setCe)) return;
     setBusy("discover"); setMsg("");
     try { const r = await owner.discoverTables(store, src.dsn); setTables(r.tables); if (!src.table && r.tables[0]) setSrc({ ...src, table: r.tables[0] }); }
     catch (e) { setMsg((e as Error).message); }
@@ -795,19 +867,19 @@ function ConnectorsTab({ store }: { store: string }) {
           {KINDS.map((k) => <button key={k.id} type="button" onClick={() => { setKind(k.id); setInsp(null); setMsg(""); }} className={`chip px-3 py-1.5 ${kind === k.id ? "bg-ink text-bg" : "chip-muted"}`}>{k.label}</button>)}
         </div>
         <p className="text-xs text-muted">{KINDS.find((k) => k.id === kind)?.hint}</p>
-        {kind === "file" && <input type="file" accept=".csv,.xlsx,.json,.pdf" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setInsp(null); }} className="text-sm" />}
-        {kind === "sheet" && <input value={src.url} onChange={(e) => setSrc({ ...src, url: e.target.value })} placeholder="https://docs.google.com/spreadsheets/d/\u2026" className="field" />}
+        {kind === "file" && <div><input type="file" accept=".csv,.xlsx,.json,.pdf" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setInsp(null); setCe({}); }} aria-invalid={!!ce.file} className="text-sm" /><FieldError msg={ce.file} /></div>}
+        {kind === "sheet" && <div><input value={src.url} onChange={(e) => { setSrc({ ...src, url: e.target.value }); setCe({}); }} placeholder="https://docs.google.com/spreadsheets/d/\u2026" aria-invalid={!!ce.url} className="field" /><FieldError msg={ce.url} /></div>}
         {kind === "api" && (
           <div className="grid sm:grid-cols-2 gap-2">
-            <input value={src.url} onChange={(e) => setSrc({ ...src, url: e.target.value })} placeholder="https://pos.example.com/items.json" className="field" />
+            <div><input value={src.url} onChange={(e) => { setSrc({ ...src, url: e.target.value }); setCe({}); }} placeholder="https://pos.example.com/items.json" aria-invalid={!!ce.url} className="field" /><FieldError msg={ce.url} /></div>
             <input value={src.auth} onChange={(e) => setSrc({ ...src, auth: e.target.value })} placeholder="Authorization header, e.g. Bearer \u2026 (optional)" className="field" type="password" autoComplete="off" />
           </div>
         )}
         {kind === "db" && (
           <div className="grid sm:grid-cols-3 gap-2">
-            <input value={src.dsn} onChange={(e) => { setSrc({ ...src, dsn: e.target.value }); setTables([]); }} placeholder="postgresql://user:password@host:5432/dbname" className="field sm:col-span-2" type="password" autoComplete="off" />
+            <div className="sm:col-span-2"><input value={src.dsn} onChange={(e) => { setSrc({ ...src, dsn: e.target.value }); setTables([]); setCe({}); }} placeholder="postgresql://user:password@host:5432/dbname" aria-invalid={!!ce.dsn} className="field" type="password" autoComplete="off" /><FieldError msg={ce.dsn || ce.table} /></div>
             <div className="flex gap-2">
-              <button type="button" onClick={discover} disabled={!src.dsn || busy !== ""} className="btn btn-ghost whitespace-nowrap">{busy === "discover" ? "Looking" : "Find tables"}</button>
+              <button type="button" onClick={discover} disabled={busy !== ""} className="btn btn-ghost whitespace-nowrap">{busy === "discover" ? "Looking" : "Find tables"}</button>
               {tables.length > 0
                 ? <select value={src.table} onChange={(e) => setSrc({ ...src, table: e.target.value })} className="field">{tables.map((t) => <option key={t} value={t}>{t}</option>)}</select>
                 : <input value={src.table} onChange={(e) => setSrc({ ...src, table: e.target.value })} placeholder="table" className="field" />}
@@ -815,7 +887,7 @@ function ConnectorsTab({ store }: { store: string }) {
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => analyse(false)} disabled={!ready || busy !== ""} className="btn btn-primary">{busy === "analyse" ? "Reading" : "Analyse"}</button>
+          <button onClick={() => analyse(false)} disabled={busy !== ""} className="btn btn-primary">{busy === "analyse" ? "Reading" : "Analyse"}</button>
           {insp && <span className="text-xs text-muted">{insp.row_count} rows, {insp.columns.length} columns{insp.proposal ? `, mapping by ${insp.proposal.source === "model" ? `AI (${Math.round(insp.proposal.confidence * 100)}% confident)` : "name matching"}` : ""}</span>}
         </div>
         {insp && (
@@ -827,10 +899,11 @@ function ConnectorsTab({ store }: { store: string }) {
               </div>
             ) : null}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-              {MAP_FIELDS.map((k) => <label key={k} className="text-xs">{k}{REQUIRED_FIELDS.includes(k) && <span className="text-bad">*</span>}
-                <select value={mapping[k] ?? ""} onChange={(e) => setMapping({ ...mapping, [k]: e.target.value })} className="field py-1.5 text-sm">
+              {MAP_FIELDS.map((k) => <label key={k} className="text-xs">{k}{REQUIRED_FIELDS.includes(k) && <Req />}
+                <select value={mapping[k] ?? ""} onChange={(e) => { setMapping({ ...mapping, [k]: e.target.value }); setCe({ ...ce, [`map_${k}`]: "" }); }} aria-invalid={!!ce[`map_${k}`]} className="field py-1.5 text-sm">
                   <option value="">not in source</option>{insp.columns.map((h) => <option key={h} value={h}>{h}</option>)}
                 </select>
+                <FieldError msg={ce[`map_${k}`]} />
               </label>)}
             </div>
             <button onClick={() => analyse(true)} disabled={busy !== ""} className="btn btn-ghost">Re-check with this mapping</button>
@@ -848,7 +921,8 @@ function ConnectorsTab({ store }: { store: string }) {
             {pv && (
               <div className="flex flex-wrap items-center gap-3">
                 <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Name this source" className="field max-w-xs" />
-                {kind !== "file" && <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> Keep in step every <input value={every} onChange={(e) => setEvery(e.target.value)} inputMode="numeric" className="field w-16 py-1" /> min</label>}
+                {kind !== "file" && <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> Keep in step every <input value={every} onChange={(e) => { setEvery(e.target.value); setCe({ ...ce, every: "" }); }} inputMode="numeric" aria-invalid={!!ce.every} className="field w-16 py-1" /> min</label>}
+                <FieldError msg={ce.every} />
                 <button onClick={apply} disabled={busy !== ""} className="btn btn-ink">{busy === "apply" ? "Applying" : "Apply to the catalog"}</button>
               </div>
             )}
@@ -891,12 +965,16 @@ function LiveSync({ store, mapping }: { store: string; mapping: Record<string, s
   const [msg, setMsg] = useState("");
   const load = () => owner.sync(store).then((v) => { setView(v); setForm({ webhook_url: v.settings.webhook_url, feed_url: v.settings.feed_url, feed_every_min: String(v.settings.feed_every_min) }); }).catch((e) => setMsg(e.message));
   useEffect(() => { load(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const [le, setLe] = useState<Errors>({});
   async function save(withMapping = false) {
+    if (!guard({ webhook_url: { label: "Sale webhook URL", value: form.webhook_url, optional: true, rule: rules.https },
+                 feed_url: { label: "CSV feed URL", value: form.feed_url, optional: true, rule: rules.https },
+                 every: { label: "Pull every", value: form.feed_every_min, rule: rules.number("Pull every", { integer: true, min: 5, max: 1440 }) } }, setLe)) return;
     try {
       const clean = Object.fromEntries(Object.entries(mapping).filter(([, v]) => v));
       setView(await owner.patchSync(store, { webhook_url: form.webhook_url, feed_url: form.feed_url, feed_every_min: Number(form.feed_every_min), ...(withMapping ? { feed_mapping: clean } : {}) }));
-      setMsg(withMapping ? "Saved with the mapping above." : "Saved.");
-    } catch (e) { setMsg((e as Error).message); }
+      setMsg(withMapping ? "Saved with the mapping above." : "Saved."); toast.ok("Sync settings saved.");
+    } catch (e) { setMsg((e as Error).message); toast.error(friendlyApiError(e)); }
   }
   async function rotate() {
     if (view?.settings.has_secret && !confirm("Rotating the secret breaks the shop system's current signature until it is updated there. Continue?")) return;
@@ -922,15 +1000,15 @@ function LiveSync({ store, mapping }: { store: string; mapping: Record<string, s
         {secret && <span className="text-xs text-warn">Shown once. Copy it into your billing software now.</span>}
       </div>
       <div className="grid sm:grid-cols-2 gap-2 text-sm">
-        <label className="text-xs sm:col-span-2">Sale webhook URL (we POST each paid order here)<input value={form.webhook_url} onChange={(e) => setForm({ ...form, webhook_url: e.target.value })} placeholder="https://your-system.example/royalstack" className="field mt-1 py-1.5 text-sm" /></label>
-        <label className="text-xs">CSV feed URL (a Sheet published as CSV, or a POS export)<input value={form.feed_url} onChange={(e) => setForm({ ...form, feed_url: e.target.value })} placeholder="https://docs.google.com/…/pub?output=csv" className="field mt-1 py-1.5 text-sm" /></label>
-        <label className="text-xs">Pull every (minutes)<input value={form.feed_every_min} onChange={(e) => setForm({ ...form, feed_every_min: e.target.value })} inputMode="numeric" className="field mt-1 py-1.5 text-sm" /></label>
+        <label className="text-xs sm:col-span-2">Sale webhook URL (we POST each paid order here)<input value={form.webhook_url} onChange={(e) => { setForm({ ...form, webhook_url: e.target.value }); setLe({ ...le, webhook_url: "" }); }} aria-invalid={!!le.webhook_url} placeholder="https://your-system.example/royalstack" className="field mt-1 py-1.5 text-sm" /><FieldError msg={le.webhook_url} /></label>
+        <label className="text-xs">CSV feed URL (a Sheet published as CSV, or a POS export)<input value={form.feed_url} onChange={(e) => { setForm({ ...form, feed_url: e.target.value }); setLe({ ...le, feed_url: "" }); }} aria-invalid={!!le.feed_url} placeholder="https://docs.google.com/…/pub?output=csv" className="field mt-1 py-1.5 text-sm" /><FieldError msg={le.feed_url} /></label>
+        <label className="text-xs">Pull every (minutes)<input value={form.feed_every_min} onChange={(e) => { setForm({ ...form, feed_every_min: e.target.value }); setLe({ ...le, every: "" }); }} aria-invalid={!!le.every} inputMode="numeric" className="field mt-1 py-1.5 text-sm" /><FieldError msg={le.every} /></label>
       </div>
       <div className="flex flex-wrap gap-2 items-center">
         <button onClick={() => save(false)} className="btn btn-primary py-2">Save</button>
         <button onClick={() => save(true)} className="btn btn-ghost py-2" title="Uses the column mapping from the import section above">Save with current mapping</button>
-        <button onClick={() => owner.pullNow(store).then((r) => { setMsg(`Pull: ${JSON.stringify(r)}`); load(); })} disabled={!view.settings.feed_url} className="btn btn-ghost py-2">Pull now</button>
-        <button onClick={() => owner.testWebhook(store).then((r) => { setMsg(r.ok ? "Test event delivered." : `Test failed: ${r.error}`); load(); })} disabled={!view.settings.webhook_url || !view.settings.has_secret} className="btn btn-ghost py-2">Send test event</button>
+        <button onClick={() => { if (!view.settings.feed_url) { toast.error("Add a CSV feed URL and save it before pulling."); return; } owner.pullNow(store).then((r) => { setMsg(`Pull: ${JSON.stringify(r)}`); load(); }).catch((e) => toast.error(friendlyApiError(e))); }} className="btn btn-ghost py-2">Pull now</button>
+        <button onClick={() => { if (!view.settings.webhook_url || !view.settings.has_secret) { toast.error("Save a sale webhook URL and generate a secret before sending a test."); return; } owner.testWebhook(store).then((r) => { setMsg(r.ok ? "Test event delivered." : `Test failed: ${r.error}`); load(); }).catch((e) => toast.error(friendlyApiError(e))); }} className="btn btn-ghost py-2">Send test event</button>
         {msg && <span className="text-xs text-muted">{msg}</span>}
       </div>
       <div className="text-xs text-muted">Feed mapping: {Object.keys(view.settings.feed_mapping).length ? Object.entries(view.settings.feed_mapping).map(([k, v]) => `${k}←${v}`).join(", ") : "not set"} · last pull {view.settings.last_pull_at ? new Date(view.settings.last_pull_at).toLocaleString() : "never"} · outbox {view.outbox.pending} waiting{view.outbox.dead ? `, ${view.outbox.dead} given up` : ""}</div>

@@ -8,6 +8,7 @@ export type Msg = { id: number; role: "user" | "assistant"; text: string; produc
   offers?: { name: string; detail: string }[];
   snapshot?: { today: { revenue: number; orders: number; avg_basket: number }; low_stock: number; out_of_stock: number; open_drafts: number; open_flags: number; signed_in_customers: number; live_offers: number; attention: string[] };
   rows?: { columns: string[]; rows: Record<string, unknown>[] };
+  voice?: { url?: string; seconds?: number; peaks?: number[] };     // a spoken user turn: played back from the browser, never uploaded
   facts?: { summary: string; sources: { title: string; url: string }[]; note: string;
     label?: { ingredients?: string | null; allergens?: string[]; nutrition_per_100g?: Record<string, number> | null; nutriscore?: string | null } | null } };
 

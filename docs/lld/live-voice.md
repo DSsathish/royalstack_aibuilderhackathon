@@ -134,3 +134,19 @@ Vietnamese and Mandarin (`cmn-CN`; `zh-CN` is refused). Punjabi, Urdu and Odia a
 store's first regional language plus English. The read-aloud voice for text replies is picked from the script of the text.
 A deliberate "End conversation" now also drops the session's resumption handle, so the next conversation starts with a
 fresh model context (the saved transcript memory still carries over); reconnects after a network drop still resume.
+
+
+## Addendum 18 Oct: spoken turns as voice notes
+Decided with the owner: a spoken user turn shows as a playable voice note, in the shopper and the owner assistant; the
+assistant's replies are unchanged. Audio stays in the browser; the text transcript is still what memory keeps.
+- `lib/voiceClip.ts`: `ClipBuffer` collects the PCM chunks actually sent to the model (chunks the echo guard replaced with
+  silence are never recorded), and `cut()` trims silence (RMS 0.012, two chunks of padding), drops turns with fewer than three
+  loud chunks, and writes a 16 kHz WAV with 28 waveform peaks. Capped at 30 s per turn.
+- `lib/live.ts`: a user transcript opens a turn; the first reply audio, the assistant transcript, a tool status or
+  turn_complete cuts it and reports the clip (`onUserAudio`). An `echo` frame discards the buffer.
+- While a voice note plays during a live session, the uplink sends silence (`notePlaying`), so the model never hears the
+  shopper's replayed voice; one note plays at a time.
+- Push-to-talk reuses the recording it already makes; the waveform is decoded in the browser.
+- `components/VoiceNote.tsx`: play/pause, waveform with progress, duration, and "Show text" for the transcript. A turn with
+  nothing loud enough to clip falls back to the text bubble at turn_complete; echo turns stay as "(echo from the speaker)".
+- Clips are object URLs: they disappear when the page closes and are never uploaded.

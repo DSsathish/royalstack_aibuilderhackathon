@@ -1,12 +1,15 @@
 "use client";
 import React, { useRef, useState } from "react";
 import type { Aisle, BlockKind } from "@/lib/api";
+import { toast } from "@/lib/toast";
+import FieldError from "./FieldError";
+import { FLOOR, MAX_BLOCKS, W, freeSpot } from "@/lib/floormap";
 
 const FLOOR_LABEL = ["", "Ground", "First", "Second", "Third", "Fourth", "Fifth"];
 const KINDS: [BlockKind, string][] = [["aisle", "Shelf aisle"], ["chiller", "Chiller (milk, curd, juice, meat)"], ["freezer", "Freezer (ice cream, frozen food)"], ["counter", "Service counter"]];
 const KIND_FILL: Record<string, string> = { aisle: "fill-surface-2", chiller: "fill-[#dbeefe]", freezer: "fill-[#e4f1fb]", counter: "fill-[#f3e9d9]" };
 
-const W = 1000, H = 600, FLOOR = 540, GRID = 10;      // same 1000 x 600 space the shopper map draws; corridor and entrance below 540
+const H = 600, GRID = 10;                             // same 1000 x 600 space the shopper map draws; corridor and entrance below FLOOR
 const snap = (v: number) => Math.round(v / GRID) * GRID;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -17,10 +20,12 @@ function nextName(aisles: Aisle[]): string {
 
 /** Owners draw their own floor: add aisles, drag them into place, resize from the corner, name them after what they hold.
  *  Shoppers see exactly this map, and the assistant uses the names when it gives directions. */
-export default function FloorMapEditor({ aisles: initial, counts = {}, saving, onSave }:
-  { aisles: Aisle[]; counts?: Record<string, number>; saving?: boolean; onSave: (aisles: Aisle[]) => void }) {
+export default function FloorMapEditor({ aisles: initial, counts = {}, saving, onSave, startFloor = 1, onFloorChange, error }:
+  { aisles: Aisle[]; counts?: Record<string, number>; saving?: boolean; onSave: (aisles: Aisle[]) => void;
+    startFloor?: number; onFloorChange?: (floor: number) => void; error?: string }) {
   const [aisles, setAisles] = useState<Aisle[]>(initial.map((a) => ({ floor: 1, kind: "aisle", ...a })));
-  const [floor, setFloor] = useState(1);
+  const [floor, setFloorState] = useState(startFloor);      // kept by the parent, so a save does not jump back to the ground floor
+  const setFloor = (f: number) => { setFloorState(f); onFloorChange?.(f); };
   const [sel, setSel] = useState<string | null>(initial[0]?.aisle ?? null);
   const floors = Array.from(new Set([1, ...aisles.map((a) => a.floor ?? 1)])).sort((a, b) => a - b);
   const onFloor = aisles.filter((a) => (a.floor ?? 1) === floor);
@@ -54,11 +59,15 @@ export default function FloorMapEditor({ aisles: initial, counts = {}, saving, o
   const endDrag = () => { drag.current = null; };
 
   function add(kind: BlockKind = "aisle") {
+    if (aisles.length >= MAX_BLOCKS) { toast.error(`A store map holds up to ${MAX_BLOCKS} blocks across all floors. Remove one to add another.`); return; }
     const base = kind === "aisle" ? "A" : kind === "chiller" ? "Chiller " : kind === "freezer" ? "Freezer " : "Counter ";
     let name = kind === "aisle" ? nextName(aisles) : base.trim();
     for (let i = 2; aisles.some((a) => a.aisle.toLowerCase() === name.toLowerCase()); i++) name = `${base.trim()} ${i}`;
-    const x = clamp(snap(60 + (onFloor.length % 7) * 130), 0, W - 90);
-    setAisles([...aisles, { aisle: name, x, y: 80, w: kind === "aisle" ? 90 : 110, h: kind === "aisle" ? 320 : 200, floor, kind }]); setSel(name);
+    const want = { w: kind === "aisle" ? 90 : 110, h: kind === "aisle" ? 320 : 200 };
+    const spot = freeSpot(onFloor, want.w, want.h);
+    if (!spot) toast.error("This floor is full, so the new block sits on top of others. Drag it into place or make room.");
+    const place = spot ?? { x: clamp(snap(40 + (onFloor.length % 10) * 20), 0, W - 60), y: 20, w: 60, h: 60 };
+    setAisles([...aisles, { aisle: name, ...place, floor, kind }]); setSel(name);
   }
   function addFloor() { const f = floors[floors.length - 1] + 1; if (f > 6) return; setFloor(f); setSel(null); }
   function rename(a: Aisle, raw: string) {
@@ -67,7 +76,10 @@ export default function FloorMapEditor({ aisles: initial, counts = {}, saving, o
     if (aisles.some((x) => x.aisle !== a.aisle && x.aisle.toLowerCase() === name.trim().toLowerCase())) { setNameErr("Another aisle already has that name."); return; }
     setNameErr(""); update(a.aisle, { aisle: name }); setSel(name);
   }
-  function remove(a: Aisle) { if (aisles.length <= 1) return; setAisles(aisles.filter((x) => x.aisle !== a.aisle)); setSel(null); }
+  function remove(a: Aisle) {
+    if (aisles.length <= 1) { toast.error("A floor map needs at least one block."); return; }
+    setAisles(aisles.filter((x) => x.aisle !== a.aisle)); setSel(null);
+  }
   function rotate(a: Aisle) { update(a.aisle, { w: clamp(a.h, 40, W - a.x), h: clamp(a.w, 40, FLOOR - a.y) }); }
   function lineUp() {
     const here = onFloor.filter((a) => (a.kind ?? "aisle") === "aisle");
@@ -85,15 +97,17 @@ export default function FloorMapEditor({ aisles: initial, counts = {}, saving, o
         </div>
       )}
       <div className="flex flex-wrap gap-2 items-center">
-        <button type="button" onClick={() => add("aisle")} disabled={aisles.length >= 16} className="btn btn-ghost py-2">Add aisle</button>
-        <button type="button" onClick={() => add("chiller")} disabled={aisles.length >= 16} className="btn btn-ghost py-2">Add chiller</button>
-        <button type="button" onClick={() => add("freezer")} disabled={aisles.length >= 16} className="btn btn-ghost py-2">Add freezer</button>
-        <button type="button" onClick={() => add("counter")} disabled={aisles.length >= 16} className="btn btn-ghost py-2">Add counter</button>
+        <button type="button" onClick={() => add("aisle")} className="btn btn-ghost py-2">Add aisle</button>
+        <button type="button" onClick={() => add("chiller")} className="btn btn-ghost py-2">Add chiller</button>
+        <button type="button" onClick={() => add("freezer")} className="btn btn-ghost py-2">Add freezer</button>
+        <button type="button" onClick={() => add("counter")} className="btn btn-ghost py-2">Add counter</button>
         <button type="button" onClick={lineUp} className="btn btn-ghost py-2">Line up aisles</button>
         <span className="flex-1" />
         {dirty && <span className="text-xs text-warn">Unsaved changes</span>}
+        <span className="text-xs text-muted">{aisles.length} of {MAX_BLOCKS} blocks</span>
         <button type="button" onClick={() => onSave(aisles)} disabled={!dirty || saving} className="btn btn-primary py-2">{saving ? "Saving" : "Save floor map"}</button>
       </div>
+      {error && <p role="alert" className="field-error">{error}</p>}
       <div className="grid lg:grid-cols-[minmax(0,1fr)_260px] gap-3">
         <svg ref={svg} viewBox={`0 0 ${W} ${H}`} className="w-full rounded-[10px] bg-surface border border-line select-none touch-none"
           onPointerMove={onMove} onPointerUp={endDrag} onPointerCancel={endDrag} onPointerDown={() => setSel(null)} role="application" aria-label="Floor map editor">
@@ -115,9 +129,9 @@ export default function FloorMapEditor({ aisles: initial, counts = {}, saving, o
           {current ? (
             <>
               <label className="block font-medium">Aisle name
-                <input key={current.aisle} defaultValue={current.aisle} onBlur={(e) => rename(current, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} maxLength={16} className="field mt-1" />
+                <input key={current.aisle} defaultValue={current.aisle} onBlur={(e) => rename(current, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} maxLength={16} aria-invalid={!!nameErr} className="field mt-1" />
+                <FieldError msg={nameErr} />
               </label>
-              {nameErr && <p className="chip chip-bad whitespace-normal">{nameErr}</p>}
               <label className="block font-medium">Type
                 <select value={current.kind ?? "aisle"} onChange={(e) => update(current.aisle, { kind: e.target.value as BlockKind })} className="field mt-1">{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               </label>
@@ -125,7 +139,7 @@ export default function FloorMapEditor({ aisles: initial, counts = {}, saving, o
               <div className="grid grid-cols-2 gap-2 text-xs text-muted"><span>Position {Math.round(current.x)}, {Math.round(current.y)}</span><span>Size {Math.round(current.w)} × {Math.round(current.h)}</span></div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => rotate(current)} className="btn btn-ghost py-1.5 text-xs">Rotate</button>
-                <button type="button" onClick={() => remove(current)} disabled={aisles.length <= 1} className="btn btn-ghost py-1.5 text-xs text-bad">Remove</button>
+                <button type="button" onClick={() => remove(current)} className="btn btn-ghost py-1.5 text-xs text-bad">Remove</button>
               </div>
             </>
           ) : <p className="text-muted">Select an aisle to name, move or resize it, or add a new one.</p>}

@@ -80,3 +80,16 @@ def test_session_creation_is_rate_limited_per_client(shop, monkeypatch):
     codes = [client.post("/sessions", json={"store_id": shop, "mode": "online"}).status_code for _ in range(3)]
     assert codes == [200, 200, 429]
     agent_api.limiter.clear()
+
+
+def test_chat_language_is_validated_and_used(shop, monkeypatch):
+    from app.agent import agent as agent_mod
+    seen = {}
+    async def fake_chat(s, text, image=None):
+        seen["language"] = s.language
+        yield {"type": "done", "text": "ok"}
+    monkeypatch.setattr(agent_mod, "chat", fake_chat)
+    sid = client.post("/sessions", json={"store_id": shop, "mode": "online"}).json()["session_id"]
+    assert client.post("/agent/chat", data={"session_id": sid, "message": "hi", "language": "xx"}).status_code == 422
+    assert client.post("/agent/chat", data={"session_id": sid, "message": "hi", "language": "ta"}).status_code == 200
+    assert seen["language"] == "ta"

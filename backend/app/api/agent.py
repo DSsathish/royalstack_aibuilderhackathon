@@ -83,8 +83,9 @@ def _sse(events):
 
 @router.post("/agent/chat")
 async def chat(session_id: str = Form(...), message: str = Form(min_length=1, max_length=2000),
-               image: UploadFile | None = File(default=None)):
+               image: UploadFile | None = File(default=None), language: str = Form(default="auto", pattern=languages.CODE_PATTERN)):
     s = _session(session_id)
+    s.language = language          # the language picked in the app, for this turn
     limit_chat(s.session_id)
     img = await _read_upload(image, "image")
     return _sse(agent.chat(s, message, img))
@@ -93,6 +94,7 @@ async def chat(session_id: str = Form(...), message: str = Form(min_length=1, ma
 @router.post("/agent/audio")
 async def audio(session_id: str = Form(...), audio: UploadFile = File(...), language: str = Form(default="auto", pattern=languages.CODE_PATTERN)):
     s = _session(session_id)
+    s.language = language
     limit_chat(s.session_id)
     data, mime = await _read_upload(audio, "audio")
     transcript = gemini.transcribe(data, mime, language)

@@ -218,10 +218,10 @@ def test_live_config_carries_the_chosen_language(monkeypatch, store_id):
     from app.services import db, sessions
     db.store_ref(store_id).set(Store(store_id=store_id, name="S").model_dump())
     s = sessions.create(store_id, "online")
-    assert "chose" not in live._config(s).system_instruction
+    assert "chose" not in live._config(s).system_instruction and "latest message" in live._config(s).system_instruction
     s.language = "ta"
     cfg = live._config(s)
-    assert "The shopper chose Tamil" in cfg.system_instruction
+    assert "the shopper chose Tamil" in cfg.system_instruction
 
 
 def test_live_transcript_language_hints(store_id):

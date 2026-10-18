@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ConfirmationResult } from "firebase/auth";
 import { confirmOtp, phoneUser, reverifyPhone, sendOtp } from "@/lib/firebase";
 import { friendlyAuthError as friendly, normaliseIndianMobile, validateIndianMobile } from "@/lib/phone";
+import { toast } from "@/lib/toast";
 
 /** Mobile number, then the one-time code. Indian numbers only for now (+91).
  *  With `reverify`, the signed-in shopper confirms a code sent to their own number (used before spending points). */
@@ -18,12 +19,17 @@ export default function PhoneSignIn({ onDone, onSkip, reverify }: { onDone: () =
   const codeDigits = code.replace(/\D/g, "");
 
   async function send() {
+    if (!reverify) {
+      const problem = !digits ? "Enter your mobile number." : validateIndianMobile(digits);
+      if (problem) { setError(problem); toast.error(problem); return; }
+    }
     setBusy(true); setError("");
     try { setPending(reverify ? await reverifyPhone("recaptcha-slot") : await sendOtp(full, "recaptcha-slot")); } catch (e) { setError(friendly(e)); }
     setBusy(false);
   }
   async function confirm() {
     if (!pending) return;
+    if (codeDigits.length !== 6) { const m = codeDigits ? "The code has 6 digits." : "Enter the 6-digit code from the text message."; setError(m); toast.error(m); return; }
     setBusy(true); setError("");
     try { await confirmOtp(pending, code.trim()); await onDone(); } catch (e) { setError(friendly(e)); setBusy(false); }
   }
@@ -48,7 +54,7 @@ export default function PhoneSignIn({ onDone, onSkip, reverify }: { onDone: () =
             {phoneProblem ? <span className="block text-xs text-bad mt-1">{phoneProblem}</span> : digits.length === 10 ? <span className="block text-xs text-muted mt-1">We will send a code to +91 {digits.slice(0, 5)} {digits.slice(5)}</span> : <span className="block text-xs text-muted mt-1">10-digit Indian mobile number, with or without +91.</span>}
           </label>
           <div className="flex gap-2">
-            <button onClick={send} disabled={busy || !!phoneProblem || digits.length !== 10} className="btn btn-primary">{busy ? "Sending" : "Send code"}</button>
+            <button onClick={send} disabled={busy} className="btn btn-primary">{busy ? "Sending" : "Send code"}</button>
             {onSkip && <button onClick={onSkip} className="btn btn-ghost">Skip for now</button>}
           </div>
         </>
@@ -59,7 +65,7 @@ export default function PhoneSignIn({ onDone, onSkip, reverify }: { onDone: () =
             <span className="block text-xs text-muted mt-1">{codeDigits.length}/6 digits</span>
           </label>
           <div className="flex gap-2">
-            <button onClick={confirm} disabled={busy || codeDigits.length !== 6} className="btn btn-primary">{busy ? "Checking" : "Verify"}</button>
+            <button onClick={confirm} disabled={busy} className="btn btn-primary">{busy ? "Checking" : "Verify"}</button>
             <button onClick={() => { setPending(null); setCode(""); }} className="btn btn-ghost">{reverify ? "Back" : "Change number"}</button>
           </div>
         </>

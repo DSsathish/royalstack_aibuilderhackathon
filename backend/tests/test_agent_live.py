@@ -1,3 +1,4 @@
+import re
 """Live evaluation against Gemini. Runs only when LIVE_GEMINI=1 and a key is configured.
 
     LIVE_GEMINI=1 backend/scripts/test.sh tests/test_agent_live.py -s
@@ -152,3 +153,17 @@ def test_owner_briefing_and_confirmed_offer(shop):
     assert "?" in reply or "confirm" in reply.lower() or "yes" in reply.lower(), reply
     tools, reply, _ = run(s, "Yes, go ahead")
     assert "create_offer" in tools and [o.name for o in offers.list_all(shop)] == ["Dairy week"], reply
+
+
+def test_owner_reply_follows_the_language_switch(shop):
+    """Owner memory spans visits; a Tamil history must not hold an English question (or a picked language) in Tamil."""
+    from app.services import conversation
+    s = sessions.create(shop, "owner", user_id="owner-lang")
+    conversation.add_turn(s, "user", "இன்றைய விற்பனை எப்படி?")
+    conversation.add_turn(s, "assistant", "இன்று விற்பனை நன்றாக உள்ளது.")
+    s.language = "auto"
+    _, reply, _ = run(s, "How many products are low on stock?")
+    assert not re.search(r"[\u0B80-\u0BFF]", reply), reply                      # English question, English answer
+    s.language = "ta"
+    _, reply, _ = run(s, "How many products are low on stock?")
+    assert re.search(r"[\u0B80-\u0BFF]", reply), reply                          # Tamil picked in the app wins

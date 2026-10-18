@@ -114,7 +114,7 @@ export default function MePage() {
 
       <section className="card p-4 space-y-3">
         <div className="eyebrow">Preferences</div>
-        <label className="block text-sm">Name<input value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} className="field mt-1" /></label>
+        <label className="block text-sm">Name <span className="text-muted">(optional)</span><input value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} className="field mt-1" /></label>
         <label className="block text-sm">Language<select value={form.language ?? "auto"} onChange={(e) => setForm({ ...form, language: e.target.value })} className="field mt-1">{LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}</select></label>
         <div className="text-sm">Dietary{chips("dietary", DIETARY)}</div>
         <div className="text-sm">Favourite categories{chips("favourite_categories", CATEGORIES)}</div>

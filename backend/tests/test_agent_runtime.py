@@ -18,7 +18,7 @@ def test_build_uses_mode_tools_and_prompt():
 
 def test_prompt_core_rules_present():
     p = prompts.for_mode("owner")
-    assert "tool" in p.lower() and "owner's language" in p.lower()
+    assert "tool" in p.lower() and "owner's latest message" in p.lower()
     assert "approval" in p.lower()
 
 
@@ -61,8 +61,9 @@ def test_instruction_includes_history_when_present():
     from app.agent.agent import instruction_for
     plain = instruction_for("instore", {"history": ""})
     with_hist = instruction_for("instore", {"history": "Earlier in this conversation (most recent last):\nShopper: milk?\nAssistant: Aisle A2."})
-    assert plain == prompts.for_mode("instore")
-    assert with_hist.startswith(prompts.for_mode("instore")) and with_hist.rstrip().endswith("Assistant: Aisle A2.")
+    assert plain == prompts.for_mode("instore") + prompts.language_block(None, "instore")
+    assert with_hist.startswith(prompts.for_mode("instore")) and "Assistant: Aisle A2." in with_hist
+    assert with_hist.index("Assistant: Aisle A2.") < with_hist.index("Language:")      # the language rule overrides the history
 
 
 def test_chat_records_turns_in_conversation_memory(store_id, monkeypatch):
@@ -82,3 +83,13 @@ def test_chat_records_turns_in_conversation_memory(store_id, monkeypatch):
     events = asyncio.run(go())
     assert events[-1] == {"type": "done", "text": "Yes, we have it."}
     assert [(t["role"], t["text"]) for t in conversation.recent(s)] == [("user", "Do you have atta?"), ("assistant", "Yes, we have it.")]
+
+
+def test_language_rule_comes_last_and_overrides_history():
+    from app.agent import agent as agent_mod
+    state = {"history": "Earlier in this conversation:\nOwner: வணக்கம்\nAssistant: வணக்கம்!", "language": "en"}
+    text = agent_mod.instruction_for("owner", state)
+    assert text.rstrip().endswith("Keep product names as they appear in the catalog.") and "chose English" in text
+    assert text.index("Earlier in this conversation") < text.index("Language:")
+    auto = agent_mod.instruction_for("owner", {**state, "language": "auto"})
+    assert "latest message" in auto.split("Language:")[-1]

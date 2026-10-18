@@ -194,10 +194,7 @@ def dispatch(name: str, args: dict, state: dict) -> dict:
 
 
 def _language_block(s: Session) -> str:
-    if s.language not in languages.LANGUAGES:
-        return ""
-    who, lang = "owner" if s.mode == "owner" else "shopper", languages.name(s.language)
-    return f"\nThe {who} chose {lang} in the app. Speak {lang} unless they clearly speak another language.\n"
+    return prompts.language_block(s.language, s.mode)
 
 
 def _transcription(s: Session, store_languages: list[str]) -> types.AudioTranscriptionConfig:
@@ -216,7 +213,7 @@ def _config(s: Session) -> types.LiveConnectConfig:
     store = prompts.store_state(s.store_id)
     return types.LiveConnectConfig(
         response_modalities=["AUDIO"],
-        system_instruction=prompts.for_mode(s.mode) + prompts.store_block(store) + prompts.customer_block(prompts.customer_state(s)) + VOICE_BLOCK + _language_block(s) + (f"\n{history}\n" if history else ""),
+        system_instruction=prompts.for_mode(s.mode) + prompts.store_block(store) + prompts.customer_block(prompts.customer_state(s)) + VOICE_BLOCK + (f"\n{history}\n" if history else "") + _language_block(s),
         tools=[types.Tool(function_declarations=declarations(s.mode))],
         input_audio_transcription=_transcription(s, store.get("languages") or []),
         output_audio_transcription=types.AudioTranscriptionConfig(),

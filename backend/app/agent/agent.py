@@ -50,7 +50,8 @@ _sessions = InMemorySessionService()
 def instruction_for(mode: Mode, state: dict) -> str:
     """Mode prompt, the store's identity, and the conversation so far, read from the session state each turn."""
     history = state.get("history") or ""
-    return prompts.for_mode(mode) + prompts.store_block(state) + prompts.customer_block(state) + (f"\n\n{history}\n" if history else "")
+    return (prompts.for_mode(mode) + prompts.store_block(state) + prompts.customer_block(state)
+            + (f"\n\n{history}\n" if history else "") + prompts.language_block(state.get("language"), mode))   # last: it overrides the history
 
 
 def build(mode: Mode) -> LlmAgent:

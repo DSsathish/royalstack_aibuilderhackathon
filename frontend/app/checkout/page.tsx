@@ -89,8 +89,9 @@ export default function Checkout() {
       {token && canUsePoints && (
         <label className="card p-3 text-sm flex items-center gap-3">
           <span className="flex-1">Points to use (50 to {maxPoints})</span>
-          <input type="number" min={50} max={maxPoints} value={usePoints} onChange={(e) => setUsePoints(Number(e.target.value))} className="field w-28 py-1.5 mono" />
-          {usePoints > 0 && usePoints < 50 && <span className="text-xs text-warn">Minimum 50</span>}
+          <input type="number" min={50} max={maxPoints} value={usePoints} onChange={(e) => setUsePoints(Number(e.target.value))} aria-invalid={usePoints > 0 && (usePoints < 50 || usePoints > maxPoints)} className="field w-28 py-1.5 mono" />
+          {usePoints > 0 && usePoints < 50 && <span role="alert" className="field-error mt-0">Use at least 50 points</span>}
+          {usePoints > maxPoints && <span role="alert" className="field-error mt-0">At most {maxPoints} on this bill</span>}
           <button onClick={() => { setToken(null); setUsePoints(0); }} className="btn btn-ghost py-1.5 text-xs">Remove</button>
         </label>
       )}

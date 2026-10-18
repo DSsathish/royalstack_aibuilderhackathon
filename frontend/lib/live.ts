@@ -4,6 +4,7 @@
 
 import { API } from "./api";
 import { EchoGuard, GuardMode, pcmRms } from "./echoGuard";
+import { Clip, ClipBuffer, notePlaying } from "./voiceClip";
 
 export type LiveFrame =
   | { type: "ready" } | { type: "interrupted" } | { type: "turn_complete" } | { type: "reconnect" } | { type: "echo" } | { type: "status"; tool: string }
@@ -15,6 +16,7 @@ export type { GuardMode };
 export type LiveHandlers = {
   onFrame: (f: LiveFrame) => void; onState: (s: LiveState) => void;
   onLevel?: (level: number, who: "mic" | "ai") => void; onGuard?: (mode: GuardMode) => void;
+  onUserAudio?: (clip: Clip) => void;        // the shopper's last spoken turn, as heard by the model, kept in the browser
 };
 export type LiveControl = { stop: () => void; interrupt: () => void };
 
@@ -105,7 +107,15 @@ export async function startLive(sessionId: string, language: string, h: LiveHand
   const guard = new EchoGuard();
   let mode: GuardMode = guard.mode;
   const reportMode = () => { if (guard.mode !== mode) { mode = guard.mode; h.onGuard?.(mode); } };
-  let held: { buf: ArrayBuffer; ok: boolean } | null = null;
+  let held: { buf: ArrayBuffer; ok: boolean; rms: number } | null = null;
+  const clips = new ClipBuffer();
+  let userOpen = false;                                               // a user turn was transcribed and its clip is not cut yet
+  const cutUser = () => {
+    if (!userOpen) return;
+    userOpen = false;
+    const clip = clips.cut();
+    if (clip) h.onUserAudio?.(clip);
+  };
   const url = `${API.replace(/^http/, "ws")}/agent/live?session_id=${sessionId}&language=${encodeURIComponent(language)}`;
   let ws: WebSocket;
   let ready = false;
@@ -114,10 +124,15 @@ export async function startLive(sessionId: string, language: string, h: LiveHand
   node.port.onmessage = (e) => {
     if (!ready || !ws || ws.readyState !== WebSocket.OPEN) return;
     const buf = e.data as ArrayBuffer;
-    const ok = guard.allow(pcmRms(new Int16Array(buf)), outLevel(), playing(), performance.now());
+    const rms = pcmRms(new Int16Array(buf));
+    const ok = guard.allow(rms, outLevel(), playing(), performance.now());
     reportMode();
-    if (held) ws.send(held.ok || ok ? held.buf : SILENCE);           // one chunk of look-ahead: the first syllable of an interruption survives
-    held = { buf, ok };
+    if (held) {                                                       // one chunk of look-ahead: the first syllable of an interruption survives
+      const real = (held.ok || ok) && !notePlaying();                 // a replayed voice note must not reach the model
+      if (real) clips.add(new Int16Array(held.buf), held.rms);
+      ws.send(real ? held.buf : SILENCE);
+    }
+    held = { buf, ok, rms };
   };
 
   function connect(reconnect = false) {
@@ -126,8 +141,11 @@ export async function startLive(sessionId: string, language: string, h: LiveHand
     ws = new WebSocket(url);
     ws.binaryType = "arraybuffer";
     ws.onmessage = (e) => {
-      if (e.data instanceof ArrayBuffer) { if (!discard) playChunk(e.data); return; }
+      if (e.data instanceof ArrayBuffer) { cutUser(); if (!discard) playChunk(e.data); return; }   // the reply starts: the user turn is over
       const f = JSON.parse(e.data) as LiveFrame;
+      if (f.type === "transcript" && f.role === "user") userOpen = true;
+      if ((f.type === "transcript" && f.role === "assistant") || f.type === "status" || f.type === "turn_complete") cutUser();
+      if (f.type === "echo") { userOpen = false; clips.clear(); }
       if (f.type === "ready") { ready = true; attempts = 0; setState("listening"); }
       if (f.type === "interrupted") { discard = false; flush(); }
       if (f.type === "turn_complete") discard = false;

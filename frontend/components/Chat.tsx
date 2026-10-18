@@ -11,6 +11,8 @@ import { IconCamera, IconMic, IconSend, IconSpeaker, IconStop } from "./Icons";
 import ProductCard from "./ProductCard";
 import StoreMap from "./StoreMap";
 import VoiceOrb, { OrbState } from "./VoiceOrb";
+import VoiceNote from "./VoiceNote";
+import { peaksOf } from "@/lib/voiceClip";
 
 const STATUS: Record<string, string> = {
   search_products: "Checking the shelves", navigate_to: "Finding the aisle", add_to_cart: "Adding to your cart",
@@ -43,6 +45,7 @@ export default function Chat() {
   const liveInterrupt = useRef<(() => void) | null>(null);
   const liveConnecting = useRef(false);
   const liveMsg = useRef<{ user: number | null; assistant: number | null }>({ user: null, assistant: null });
+  const pendingVoice = useRef<number | null>(null);          // the spoken user bubble waiting for its clip
   const bottom = useRef<HTMLDivElement>(null);
   const talking = live !== "closed" || voiceOn;
   const owner = session?.mode === "owner";
@@ -101,7 +104,7 @@ export default function Chat() {
     setBusy(true); setText("");
     photoTurn.current = !!image;
     push({ role: "user", text: message || "Photo of a product" });
-    await consume(api.chat(session, message || "What is this product?", image));
+    await consume(api.chat(session, message || "What is this product?", image, language));
     setBusy(false);
   }
   async function addFromCard(p: Product, fromPhoto: boolean) {
@@ -123,6 +126,10 @@ export default function Chat() {
       const ctl = await startLive(session.session_id, language, {
         onLevel: (l) => setLevel(l),
         onGuard: setGuard,
+        onUserAudio: (clip) => {
+          const id = pendingVoice.current; pendingVoice.current = null;
+          if (id !== null) patch(id, { voice: { url: URL.createObjectURL(clip.blob), seconds: clip.seconds, peaks: clip.peaks } });
+        },
         onState: (st) => {
           setLive(st);
           setOrb(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" || st === "reconnecting" ? "connecting" : "idle");
@@ -132,11 +139,18 @@ export default function Chat() {
         onFrame: (f: LiveFrame) => {
           if (f.type === "transcript") {
             const slot = f.role, cur = liveMsg.current[slot];
-            if (cur === null) liveMsg.current[slot] = push({ role: slot, text: f.text });
+            if (cur === null) {
+              const id = push({ role: slot, text: f.text, ...(slot === "user" ? { voice: {} } : {}) });
+              liveMsg.current[slot] = id;
+              if (slot === "user") pendingVoice.current = id;
+            }
             else patch(cur, { text: (useApp.getState().messages.find((m) => m.id === cur)?.text ?? "") + f.text });
             if (slot === "user") liveMsg.current.assistant = null;
-          } else if (f.type === "turn_complete") liveMsg.current = { user: null, assistant: null };
-          else if (f.type === "echo") { const cur = liveMsg.current.user; if (cur !== null) patch(cur, { text: "(echo from the speaker)" }); liveMsg.current.user = null; }
+          } else if (f.type === "turn_complete") {
+            if (pendingVoice.current !== null) { patch(pendingVoice.current, { voice: undefined }); pendingVoice.current = null; }   // nothing loud enough to clip: show the text
+            liveMsg.current = { user: null, assistant: null };
+          }
+          else if (f.type === "echo") { const cur = liveMsg.current.user; if (cur !== null) patch(cur, { text: "(echo from the speaker)", voice: undefined }); liveMsg.current.user = null; pendingVoice.current = null; }
           else if (f.type === "status") setOrb("thinking");      // a tool is running; the voice resumes when audio arrives
           else if (f.type === "action") { const id = liveMsg.current.assistant ?? (liveMsg.current.assistant = push({ role: "assistant", text: "" })); handleAction(f.name, f.data, id); }
           else if (f.type === "error") push({ role: "assistant", text: f.text });
@@ -161,10 +175,20 @@ export default function Chat() {
       if (!voiceRef.current) break;
       if (!heard) continue;
       setBusy(true);
-      const userId = push({ role: "user", text: "…" });
+      const userId = push({ role: "user", text: "…", voice: { url: URL.createObjectURL(heard.blob) } });
+      voicePeaks(heard.blob, userId);
       if (session) await consume(api.audio(session, heard.blob, language), userId);
       setBusy(false);
     }
+  }
+  /** The waveform for a push-to-talk recording, decoded in the browser. */
+  async function voicePeaks(blob: Blob, id: number) {
+    try {
+      const ctx = media.current?.ctx; if (!ctx) return;
+      const audio = await ctx.decodeAudioData(await blob.arrayBuffer());
+      const url = useApp.getState().messages.find((m) => m.id === id)?.voice?.url;
+      patch(id, { voice: { url, seconds: audio.duration, peaks: peaksOf(audio.getChannelData(0)) } });
+    } catch { /* no waveform: the note still plays */ }
   }
   function stopVoice() {
     voiceRef.current = false; setVoiceOn(false); setOrb("idle"); setLevel(0);
@@ -232,7 +256,8 @@ export default function Chat() {
         {messages.map((m) => (
           <div key={m.id} className={m.role === "user" ? "flex justify-end" : "space-y-2"}>
             <div className={`reveal px-3.5 py-2.5 text-[15px] max-w-[85%] whitespace-pre-wrap ${m.role === "user" ? "bubble-user" : "bubble-ai"}`}>
-              {m.text || (m.status ? <span className="text-muted inline-flex items-center gap-2"><span className="dot animate-pulse" />{m.status}</span> : <span className="text-muted">…</span>)}
+              {m.role === "user" && m.voice ? <VoiceNote url={m.voice.url} seconds={m.voice.seconds} peaks={m.voice.peaks} text={m.text} />
+                : m.text || (m.status ? <span className="text-muted inline-flex items-center gap-2"><span className="dot animate-pulse" />{m.status}</span> : <span className="text-muted">…</span>)}
             </div>
             {m.products && m.products.length > 0 && (
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3">

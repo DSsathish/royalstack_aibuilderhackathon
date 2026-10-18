@@ -1,4 +1,6 @@
 "use client";
+import FieldError, { Req } from "@/components/FieldError";
+import { Errors, guard, rules } from "@/lib/validate";
 import { useEffect, useRef, useState } from "react";
 import { Verification, api, money } from "@/lib/api";
 
@@ -8,6 +10,7 @@ type Detector = { detect(src: ImageBitmapSource): Promise<{ rawValue: string }[]
 /** Exit kiosk for a tablet: PIN -> scan receipt QR -> bag photo -> verdict. Staff clear amber/red results. */
 export default function Kiosk() {
   const [store, setStore] = useState(""); const [pin, setPin] = useState(""); const [kioskId, setKioskId] = useState("exit-1");
+  const [ke, setKe] = useState<Errors>({});
   const [step, setStep] = useState<Step>("setup");
   useEffect(() => {
     const t = setTimeout(() => {   // after hydration: restore the tablet's saved settings
@@ -76,10 +79,13 @@ export default function Kiosk() {
   if (step === "setup") return (
     <main className="flex-1 flex flex-col gap-3 p-6 max-w-sm mx-auto w-full justify-center">
       <div><div className="eyebrow">Exit kiosk</div><h1 className="text-2xl font-semibold">Set up this tablet</h1></div>
-      <input id="k-store" value={store} onChange={(e) => setStore(e.target.value)} placeholder="Store id (demo-grocery)" className="field" />
-      <input id="k-pin" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Kiosk PIN" type="password" className="field" />
-      <input id="k-name" value={kioskId} onChange={(e) => setKioskId(e.target.value)} placeholder="Kiosk name" className="field" />
-      <button onClick={() => { localStorage.setItem("rs.kiosk", JSON.stringify({ store, pin, kioskId })); setStep("scan"); }} disabled={!store || !pin} className="btn btn-primary py-3">Start</button>
+      <label className="text-sm font-medium">Store id<Req /><input id="k-store" value={store} onChange={(e) => { setStore(e.target.value); setKe({ ...ke, store: "" }); }} placeholder="demo-grocery" aria-invalid={!!ke.store} className="field mt-1" /><FieldError msg={ke.store} /></label>
+      <label className="text-sm font-medium">Kiosk PIN<Req /><input id="k-pin" value={pin} onChange={(e) => { setPin(e.target.value); setKe({ ...ke, pin: "" }); }} type="password" aria-invalid={!!ke.pin} className="field mt-1" /><FieldError msg={ke.pin} /></label>
+      <label className="text-sm font-medium">Kiosk name <span className="text-muted font-normal">(optional)</span><input id="k-name" value={kioskId} onChange={(e) => setKioskId(e.target.value)} placeholder="Exit 1" className="field mt-1" /></label>
+      <button onClick={() => {
+        if (!guard({ store: { label: "Store id", value: store }, pin: { label: "Kiosk PIN", value: pin, rule: rules.number("Kiosk PIN", { integer: true }) } }, setKe)) return;
+        localStorage.setItem("rs.kiosk", JSON.stringify({ store: store.trim(), pin: pin.trim(), kioskId })); setStep("scan");
+      }} className="btn btn-primary py-3">Start</button>
     </main>
   );
 

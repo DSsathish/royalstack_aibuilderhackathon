@@ -103,10 +103,11 @@ export const api = {
     fetch(`${API}/exit/${store_id}/review/${verification_id}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Kiosk-Pin": pin },
       body: JSON.stringify({ outcome, note }) }).then(json<Verification>),
 
-  async *chat(s: Session, message: string, image?: Blob): AsyncGenerator<UiEvent> {
+  async *chat(s: Session, message: string, image?: Blob, language = "auto"): AsyncGenerator<UiEvent> {
     const form = new FormData();
     form.set("session_id", s.session_id);
     form.set("message", message);
+    form.set("language", language);            // the language picked in the app; "auto" follows the latest message
     if (image) form.set("image", image, "photo.jpg");
     const res = await fetch(`${API}/agent/chat`, { method: "POST", body: form });
     if (!res.ok || !res.body) throw await toError(res);

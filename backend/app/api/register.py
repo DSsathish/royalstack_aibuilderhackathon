@@ -65,6 +65,9 @@ def register(body: RegisterIn, uid: str = Depends(current_uid)):
     return {"store": store.model_dump(exclude={"kiosk_pin"}), "kiosk_pin": store.kiosk_pin}
 
 
+MAX_BLOCKS = 48           # aisles, chillers, freezers and counters across all floors (6 floors x 8)
+
+
 class AisleIn(BaseModel):
     """One block on the 1000 x 600 floor. The corridor and entrance sit below y 540."""
     aisle: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ]*$")
@@ -85,7 +88,7 @@ class StorePatch(BaseModel):
     languages: list[str] | None = Field(default=None, max_length=5)
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     aisles: list[str] | None = Field(default=None, min_length=1, max_length=12)
-    floor_map: list[AisleIn] | None = Field(default=None, min_length=1, max_length=16)     # the owner's own layout
+    floor_map: list[AisleIn] | None = Field(default=None, min_length=1, max_length=MAX_BLOCKS)     # the owner's own layout
 
 
 @router.patch("/owner/{store_id}/store", response_model=Store, response_model_exclude=PUBLIC_STORE_EXCLUDE)
