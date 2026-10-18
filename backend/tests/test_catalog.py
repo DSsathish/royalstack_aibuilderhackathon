@@ -1,6 +1,6 @@
 import pytest
 
-from app.domain.models import Inventory, Location, Product
+from app.domain.models import Inventory, Location, Product, Store
 from app.services import catalog, db
 
 
@@ -67,3 +67,32 @@ def test_search_records_out_of_stock_signal(shop):
 
 def test_search_respects_k(shop):
     assert len(catalog.search(shop, "milk", k=1)) == 1
+
+
+def test_rare_words_outrank_common_ones_and_full_matches_win(store_id, monkeypatch):
+    from app.services import gemini
+    db.store_ref(store_id).set(Store(store_id=store_id, name="S").model_dump())
+    for sku, name in (("rin", "Rin Detergent Bar 250g"), ("lux", "Lux Soap Bar 100g"), ("dove", "Dove Cream Bar 75g"),
+                      ("amul", "Amul Dark Chocolate 150g"), ("cadbury", "Cadbury Dairy Milk Chocolate Bar 50g")):
+        p = Product.from_row(store_id=store_id, sku=sku, name=name, price=50, mrp=50, threshold=500)
+        db.products(store_id).document(p.product_id).set(p.model_dump())
+        db.inventory(store_id).document(p.product_id).set(Inventory(product_id=p.product_id, store_id=store_id, on_hand=5).model_dump())
+    catalog.invalidate(store_id)
+    monkeypatch.setattr(gemini, "embed_texts", lambda texts, for_query=False: [])
+    names = [h.name for h in catalog.search(store_id, "chocolate bar", k=5)]
+    assert names[0] == "Cadbury Dairy Milk Chocolate Bar 50g"          # both words
+    assert names[1] == "Amul Dark Chocolate 150g"                       # the rare word beats the common one
+    assert names[2:] and all("Bar" in n for n in names[2:])
+
+
+def test_pack_sizes_do_not_decide_the_ranking(store_id, monkeypatch):
+    from app.services import gemini
+    db.store_ref(store_id).set(Store(store_id=store_id, name="S").model_dump())
+    for sku, name in (("milk", "Aavin Toned Milk 500ml"), ("milk1l", "Amul Taaza Toned Milk 1 L"), ("colin", "Colin Glass Cleaner 500ml")):
+        p = Product.from_row(store_id=store_id, sku=sku, name=name, price=50, mrp=50, threshold=500)
+        db.products(store_id).document(p.product_id).set(p.model_dump())
+        db.inventory(store_id).document(p.product_id).set(Inventory(product_id=p.product_id, store_id=store_id, on_hand=5).model_dump())
+    catalog.invalidate(store_id)
+    monkeypatch.setattr(gemini, "embed_texts", lambda texts, for_query=False: [])
+    names = [h.name for h in catalog.search(store_id, "toned milk 500ml", k=3)]
+    assert names[:2] == ["Aavin Toned Milk 500ml", "Amul Taaza Toned Milk 1 L"]      # the milks before the cleaner that shares only the size

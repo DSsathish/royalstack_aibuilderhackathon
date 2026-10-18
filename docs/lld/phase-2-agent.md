@@ -153,3 +153,10 @@ production catalog found three faults, all fixed:
 Relevance notes from the battery: needs resolve to products ("headache" to Crocin and Dolo, "something for pooja" to
 lamp ghee and a pooja plate, "breakfast" to poha); Tamil and Hindi product words resolve through the multilingual
 embeddings; brand and pack queries rank the exact pack first.
+
+Ranking rules (18 Oct): each query word scores once per product, 3 in the name, else 2 as a brand or tag alias, else 1
+from the category or subcategory, scaled by how telling the word is (smoothed inverse document frequency normalised so a
+typical word weighs 1.0; packaging words and pack sizes such as "bar", "pack", "500ml", "5kg" weigh 0.3, listed in
+`domain/lexicon.py`); a product carrying every query word gets half as much again; plurals are folded. The semantic score
+(5 x cosine) stays on the same footing, so it decides between partial matches. Effect: "chocolate bar" returns
+chocolates with or without embeddings, "toned milk 500ml" the milks before a cleaner that shares only the size.

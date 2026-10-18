@@ -14,3 +14,9 @@ PET = {
 def words(table: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
     """All languages' words as one tuple, for the matchers."""
     return tuple(w for ws in table.values() for w in ws)
+
+
+# Packaging and unit words describe the pack, not the product: "chocolate bar" is about chocolate, "milk 1l" about milk.
+FORM_WORDS = frozenset({"pack", "packet", "pouch", "pc", "pcs", "piece", "pieces", "set", "combo", "box", "tin", "can", "jar",
+                        "bottle", "bar", "roll", "tube", "sachet", "strip", "tablet", "kg", "g", "gm", "gram", "ml", "l", "ltr",
+                        "litre", "liter", "cm", "mm", "inch", "x"})

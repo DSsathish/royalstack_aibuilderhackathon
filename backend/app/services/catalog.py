@@ -8,7 +8,7 @@ import uuid
 from pydantic import BaseModel
 
 from app.domain.models import DemandSignal, Location, Product
-from app.domain import classify
+from app.domain import classify, lexicon
 from app.services import db, gemini, inventory
 
 CACHE_TTL_S = 60
@@ -50,8 +50,32 @@ def _load(store_id: str) -> tuple[list[Product], dict[str, Location]]:
     version = _version(store_id)
     products = [Product(**d.to_dict()) for d in db.products(store_id).stream()]
     locations = {d.id: Location(**d.to_dict()) for d in db.locations(store_id).stream()}
-    _cache[store_id] = {"at": t, "checked": t, "version": version, "products": products, "locations": locations}
+    _cache[store_id] = {"at": t, "checked": t, "version": version, "products": products, "locations": locations,
+                        "weights": _token_weights(products)}
     return products, locations
+
+
+def _fields(p: Product) -> tuple[set[str], set[str], set[str], set[str]]:
+    return _tokens(p.name), _tokens(p.brand), _tokens(" ".join(p.tags)), _tokens(f"{p.category} {p.subcategory}")
+
+
+def _token_weights(products: list[Product]) -> dict[str, float]:
+    """How telling a word is: one that appears in few products weighs more than one in many ("pack", "1l"). Smoothed
+    inverse document frequency scaled so a typical word weighs 1.0, which keeps keyword and semantic scores on the
+    same footing as before; rare and common words then differ by ratio, not by scale."""
+    df: dict[str, int] = {}
+    for p in products:
+        for tok in set().union(*_fields(p)):
+            df[tok] = df.get(tok, 0) + 1
+    n = max(1, len(products))
+    raw = {tok: 1.0 + math.log((n + 1) / (c + 1)) for tok, c in df.items()}
+    mean = sum(raw.values()) / len(raw) if raw else 1.0
+    return {tok: (v / mean) * (FORM_WEIGHT if tok in lexicon.FORM_WORDS or _PACK.match(tok) else 1.0) for tok, v in raw.items()}
+
+
+def token_weights(store_id: str) -> dict[str, float]:
+    _load(store_id)
+    return _cache[store_id].get("weights") or {}
 
 
 def _view(store_id: str, p: Product, locations: dict[str, Location]) -> ProductView:
@@ -66,6 +90,8 @@ def blocks(store_id: str) -> dict[str, dict]:
 
 
 SECTIONS_TTL_S = 600
+FORM_WEIGHT = 0.3            # packaging and unit words (lexicon.FORM_WORDS) and pack sizes count this much of a telling word
+_PACK = re.compile(r"^\d+(\.\d+)?(kg|g|gm|ml|l|ltr|litre|liter|pcs?|pc|x|w)?$")   # 500ml, 5kg, 12, 9w: a size, not a product
 _sections_cache: dict[str, tuple[float, dict]] = {}
 
 
@@ -127,12 +153,27 @@ _TOKEN = re.compile(r"[\w஀-௿ऀ-ॿ]+")  # latin, tamil, devanagari
 
 
 def _tokens(text: str) -> set[str]:
-    return set(_TOKEN.findall(text.lower().replace("_", " ")))    # models often write snake_case ids
+    """Lower-cased words, plurals folded ("chocolates" meets "chocolate"); models often write snake_case ids."""
+    return {t[:-1] if len(t) > 3 and t.endswith("s") and not t.endswith("ss") else t
+            for t in _TOKEN.findall(text.lower().replace("_", " "))}
 
 
-def _keyword_score(q: set[str], p: Product) -> float:
-    name, brand, tags, cat = _tokens(p.name), _tokens(p.brand), _tokens(" ".join(p.tags)), _tokens(p.category)
-    return 3 * len(q & name) + 2 * len(q & brand) + 2 * len(q & tags) + len(q & cat)
+def _keyword_score(q: set[str], p: Product, weights: dict[str, float] | None = None) -> float:
+    """Each query word scores once: 3 in the name, else 2 as a brand or tag alias, else 1 from the category or
+    subcategory, scaled by how telling the word is (packaging words barely count). A product that carries every query
+    word gets half as much again, so "chocolate bar" prefers a chocolate bar to a soap bar; the semantic score decides
+    between partial matches."""
+    name, brand, tags, cat = _fields(p)
+    weights = weights or {}
+    score, matched = 0.0, 0
+    for tok in q:
+        field = 3 if tok in name else 2 if tok in brand or tok in tags else 1 if tok in cat else 0
+        if field:
+            matched += 1
+            score += field * weights.get(tok, 1.0)
+    if q and matched == len(q):
+        score *= 1.5
+    return score
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -148,13 +189,14 @@ def search(store_id: str, query: str, k: int = 6) -> list[ProductView]:
     qvec = (gemini.embed_texts([query], for_query=True) or [[]])[0]
 
     wanted = classify.query_use(query)
+    weights = token_weights(store_id)
     scored = []
     for p in products:
         if wanted and p.use != wanted:
             continue                      # "dog biscuits" means pet products only
         if not wanted and p.use == "pet":
             continue                      # nobody asked for pets: pet products never answer a people's query
-        kw = _keyword_score(q, p)
+        kw = _keyword_score(q, p, weights)
         sem = _cosine(qvec, p.embedding)
         if kw > 0 or sem > 0.6:
             scored.append((kw + 5 * sem, p))
