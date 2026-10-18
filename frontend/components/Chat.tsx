@@ -2,15 +2,18 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ApiError, Offer, Product, api } from "@/lib/api";
-import { GuardMode, LiveFrame, LiveState, liveSupported, startLive } from "@/lib/live";
+import { liveSupported } from "@/lib/live";
 import { UiEvent } from "@/lib/sse";
-import { Msg, sayAloud, useApp } from "@/lib/store";
+import { sayAloud, useApp } from "@/lib/store";
 import { LANGUAGES } from "@/lib/languages";
 import { listenOnce } from "@/lib/voice";
-import { IconCamera, IconMic, IconSend, IconSpeaker, IconStop } from "./Icons";
+import { IconCamera, IconMic, IconSend, IconSpeaker } from "./Icons";
 import ProductCard from "./ProductCard";
 import StoreMap from "./StoreMap";
-import VoiceOrb, { OrbState } from "./VoiceOrb";
+import VoiceDock from "./VoiceDock";
+import VoiceStrip from "./VoiceStrip";
+import { applyAction } from "@/lib/actions";
+import { useVoice, voice } from "@/lib/voiceSession";
 import VoiceNote from "./VoiceNote";
 import { peaksOf } from "@/lib/voiceClip";
 
@@ -18,26 +21,17 @@ const SUGGESTIONS = ["Where is atta?", "பால் எங்கே இரு�
 const OWNER_SUGGESTIONS = ["How are we doing today?", "What should I reorder?", "Which products are not selling?", "Create 10% off on Dairy for everyone", "Who are my VIP customers?", "What did shoppers ask for that we don't have?"];
 
 export default function Chat() {
-  const { session, setSession, store, messages, push, patch, setCart, setHighlight, language, setLanguage, speak, setSpeak, setAvatar, customer } = useApp();
+  const { session, setSession, store, messages, push, patch, setCart, language, setLanguage, speak, setSpeak, setAvatar, customer } = useApp();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [level, setLevel] = useState(0);
-  const [orb, setOrb] = useState<OrbState>("idle");
-  const [voiceOn, setVoiceOn] = useState(false);               // record-and-answer loop (fallback)
+  const liveState = useVoice((s) => s.live);                   // the conversation itself lives in lib/voiceSession
+  const [voiceOn, setVoiceOn] = useState(false);               // record-and-answer loop, only where live audio is unsupported
   const voiceRef = useRef(false);
   const media = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
-  const [live, setLive] = useState<LiveState>("closed");       // speech-to-speech
-  const [guard, setGuard] = useState<GuardMode>("unknown");    // loudspeaker or headphones, as measured by the echo guard
-  const [canLive, setCanLive] = useState(false);
+  const [canLive, setCanLive] = useState(true);
   useEffect(() => { setTimeout(() => setCanLive(liveSupported()), 0); }, []);
-  const liveStop = useRef<(() => void) | null>(null);
-  const liveSend = useRef<((text: string) => boolean) | null>(null);   // set while live voice is on: typed lines go into that conversation
-  const liveInterrupt = useRef<(() => void) | null>(null);
-  const liveConnecting = useRef(false);
-  const liveMsg = useRef<{ user: number | null; assistant: number | null }>({ user: null, assistant: null });
-  const pendingVoice = useRef<number | null>(null);          // the spoken user bubble waiting for its clip
   const bottom = useRef<HTMLDivElement>(null);
-  const talking = live !== "closed" || voiceOn;
+  const talking = liveState !== "closed" || voiceOn;
   const owner = session?.mode === "owner";
   const [offers, setOffers] = useState<Offer[]>([]);
   useEffect(() => {
@@ -61,23 +55,23 @@ export default function Chat() {
     if (!session) return;
     const id = push({ role: "assistant", text: "" });
     let buffer = "";
-    setAvatar("thinking"); setOrb("thinking");
+    setAvatar("thinking"); if (!voice.active()) useVoice.setState({ orb: "thinking" });
     try {
       for await (const e of make(session)) {
         if (e.type === "transcript" && userMsgId) patch(userMsgId, { text: e.text });
         else if (e.type === "status") patch(id, { status: e.label ?? "Working" });   // the label comes with the event: one wording for every surface
         else if (e.type === "token") { buffer += e.text; patch(id, { text: buffer, status: undefined }); }
         else if (e.type === "done") { buffer = e.text || buffer; patch(id, { text: buffer, status: undefined }); }
-        else if (e.type === "action") handleAction(e.name, e.data, id);
+        else if (e.type === "action") applyAction(e.name, e.data, id, photoTurn.current);
         else if (e.type === "error") { buffer = ""; patch(id, { text: e.text, status: undefined }); }
       }
       if ((speak || voiceRef.current) && buffer) {
-        setAvatar("speaking"); setOrb("speaking");
-        const pulse = setInterval(() => setLevel(0.35 + Math.random() * 0.4), 90);   // browser TTS exposes no signal; simulate cadence
+        setAvatar("speaking");
+        const stopPulse = voice.pulse();
         await sayAloud(buffer, language);
-        clearInterval(pulse); setLevel(0);
+        stopPulse();
       }
-      setAvatar("idle"); setOrb(voiceRef.current ? "listening" : "idle");
+      setAvatar("idle"); if (!voice.active()) useVoice.setState({ orb: voiceRef.current ? "listening" : "idle" });
     } catch (err) {
       if (sessionGone(err) && owner && !retried) {
         const next = await freshSession().catch(() => null);
@@ -85,34 +79,15 @@ export default function Chat() {
       }
       if (sessionGone(err) && !owner) { patch(id, { text: "Your visit has ended. Scan the entrance code again to continue.", status: undefined }); setSession(null); }
       else patch(id, { text: `Assistant unavailable: ${(err as Error).message}`, status: undefined });
-      setAvatar("idle"); setOrb("idle");
+      setAvatar("idle"); if (!voice.active()) useVoice.setState({ orb: "idle" });
     }
   }
 
-  function handleAction(name: string, data: Record<string, unknown>, id: number) {
-    if (name === "show_products") patch(id, { products: (data.products as Product[]) ?? [], fromPhoto: photoTurn.current });
-    else if (name === "show_product") patch(id, { products: [data as unknown as Product] });
-    else if (name === "highlight_map" && data.aisle) { const loc = data as Msg["map"]; setHighlight(loc!); patch(id, { map: loc }); }
-    else if (name === "cart_updated" && data.cart) refreshCart();
-    else if (name === "checkout_ready" && data.ok) patch(id, { checkout: true });
-    else if (name === "show_low_stock") patch(id, { lowStock: (data.items as Msg["lowStock"]) ?? [] });
-    else if (name === "drafts_created") patch(id, { drafts: (data.drafts as Msg["drafts"]) ?? [] });
-    else if (name === "show_offers") patch(id, { offers: (data.offers as Msg["offers"]) ?? [] });
-    else if (name === "show_snapshot" && data.today) patch(id, { snapshot: data as unknown as Msg["snapshot"] });
-    else if (name === "show_rows" && Array.isArray(data.rows) && Array.isArray(data.columns)) patch(id, { rows: { columns: data.columns as string[], rows: data.rows as Record<string, unknown>[] } });
-    else if (name === "show_facts" && data.ok) patch(id, { facts: { summary: String(data.summary ?? ""), sources: (data.sources as { title: string; url: string }[]) ?? [], note: String(data.note ?? ""), label: (data.label as NonNullable<Msg["facts"]>["label"]) ?? null } });
-  }
-  async function refreshCart() { if (session) setCart(await api.cart(session)); }
 
   const photoTurn = useRef(false);
   async function send(message: string, image?: Blob) {
     if (!session || (!message.trim() && !image)) return;
-    if (!image && liveSend.current?.(message.trim())) {               // live voice is on: the typed line is the next turn of that conversation
-      setText("");
-      push({ role: "user", text: message.trim() });
-      liveMsg.current = { user: null, assistant: null }; pendingVoice.current = null;
-      return;
-    }
+    if (!image && voice.sendText(message.trim())) { setText(""); return; }   // live voice is on: the typed line is its next turn
     if (busy) return;                                                 // one text turn at a time; the line stays in the box
     setBusy(true); setText("");
     photoTurn.current = !!image;
@@ -129,52 +104,6 @@ export default function Chat() {
   const whereIs = (p: Product) => send(`Where is ${p.name}?`);
 
   /** Speech-to-speech on the Gemini Live API. Transcripts and tool actions flow into the same thread. */
-  async function toggleLive() {
-    if (liveStop.current) { liveStop.current(); return; }
-    if (liveConnecting.current || !session) return;
-    if (voiceRef.current) stopVoice();
-    liveConnecting.current = true;
-    const live_session = (owner ? await freshSession().catch(() => null) : null) ?? session;   // an owner's voice session starts on a live id
-    let closedEarly = false;
-    try {
-      const ctl = await startLive(live_session.session_id, language, {
-        onLevel: (l) => setLevel(l),
-        onGuard: setGuard,
-        onUserAudio: (clip) => {
-          const id = pendingVoice.current; pendingVoice.current = null;
-          if (id !== null) patch(id, { voice: { url: URL.createObjectURL(clip.blob), seconds: clip.seconds, peaks: clip.peaks } });
-        },
-        onState: (st) => {
-          setLive(st);
-          setOrb(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "connecting" || st === "reconnecting" ? "connecting" : "idle");
-          setAvatar(st === "speaking" ? "speaking" : st === "listening" ? "listening" : st === "closed" ? "idle" : "thinking");
-          if (st === "closed") { closedEarly = true; liveStop.current = null; liveInterrupt.current = null; liveSend.current = null; liveMsg.current = { user: null, assistant: null }; setLevel(0); setGuard("unknown"); }
-        },
-        onFrame: (f: LiveFrame) => {
-          if (f.type === "transcript") {
-            const slot = f.role, cur = liveMsg.current[slot];
-            if (cur === null) {
-              const id = push({ role: slot, text: f.text, ...(slot === "user" ? { voice: {} } : {}) });
-              liveMsg.current[slot] = id;
-              if (slot === "user") pendingVoice.current = id;
-            }
-            else patch(cur, { text: (useApp.getState().messages.find((m) => m.id === cur)?.text ?? "") + f.text });
-            if (slot === "user") liveMsg.current.assistant = null;
-          } else if (f.type === "turn_complete") {
-            if (pendingVoice.current !== null) { patch(pendingVoice.current, { voice: undefined }); pendingVoice.current = null; }   // nothing loud enough to clip: show the text
-            liveMsg.current = { user: null, assistant: null };
-          }
-          else if (f.type === "echo") { const cur = liveMsg.current.user; if (cur !== null) patch(cur, { text: "(echo from the speaker)", voice: undefined }); liveMsg.current.user = null; pendingVoice.current = null; }
-          else if (f.type === "status") setOrb("thinking");      // a tool is running; the voice resumes when audio arrives
-          else if (f.type === "action") { const id = liveMsg.current.assistant ?? (liveMsg.current.assistant = push({ role: "assistant", text: "" })); handleAction(f.name, f.data, id); }
-          else if (f.type === "error") push({ role: "assistant", text: f.text });
-        },
-      });
-      if (closedEarly) ctl.stop(); else { liveStop.current = ctl.stop; liveInterrupt.current = ctl.interrupt; liveSend.current = ctl.sendText; }
-    } catch (e) { push({ role: "assistant", text: `Live voice could not start: ${(e as Error).message}` }); liveStop.current = null; setLive("closed"); setOrb("idle"); }
-    liveConnecting.current = false;
-  }
-
   /** Fallback: record until silence, answer, speak, listen again. Used where live audio is unsupported. */
   async function toggleVoice() {
     if (voiceRef.current) { stopVoice(); return; }
@@ -182,10 +111,10 @@ export default function Chat() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       media.current = { stream, ctx: new AudioContext() };
     } catch { push({ role: "assistant", text: "Microphone not available. Please type instead." }); return; }
-    voiceRef.current = true; setVoiceOn(true);
+    voiceRef.current = true; setVoiceOn(true); voice.registerFallback(stopVoice); useVoice.setState({ fallback: true, expanded: true });
     while (voiceRef.current && media.current) {
-      setOrb("listening"); setAvatar("listening");
-      const heard = await listenOnce(media.current.stream, media.current.ctx, () => !voiceRef.current, setLevel);
+      useVoice.setState({ orb: "listening" }); setAvatar("listening");
+      const heard = await listenOnce(media.current.stream, media.current.ctx, () => !voiceRef.current, (l) => useVoice.setState({ level: l }));
       if (!voiceRef.current) break;
       if (!heard) continue;
       setBusy(true);
@@ -205,26 +134,13 @@ export default function Chat() {
     } catch { /* no waveform: the note still plays */ }
   }
   function stopVoice() {
-    voiceRef.current = false; setVoiceOn(false); setOrb("idle"); setLevel(0);
+    voiceRef.current = false; setVoiceOn(false); voice.registerFallback(null); useVoice.setState({ orb: "idle", level: 0, fallback: false, expanded: false });
     window.speechSynthesis?.cancel();
     media.current?.stream.getTracks().forEach((t) => t.stop());
     media.current?.ctx.close(); media.current = null;
     setAvatar("idle");
   }
-  function toggleTalk() { if (canLive) toggleLive(); else toggleVoice(); }
-  function endTalk() { if (liveStop.current) liveStop.current(); if (voiceRef.current) stopVoice(); }
-  useEffect(() => () => { if (voiceRef.current) stopVoice(); liveStop.current?.(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
-  const liveLang = useRef(language);
-  useEffect(() => {                                                 // the live session's language is fixed when it connects: restart it
-    if (liveLang.current === language) return;
-    liveLang.current = language;
-    if (liveStop.current) { liveStop.current(); setTimeout(() => { void toggleLive(); }, 400); }
-  }, [language]);   // eslint-disable-line react-hooks/exhaustive-deps
-
-  const onSpeaker = guard === "speaker";                       // on a loudspeaker, interruptions are by tap, not by talking over
-  const orbCaption = live === "reconnecting" ? "Reconnecting, keep talking" : live === "connecting" ? "Connecting"
-    : orb === "listening" ? (onSpeaker ? "Listening. Just talk" : "Listening. Just talk, interrupt any time")
-    : orb === "speaking" ? (onSpeaker ? "Speaking. Tap to interrupt" : "Speaking") : orb === "thinking" ? "Checking" : "Tap to talk";
+  useEffect(() => () => { if (voiceRef.current) stopVoice(); if (owner) voice.end(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col h-full">
@@ -238,17 +154,10 @@ export default function Chat() {
           {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
         </select>
         <button onClick={() => setSpeak(!speak)} title={speak ? "Mute read-aloud" : "Read replies aloud"} className="text-muted"><IconSpeaker muted={!speak} /></button>
+        {owner && canLive && <VoiceDock variant="header" resolveSession={freshSession} />}
       </header>
 
-      {/* voice stage: the orb is the centrepiece while talking, a compact tap target otherwise */}
-      <div className={`flex flex-col items-center transition-all ${talking ? "py-2" : "py-0.5"}`}>
-        <button onClick={live !== "closed" ? () => liveInterrupt.current?.() : talking ? undefined : toggleTalk} className="rounded-full"
-          aria-label={live !== "closed" ? "Interrupt the assistant" : "Start voice conversation"} disabled={talking && live === "closed"}>
-          <VoiceOrb state={orb} level={level} size={talking ? 150 : 72} label={talking ? orbCaption : "Tap to talk"} />
-        </button>
-        {talking && <button onClick={endTalk} className="btn btn-ink mt-3"><IconStop className="w-4 h-4" /> End conversation</button>}
-        {live !== "closed" && <p className="text-xs text-muted mt-2">{guard === "speaker" ? "Loudspeaker: tap the orb to interrupt" : guard === "duplex" ? "Headphones: talk over any time" : "Checking for speaker echo"}</p>}
-      </div>
+      {owner && <VoiceStrip />}
 
       <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-3">
         {messages.length === 0 && !talking && offers.length > 0 && (
@@ -344,7 +253,7 @@ export default function Chat() {
           </label>
         )}
         <input id="chat-input" value={text} onChange={(e) => setText(e.target.value)} placeholder={owner ? "Ask about stock, sales, orders" : "Ask about products, prices, aisles"} className="field flex-1 rounded-full py-2.5" />
-        {!talking && <button type="button" onClick={toggleTalk} className="btn btn-ghost w-11 h-11 p-0 rounded-full" title="Talk"><IconMic /></button>}
+        {!canLive && !talking && <button type="button" onClick={toggleVoice} className="btn btn-ghost w-11 h-11 p-0 rounded-full" title="Talk"><IconMic /></button>}
         <button type="submit" disabled={busy || !text.trim()} className="btn btn-primary w-11 h-11 p-0 rounded-full" title="Send"><IconSend /></button>
       </form>
     </div>

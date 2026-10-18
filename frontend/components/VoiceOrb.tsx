@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useRef } from "react";
 
-export type OrbState = "idle" | "listening" | "thinking" | "speaking" | "connecting";
+import type { OrbState } from "@/lib/voiceText";
+export type { OrbState };
 
 /**
  * Circular audio level. `level` is 0..1: the microphone while listening, the assistant's speaker output while speaking.
  * Canvas, 60 fps, honours reduced motion (static ring with opacity only).
  */
-export default function VoiceOrb({ state, level, size = 220, label }: { state: OrbState; level: number; size?: number; label?: string }) {
+export default function VoiceOrb({ state, level, size = 220, label, showLabel = true }: { state: OrbState; level: number; size?: number; label?: string; showLabel?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const levelRef = useRef(0);
   const stateRef = useRef<OrbState>(state);
@@ -77,7 +78,7 @@ export default function VoiceOrb({ state, level, size = 220, label }: { state: O
   return (
     <div className="flex flex-col items-center gap-2" aria-live="polite">
       <canvas ref={canvas} style={{ width: size, height: size }} aria-label={`assistant ${state}`} />
-      <div className="eyebrow">{caption}</div>
+      {showLabel && <div className="eyebrow">{caption}</div>}
     </div>
   );
 }

@@ -10,6 +10,9 @@ import Scanner from "@/components/Scanner";
 import Cart from "@/components/Cart";
 import StoreMap from "@/components/StoreMap";
 import TotalBar from "@/components/TotalBar";
+import VoiceDock from "@/components/VoiceDock";
+import VoiceStrip from "@/components/VoiceStrip";
+import { useVoice, voice } from "@/lib/voiceSession";
 import { IconCart, IconChat, IconMap, IconScan } from "@/components/Icons";
 
 type Tab = "chat" | "scan" | "cart" | "map";
@@ -19,6 +22,8 @@ export default function Shop() {
   const { session, store, setStore, setCart, highlight, setSession, setCustomer } = useApp();
   const [tab, setTab] = useState<Tab>("chat");
   const [photo, setPhoto] = useState<File | null>(null);
+  const voiceOk = useVoice((s) => s.supported);
+  useEffect(() => { voice.detect(); return () => voice.end(); }, []);     // the conversation lives as long as this screen
 
   useEffect(() => {
     if (!session) { router.replace("/"); return; }
@@ -48,19 +53,23 @@ export default function Shop() {
         {tab === "scan" && <Scanner onPhoto={(f) => { setPhoto(f); setTab("chat"); }} />}
         {tab === "cart" && <div className="overflow-y-auto h-full"><Cart /></div>}
         {tab === "map" && store && (
-          <div className="p-3 space-y-2">
+          <div className="h-full overflow-y-auto p-3 space-y-2">
             <div className="eyebrow px-1">Store map</div>
             <StoreMap aisles={store.floor_map} target={highlight} youAreHere={session.aisle_hint} />
             <p className="text-xs text-muted text-center">{highlight ? `Highlighted: aisle ${highlight.aisle}, bay ${highlight.bay}, ${highlight.side} side` : "Ask the assistant where a product is, or scan an aisle QR to update your position."}</p>
           </div>
         )}
       </div>
+      <VoiceStrip />
       {session.mode !== "owner" && <TotalBar />}
-      <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`py-2 text-[11px] font-semibold flex flex-col items-center gap-0.5 ${tab === t.id ? "text-ink" : "text-muted"}`}>
-            <span className={`rounded-full px-3 py-0.5 ${tab === t.id ? "bg-accent-soft text-accent-ink" : ""}`}>{t.icon}</span>{t.label}
-          </button>
+      <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr items-end border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
+        {tabs.map((t, i) => (
+          <React.Fragment key={t.id}>
+            {i === 2 && voiceOk && <VoiceDock variant="nav" />}
+            <button onClick={() => setTab(t.id)} className={`py-2 text-[11px] font-semibold flex flex-col items-center gap-0.5 ${tab === t.id ? "text-ink" : "text-muted"}`}>
+              <span className={`rounded-full px-3 py-0.5 ${tab === t.id ? "bg-accent-soft text-accent-ink" : ""}`}>{t.icon}</span>{t.label}
+            </button>
+          </React.Fragment>
         ))}
       </nav>
     </div>
