@@ -30,6 +30,8 @@ SUPPLIERS = [
     ("sup-aavin", "Aavin Dairy Depot", "depot@aavin.example", 1),
     ("sup-hul", "HUL Distributor", "orders@hul.example", 4),
     ("sup-koyambedu", "Koyambedu Market Agent", "agent@koyambedu.example", 1),
+    ("sup-saravana", "Saravana Wholesale Mart", "orders@saravana.example", 5),
+    ("sup-general", "Chennai General Merchandise", "sales@cgm.example", 6),
 ]
 
 
