@@ -21,7 +21,11 @@ def _audit(store_id: str, actor: str, action: str, payload: dict) -> None:
 
 async def _source(kind: str, file: UploadFile | None, url: str, auth: str, dsn: str, table: str) -> dict:
     if kind not in connectors.KINDS:
-        raise HTTPException(400, "kind must be file, sheet, api or db")
+        raise HTTPException(400, "kind must be file, sheet, api, db or mcp")
+    if kind == "mcp":
+        if not url:
+            raise HTTPException(400, "the MCP server's URL is required")
+        return {"url": url, "auth": auth, "table": table or "list_products"}
     if kind == "file":
         if not file:
             raise HTTPException(400, "a file is required")
@@ -70,7 +74,7 @@ async def inspect(store_id: str = STORE_ID, kind: str = Form(...), file: UploadF
 async def apply(store_id: str = STORE_ID, kind: str = Form(...), file: UploadFile | None = File(default=None),
                 url: str = Form(default=""), auth: str = Form(default=""), dsn: str = Form(default=""), table: str = Form(default=""),
                 mapping: str = Form(...), label: str = Form(default=""), save: bool = Form(default=False), every_min: int = Form(default=15),
-                uid: str = Depends(current_uid)):
+                compare: bool = Form(default=False), compare_tool: str = Form(default="search_products"), uid: str = Depends(current_uid)):
     require_owner(store_id, uid)
     source = await _source(kind, file, url, auth, dsn, table)
     m = _mapping(mapping, required=True)
@@ -79,12 +83,31 @@ async def apply(store_id: str = STORE_ID, kind: str = Form(...), file: UploadFil
         saved = None
         if save and kind in connectors.KEEPABLE:
             saved = connectors.save(store_id, kind, label=label, mapping={k: v for k, v in m.items() if v}, actor=uid, url=source.get("url", ""), table=source.get("table", ""), every_min=every_min,
-                                    auth=source.get("auth", ""), dsn=source.get("dsn", ""))
+                                    auth=source.get("auth", ""), dsn=source.get("dsn", ""), compare=compare, compare_tool=compare_tool)
     except (connectors.SourceError, csvc.ImportError_) as exc:
         raise HTTPException(400, str(exc))
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"could not fetch the source: {exc}")
     return {"result": result, "connector": saved.model_dump() if saved else None}
+
+
+class McpIn(BaseModel):
+    url: str
+    auth: str = ""
+
+
+@router.post("/{store_id}/connectors/mcp/tools")
+def mcp_tools(body: McpIn, store_id: str = STORE_ID, uid: str = Depends(current_uid)):
+    """What the MCP server offers, so the owner can pick the catalog tool and the search tool."""
+    require_owner(store_id, uid)
+    try:
+        out = connectors.mcp_tools(body.url, body.auth)
+    except (connectors.SourceError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"could not reach the MCP server: {exc}")
+    _audit(store_id, uid, "connector_mcp_tools", {"url": body.url[:120], "tools": len(out["tools"])})
+    return out
 
 
 class DsnIn(BaseModel):

@@ -17,3 +17,6 @@ export const IconMinus = (p: { className?: string }) => <svg {...base} className
 export const IconClose = (p: { className?: string }) => <svg {...base} className={p.className}><path d="M6 6l12 12M18 6L6 18" /></svg>;
 export const IconBag = (p: { className?: string }) => <svg {...base} className={p.className}><path d="M6 8h12l1 13H5zM9 8V6a3 3 0 0 1 6 0v2" /></svg>;
 export const IconStore = (p: { className?: string }) => <svg {...base} className={p.className}><path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M9 20v-6h6v6" /></svg>;
+export const IconSearch = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+);

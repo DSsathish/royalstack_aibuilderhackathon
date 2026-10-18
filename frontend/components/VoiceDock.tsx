@@ -8,7 +8,7 @@ import VoiceOrb from "./VoiceOrb";
 
 /** The one voice control: a mic button when idle, the live orb during a conversation. It lives in the shopper's bottom
  *  bar or the owner's header, never over content (docs/lld/voice-widget.md). */
-export default function VoiceDock({ variant, resolveSession }: { variant: "nav" | "header"; resolveSession?: () => Promise<Session | null> }) {
+export default function VoiceDock({ variant, resolveSession }: { variant: "nav" | "header" | "fab"; resolveSession?: () => Promise<Session | null> }) {
   const live = useVoice((s) => s.live), orb = useVoice((s) => s.orb), level = useVoice((s) => s.level), expanded = useVoice((s) => s.expanded);
   const session = useApp((s) => s.session), language = useApp((s) => s.language);
   const action = dockAction(live, orb);
@@ -18,11 +18,14 @@ export default function VoiceDock({ variant, resolveSession }: { variant: "nav" 
     else if (action === "interrupt") voice.interrupt();
     else voice.toggleExpanded();
   }
-  const size = variant === "nav" ? 44 : 40;
+  const size = variant === "nav" ? 44 : variant === "fab" ? 52 : 40;
   const idle = live === "closed" && orb === "idle";
+  if (variant === "fab" && expanded && live !== "closed") return null;          // the strip carries the orb while it is open
+  const cls = variant === "nav" ? "py-1 text-[11px] font-semibold flex flex-col items-center gap-0.5 text-muted"
+    : variant === "fab" ? "fixed right-4 z-40 rounded-full shadow-lg" : "rounded-full shrink-0";
   return (
-    <button type="button" onClick={tap} aria-label={hint} title={hint} aria-pressed={live !== "closed"}
-      className={variant === "nav" ? "py-1 text-[11px] font-semibold flex flex-col items-center gap-0.5 text-muted" : "rounded-full shrink-0"}>
+    <button type="button" onClick={tap} aria-label={hint} title={hint} aria-pressed={live !== "closed"} className={cls}
+      style={variant === "fab" ? { bottom: "calc(9rem + env(safe-area-inset-bottom))" } : undefined}>
       {idle
         ? <span className="rounded-full flex items-center justify-center shadow-sm" style={{ width: size, height: size, background: "var(--accent)", color: "var(--bg)" }}><IconMic /></span>
         : <VoiceOrb state={orb} level={level} size={size} showLabel={false} />}

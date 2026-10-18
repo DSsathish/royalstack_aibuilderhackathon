@@ -40,6 +40,8 @@ export default function Chat() {
   }, [session, owner]);
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  const ask = useApp((s) => s.ask), setAsk = useApp((s) => s.setAsk);
+  useEffect(() => { if (ask) { setAsk(null); void send(ask); } }, [ask]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Sessions live four hours. An owner's dead session is replaced silently; a shopper's visit ends and the entrance page returns. */
   const sessionGone = (e: unknown) => e instanceof ApiError && (e.status === 404 || e.status === 401);

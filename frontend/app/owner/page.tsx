@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { User } from "firebase/auth";
 import { API, money, type Aisle } from "@/lib/api";
 import { addPassword, changeEmail, changePassword, createOwnerAccount, isPasswordUser, refreshVerified, resendVerification, resetPassword, signInWithEmail, signInWithGoogle, signOutOwner, watchUser } from "@/lib/firebase";
-import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner, ConnectorDoc, Inspection, SourceInput, InventoryField, UploadCheck, ProductDetail, ProductEdit } from "@/lib/owner";
+import { Customer, Draft, InvRow, Loss, OfferDoc, Overview, Signals, StoreDoc, SyncView, owner, ConnectorDoc, Inspection, SourceInput, InventoryField, UploadCheck, ProductDetail, ProductEdit, McpTools } from "@/lib/owner";
 import { QRCodeSVG } from "qrcode.react";
 import BarcodeScan from "@/components/BarcodeScan";
 import FloorMapEditor from "@/components/FloorMapEditor";
@@ -23,7 +23,7 @@ const NAV: { group: string; items: { id: Tab; label: string }[] }[] = [
   { group: "Stock", items: [{ id: "inventory", label: "Inventory" }, { id: "reorders", label: "Reorders" }, { id: "signals", label: "Demand signals" }] },
   { group: "Customers", items: [{ id: "customers", label: "Customers" }, { id: "offers", label: "Offers" }] },
   { group: "Trust", items: [{ id: "loss", label: "Loss and shrink" }, { id: "exits", label: "Exit checks" }] },
-  { group: "Store", items: [{ id: "setup", label: "Store settings" }, { id: "connectors", label: "Connectors" }] },
+  { group: "Store", items: [{ id: "setup", label: "Store settings" }, { id: "connectors", label: "Integrations" }] },
   { group: "You", items: [{ id: "account", label: "Account" }] },
 ];
 const STAFF_IDS: Tab[] = ["inventory", "exits", "account"];
@@ -38,7 +38,7 @@ const TITLES: Record<Tab, [string, string]> = {
   loss: ["Loss and shrink", "Shelf counts against system stock, exit outcomes and the controls behind them."],
   exits: ["Exit checks", "Every receipt scanned at the exit kiosk and how it was cleared."],
   setup: ["Store settings", "Products, aisles, branding, QR codes, team and payments."],
-  connectors: ["Connectors", "The connector agent brings in files, sheets, API feeds and databases, shows what would change, and keeps them in step. Also webhooks and QR codes."],
+  connectors: ["Inventory integrations", "Files, sheets, API feeds, databases and MCP servers: the connector agent reads them, shows what would change, keeps them in step, and can compare prices. Also webhooks and QR codes."],
   account: ["Account", "Your own sign-in: email and password. Store details live under Store settings."],
 };
 
@@ -1111,7 +1111,9 @@ const KINDS: { id: SourceInput["kind"]; label: string; hint: string }[] = [
   { id: "sheet", label: "Google Sheet", hint: "Share the sheet with \u201cAnyone with the link\u201d as viewer, then paste the link." },
   { id: "api", label: "API link", hint: "A JSON or CSV endpoint your billing or POS software serves over https. The auth header is stored in Secret Manager." },
   { id: "db", label: "Database", hint: "A Postgres or MySQL connection reachable from the internet. Read-only: one table is read, nothing is written." },
+  { id: "mcp", label: "MCP server", hint: "A Model Context Protocol server with product tools: Swiggy Instamart's once your client is approved, or Royal Stack's demo provider to try the flow now. The token is stored in Secret Manager; sample data stays labelled as such." },
 ];
+const DEMO_MCP = `${API}/mcp/demo/kirana-hub`;
 const MAP_FIELDS = ["sku", "name", "price", "on_hand", "barcode", "brand", "category", "subcategory", "mrp", "unit", "aisle", "supplier_id", "reorder_point", "reorder_qty", "lead_time_days", "tags"];
 const REQUIRED_FIELDS = ["sku", "name", "price", "on_hand"];
 
@@ -1121,6 +1123,8 @@ function ConnectorsTab({ store }: { store: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [src, setSrc] = useState({ url: "", auth: "", dsn: "", table: "" });
   const [tables, setTables] = useState<string[]>([]);
+  const [mcp, setMcp] = useState<McpTools | null>(null);
+  const [compare, setCompare] = useState(false);
   const [label, setLabel] = useState("");
   const [keep, setKeep] = useState(true);
   const [every, setEvery] = useState("15");
@@ -1130,14 +1134,22 @@ function ConnectorsTab({ store }: { store: string }) {
   const [msg, setMsg] = useState("");
   const [list, setList] = useState<ConnectorDoc[]>([]);
   const [qr, setQr] = useState<{ entrance_url: string; aisles: { aisle: string; url: string }[] } | null>(null);
-  const input = (): SourceInput => ({ kind, file, ...src });
+  const input = (): SourceInput => ({ kind, file, ...src, compare: kind === "mcp" && compare, compare_tool: "search_products" });
   const loadList = () => owner.connectors(store).then((r) => setList(r.connectors)).catch(() => {});
   useEffect(() => { loadList(); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [ce, setCe] = useState<Errors>({});
   const sourceFields = (): Parameters<typeof guard>[0] =>
     kind === "file" ? { file: { label: "File", value: file ? file.name : "", missing: "Choose a file to analyse." } }
     : kind === "db" ? { dsn: { label: "Connection string", value: src.dsn }, table: { label: "Table", value: src.table, missing: "Enter or pick a table (Find tables lists them)." } }
+    : kind === "mcp" ? { url: { label: "MCP server URL", value: src.url, rule: rules.https }, table: { label: "Catalog tool", value: src.table, missing: "Pick the tool that lists products (List tools shows them)." } }
     : { url: { label: kind === "sheet" ? "Sheet link" : "API link", value: src.url, rule: rules.https } };
+  async function listTools() {
+    if (!guard({ url: { label: "MCP server URL", value: src.url, rule: rules.https } }, setCe)) return;
+    setBusy("discover"); setMsg("");
+    try { const r = await owner.mcpTools(store, src.url, src.auth); setMcp(r); if (!src.table) { const first = r.tools.find((t) => /list|catalog|products/i.test(t.name)) ?? r.tools[0]; if (first) setSrc({ ...src, table: first.name }); } }
+    catch (e) { setMsg((e as Error).message); }
+    setBusy("");
+  }
 
   async function analyse(withMapping = false) {
     if (!guard(sourceFields(), setCe)) return;
@@ -1186,6 +1198,24 @@ function ConnectorsTab({ store }: { store: string }) {
           <div className="grid sm:grid-cols-2 gap-2">
             <div><input value={src.url} onChange={(e) => { setSrc({ ...src, url: e.target.value }); setCe({}); }} placeholder="https://pos.example.com/items.json" aria-invalid={!!ce.url} className="field" /><FieldError msg={ce.url} /></div>
             <input value={src.auth} onChange={(e) => setSrc({ ...src, auth: e.target.value })} placeholder="Authorization header, e.g. Bearer \u2026 (optional)" className="field" type="password" autoComplete="off" />
+          </div>
+        )}
+        {kind === "mcp" && (
+          <div className="space-y-2">
+            <div className="grid sm:grid-cols-2 gap-2">
+              <div><input value={src.url} onChange={(e) => { setSrc({ ...src, url: e.target.value }); setMcp(null); setCe({}); }} placeholder="https://mcp.example.com/catalog" aria-invalid={!!ce.url} className="field" /><FieldError msg={ce.url} /></div>
+              <input value={src.auth} onChange={(e) => setSrc({ ...src, auth: e.target.value })} placeholder="Authorization header, e.g. Bearer \u2026 (optional)" className="field" type="password" autoComplete="off" />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={listTools} disabled={busy !== ""} className="btn btn-ghost">{busy === "discover" ? "Connecting" : "List tools"}</button>
+              <button type="button" onClick={() => { setSrc({ ...src, url: DEMO_MCP, auth: "", table: "list_products" }); setMcp(null); setCe({}); }} className="text-xs text-accent font-semibold">Use the demo provider (sample data)</button>
+              {mcp && <span className="text-xs text-muted">{mcp.server.name ?? "server"}: {mcp.tools.length} tools</span>}
+            </div>
+            {mcp && <div className="flex flex-wrap gap-2">{mcp.tools.map((t) => <button key={t.name} type="button" onClick={() => setSrc({ ...src, table: t.name })} title={t.description} className={`chip ${src.table === t.name ? "bg-ink text-bg" : "chip-muted"}`}>{t.name}</button>)}</div>}
+            <div className="grid sm:grid-cols-2 gap-2 items-center">
+              <div><input value={src.table} onChange={(e) => { setSrc({ ...src, table: e.target.value }); setCe({}); }} placeholder="catalog tool, e.g. list_products" aria-invalid={!!ce.table} className="field" /><FieldError msg={ce.table} /></div>
+              <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} /> Also use this server when shoppers compare prices (its search_products tool)</label>
+            </div>
           </div>
         )}
         {kind === "db" && (
@@ -1251,6 +1281,7 @@ function ConnectorsTab({ store }: { store: string }) {
             return (
               <div key={c.connector_id} className="flex flex-wrap items-center gap-2 text-sm py-1.5 border-b border-line last:border-0">
                 <b>{c.label}</b><span className="chip chip-muted">{c.kind}</span>
+                {c.compare && <span className="chip chip-accent">price comparison</span>}
                 <span className="text-muted">every {c.every_min} min, last run {c.last_run_at ? new Date(c.last_run_at).toLocaleString() : "never"}{r.ok === true ? `: ${r.created} added, ${r.updated} updated` : r.ok === false ? `: failed, ${r.error}` : ""}</span>
                 <span className="flex-1" />
                 <button onClick={() => owner.runConnector(store, c.connector_id).then(loadList)} className="btn btn-ghost">Run now</button>

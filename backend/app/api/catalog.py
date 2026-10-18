@@ -7,7 +7,7 @@ from app.services import catalog, db
 from app.services.auth import STORE_ID
 
 router = APIRouter(tags=["catalog"])
-PUBLIC_EXCLUDE = {"embedding"}
+PUBLIC_EXCLUDE = {"embedding", "cost_price", "gst_rate", "is_high_value"}   # the shop's own numbers never leave the owner side
 
 
 @router.get("/stores/{store_id}", response_model=Store, response_model_exclude={"kiosk_pin", "audit_rate", "owner_emails", "staff_emails", "sync"})

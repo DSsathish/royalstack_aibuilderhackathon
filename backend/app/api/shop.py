@@ -104,6 +104,28 @@ def add_item(body: CartItemIn, cart_id: str = Path(pattern=HEX_ID), s: Session =
     return _cart_view(res, s)
 
 
+class QtyIn(BaseModel):
+    qty: int = Field(ge=0, le=99)
+
+
+@router.patch("/carts/{cart_id}/items/{product_id}")
+def set_item_qty(body: QtyIn, cart_id: str = Path(pattern=HEX_ID), product_id: str = Path(pattern=r"^[a-z0-9-]{3,80}$"), s: Session = Depends(session_header)):
+    """The cart's quantity stepper: zero removes the line. In store the stepper only reduces, since adding needs a scan."""
+    _own_cart(cart_id, s)
+    line = next((i for i in cart_svc.get(s.store_id, cart_id).items if i.product_id == product_id), None)
+    if line is None:
+        raise HTTPException(404, "not in the cart")
+    if s.mode == "instore" and body.qty > line.qty:
+        raise HTTPException(409, "scan_required")
+    cart = cart_svc.remove(s.store_id, cart_id, product_id)
+    if body.qty > 0:
+        res = cart_svc.add(s.store_id, cart_id, product_id, body.qty, via=line.via, mode=s.mode)
+        if isinstance(res, str):
+            raise HTTPException(409, res)
+        cart = res
+    return _cart_view(cart, s)
+
+
 @router.delete("/carts/{cart_id}/items/{product_id}")
 def remove_item(cart_id: str = Path(pattern=HEX_ID), product_id: str = Path(pattern=r"^[a-z0-9-]{3,80}$"), s: Session = Depends(session_header)):
     _own_cart(cart_id, s)

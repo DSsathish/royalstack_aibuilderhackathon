@@ -2,15 +2,17 @@
 import { useVoice, voice } from "@/lib/voiceSession";
 import { stripText } from "@/lib/voiceText";
 import { IconStop } from "./Icons";
+import VoiceDock from "./VoiceDock";
 
 /** Status and controls for the running conversation, in the page flow (never over the thread). Hide it and the orb in
  *  the bar keeps showing the state. */
-export default function VoiceStrip() {
+export default function VoiceStrip({ dock = false }: { dock?: boolean }) {
   const live = useVoice((s) => s.live), orb = useVoice((s) => s.orb), guard = useVoice((s) => s.guard), expanded = useVoice((s) => s.expanded), fallback = useVoice((s) => s.fallback);
   if ((live === "closed" && !fallback) || !expanded) return null;
   const { label, sub } = stripText(live, orb, guard, fallback);
   return (
     <div className="flex items-center gap-2 px-4 py-2 border-t border-line bg-surface text-sm" role="status" aria-live="polite">
+      {dock && <VoiceDock variant="header" />}
       <div className="min-w-0 flex-1">
         <div className="font-medium truncate">{label}</div>
         {sub && <div className="text-xs text-muted truncate">{sub}</div>}

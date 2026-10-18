@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import agent, catalog, exit, me, owner, owner_connectors, owner_import, owner_sync, products, register, shop, sync
+from app.api import agent, catalog, exit, me, owner, mcp, online, owner_connectors, owner_import, owner_sync, products, register, shop, sync
 from app.config import settings
 
 app = FastAPI(title="Retail Agent API", version="0.1.0")
@@ -35,6 +35,8 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 app.include_router(catalog.router)
 app.include_router(owner_import.router)
+app.include_router(online.router)
+app.include_router(mcp.router)
 app.include_router(agent.router)
 app.include_router(shop.router)
 app.include_router(exit.router)

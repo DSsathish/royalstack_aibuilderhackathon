@@ -13,14 +13,15 @@ import TotalBar from "@/components/TotalBar";
 import VoiceDock from "@/components/VoiceDock";
 import VoiceStrip from "@/components/VoiceStrip";
 import { useVoice, voice } from "@/lib/voiceSession";
-import { IconCart, IconChat, IconMap, IconScan } from "@/components/Icons";
+import { IconBag, IconCart, IconChat, IconMap, IconScan } from "@/components/Icons";
+import OnlineHome from "@/components/OnlineHome";
 
-type Tab = "chat" | "scan" | "cart" | "map";
+type Tab = "home" | "chat" | "scan" | "cart" | "map";
 
 export default function Shop() {
   const router = useRouter();
-  const { session, store, setStore, setCart, highlight, setSession, setCustomer } = useApp();
-  const [tab, setTab] = useState<Tab>("chat");
+  const { session, store, setStore, setCart, highlight, setSession, setCustomer, setAsk } = useApp();
+  const [tab, setTab] = useState<Tab>(() => (useApp.getState().session?.mode === "online" ? "home" : "chat"));
   const [photo, setPhoto] = useState<File | null>(null);
   const voiceOk = useVoice((s) => s.supported);
   useEffect(() => { voice.detect(); return () => voice.end(); }, []);     // the conversation lives as long as this screen
@@ -42,13 +43,15 @@ export default function Shop() {
   }, [store]);
 
   if (!session) return null;
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "chat", label: "Assistant", icon: <IconChat /> }, { id: "scan", label: "Scan", icon: <IconScan /> },
-    { id: "cart", label: "Cart", icon: <IconCart /> }, ...(session.mode === "instore" ? [{ id: "map" as Tab, label: "Map", icon: <IconMap /> }] : []),
-  ];
+  const online = session.mode === "online";
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = online
+    ? [{ id: "home", label: "Shop", icon: <IconBag /> }, { id: "chat", label: "Assistant", icon: <IconChat /> }, { id: "cart", label: "Cart", icon: <IconCart /> }]
+    : [{ id: "chat", label: "Assistant", icon: <IconChat /> }, { id: "scan", label: "Scan", icon: <IconScan /> },
+       { id: "cart", label: "Cart", icon: <IconCart /> }, { id: "map", label: "Map", icon: <IconMap /> }];
   return (
     <div className="flex flex-col h-dvh">
       <div key={tab} className="flex-1 overflow-hidden reveal">
+        {tab === "home" && <OnlineHome onPhoto={(f) => { setPhoto(f); setTab("chat"); }} onAsk={(q) => { setAsk(q); setTab("chat"); }} />}
         {tab === "chat" && <ChatWithPhoto photo={photo} clear={() => setPhoto(null)} />}
         {tab === "scan" && <Scanner onPhoto={(f) => { setPhoto(f); setTab("chat"); }} />}
         {tab === "cart" && <div className="overflow-y-auto h-full"><Cart /></div>}
@@ -60,12 +63,13 @@ export default function Shop() {
           </div>
         )}
       </div>
-      <VoiceStrip />
+      {online && voiceOk && <VoiceDock variant="fab" />}
+      <VoiceStrip dock={online} />
       {session.mode !== "owner" && <TotalBar />}
       <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr items-end border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
         {tabs.map((t, i) => (
           <React.Fragment key={t.id}>
-            {i === 2 && voiceOk && <VoiceDock variant="nav" />}
+            {i === 2 && voiceOk && !online && <VoiceDock variant="nav" />}
             <button onClick={() => setTab(t.id)} className={`py-2 text-[11px] font-semibold flex flex-col items-center gap-0.5 ${tab === t.id ? "text-ink" : "text-muted"}`}>
               <span className={`rounded-full px-3 py-0.5 ${tab === t.id ? "bg-accent-soft text-accent-ink" : ""}`}>{t.icon}</span>{t.label}
             </button>

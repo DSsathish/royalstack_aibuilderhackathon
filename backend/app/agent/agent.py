@@ -24,7 +24,7 @@ TRANSFER = "transfer_to_agent"
 
 ACTION_FOR_TOOL = {
     "search_products": "show_products",
-    "product_facts": "show_facts",
+    "product_facts": "show_facts", "compare_prices": "show_rows",
     "list_category": "show_rows",
     "store_overview": "show_rows",
     "connectors_status": "show_rows",

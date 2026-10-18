@@ -108,6 +108,7 @@ export const owner = {
     const form = sourceForm(src); form.set("mapping", JSON.stringify(mapping)); form.set("label", opts.label); form.set("save", String(opts.save)); form.set("every_min", String(opts.every_min));
     return multipart<{ result: ApplyResult; connector: ConnectorDoc | null }>(`/owner/${s}/connectors/apply`, form);
   },
+  mcpTools: (s: string, url: string, auth: string) => call<McpTools>(`/owner/${s}/connectors/mcp/tools`, { method: "POST", body: JSON.stringify({ url, auth }) }),
   discoverTables: (s: string, dsn: string) => call<{ tables: string[] }>(`/owner/${s}/connectors/discover`, { method: "POST", body: JSON.stringify({ dsn }) }),
   runConnector: (s: string, cid: string) => call<Record<string, unknown>>(`/owner/${s}/connectors/${cid}/run`, { method: "POST" }),
   removeConnector: (s: string, cid: string) => call<{ ok: boolean }>(`/owner/${s}/connectors/${cid}`, { method: "DELETE" }),
@@ -128,7 +129,8 @@ export const owner = {
 };
 
 /** Connector agent: a source the owner brings in (docs/lld/connector-agent.md). */
-export type SourceInput = { kind: "file" | "sheet" | "api" | "db"; file?: File | null; url?: string; auth?: string; dsn?: string; table?: string };
+export type SourceInput = { kind: "file" | "sheet" | "api" | "db" | "mcp"; file?: File | null; url?: string; auth?: string; dsn?: string; table?: string; compare?: boolean; compare_tool?: string };
+export type McpTools = { server: { name?: string; version?: string }; instructions: string; tools: { name: string; description: string }[] };
 export type Inspection = {
   kind: string; columns: string[]; samples: Record<string, string>[]; row_count: number; mapping: Record<string, string>;
   proposal: { notes: string[]; questions: string[]; confidence: number; source: string } | null;
@@ -136,12 +138,13 @@ export type Inspection = {
   problem: string;
 };
 export type ApplyResult = { created: number; updated: number; errors: number; rows: number; source: string; error_samples: { line: number; message: string }[] };
-export type ConnectorDoc = { connector_id: string; kind: string; label: string; url: string; table: string; mapping: Record<string, string>; every_min: number; enabled: boolean; last_run_at: string | null; last_result: Record<string, unknown> };
+export type ConnectorDoc = { connector_id: string; kind: string; label: string; url: string; table: string; mapping: Record<string, string>; every_min: number; enabled: boolean; compare?: boolean; last_run_at: string | null; last_result: Record<string, unknown> };
 
 function sourceForm(src: SourceInput): FormData {
   const form = new FormData(); form.set("kind", src.kind);
   if (src.file) form.set("file", src.file);
-  for (const k of ["url", "auth", "dsn", "table"] as const) if (src[k]) form.set(k, src[k]!);
+  for (const k of ["url", "auth", "dsn", "table", "compare_tool"] as const) if (src[k]) form.set(k, src[k]!);
+  if (src.compare) form.set("compare", "true");
   return form;
 }
 async function multipart<T>(path: string, form: FormData): Promise<T> {

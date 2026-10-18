@@ -33,6 +33,8 @@ type State = {
   setLanguage: (l: State["language"]) => void;
   setSpeak: (v: boolean) => void;
   setAvatar: (a: State["avatar"]) => void;
+  ask: string | null;                     // a question another screen hands to the assistant tab
+  setAsk: (q: string | null) => void;
 };
 
 let nextId = 1;
@@ -50,6 +52,8 @@ export const useApp = create<State>((set) => ({
   setLanguage: (language) => set({ language }),
   setSpeak: (speak) => set({ speak }),
   setAvatar: (avatar) => set({ avatar }),
+  ask: null,
+  setAsk: (ask) => set({ ask }),
 }));
 
 /** Read a reply aloud; resolves when speech ends. */

@@ -354,11 +354,27 @@ def product_facts(question: str, product_id: str = "", tool_context: ToolContext
     return facts.lookup(s["store_id"], s["session_id"], question, product, s.get("language") or "auto")
 
 
+def compare_prices(product_id: str, tool_context: ToolContext = None) -> dict:
+    """What the same product costs at other providers the shop has connected, plus a demo provider whose rows are sample
+    data. Pass the product_id or exact name. Returns rows for a table; say plainly which rows are demo data."""
+    from app.services import providers
+    s = tool_context.state
+    product = _find(s["store_id"], product_id)
+    if not product:
+        return {"ok": False, "note": "no such product in this shop"}
+    rows = providers.compare(s["store_id"], product)
+    return {"ok": True, "product": product.name, "our_price": product.price,
+            "columns": ["provider", "status", "price", "mrp", "available", "note"],
+            "rows": [{"provider": r["label"] + (" [demo data]" if r.get("demo") else ""), "status": r["status"], "price": r.get("price"),
+                      "mrp": r.get("mrp"), "available": r.get("available"), "note": r.get("note", "")} for r in rows],
+            "note": "Rows marked demo data are samples, not live prices."}
+
+
 TOOLS_BY_MODE = {
     "instore": [search_products, list_category, store_overview, get_product, suggest_substitutes, navigate_to, record_demand_signal,
                 remove_from_cart, view_cart, start_checkout, get_offers, product_facts],      # items enter the cart only by scanning
     "online": [search_products, list_category, store_overview, get_product, suggest_substitutes, record_demand_signal,
-               add_to_cart, remove_from_cart, view_cart, start_checkout, get_offers, product_facts],
+               add_to_cart, remove_from_cart, view_cart, start_checkout, get_offers, product_facts, compare_prices],
     "owner": [],      # filled below from owner_tools: a separate agent with full access to the store
 }
 

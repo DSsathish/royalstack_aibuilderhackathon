@@ -4,7 +4,7 @@ wording lives here and nowhere in the clients."""
 TOOLS = {
     "search_products": "Checking the shelves", "list_category": "Listing the section", "store_overview": "Reading the sections",
     "get_product": "Checking the product", "suggest_substitutes": "Looking for alternatives", "navigate_to": "Finding the aisle",
-    "product_facts": "Looking up facts", "record_demand_signal": "Noting your request", "get_offers": "Checking offers",
+    "product_facts": "Looking up facts", "compare_prices": "Comparing prices", "record_demand_signal": "Noting your request", "get_offers": "Checking offers",
     "add_to_cart": "Adding to your cart", "remove_from_cart": "Updating your cart", "view_cart": "Opening your cart",
     "start_checkout": "Preparing checkout",
     "store_snapshot": "Pulling today's figures", "stock_report": "Reading the stock report", "find_products": "Searching the inventory",

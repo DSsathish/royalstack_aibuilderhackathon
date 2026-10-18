@@ -2,7 +2,8 @@
 online, busier at weekends and in the evening), forty customers with segments, demand signals from the last week, a few
 products run down to zero or low stock, shelf counts with discrepancies, exit checks and three offers.
 
-Deterministic (seeded random) and idempotent: documents carry stable ids, so a re-run overwrites the same ones.
+Deterministic (seeded random) and idempotent: stock is first restored from the catalog file, documents carry stable ids, and
+sample orders an earlier run left behind are removed, so a re-run lands in the same place.
 
   backend/.venv/bin/python infra/seed/sample_activity.py --store dailygoods
   backend/.venv/bin/python -m app.jobs.forecast --store dailygoods      # then: days of cover and reorder drafts
@@ -46,14 +47,38 @@ def _popular(products: list[dict], rnd: random.Random) -> list[tuple[dict, float
     """Every product with a long-tail weight: three hundred everyday lines carry most sales, the rest sell now and
     then, and about a fifth of the catalog does not sell at all in the period."""
     boost = {"Grocery and Food Products": 3.0, "Dairy, Bread and Eggs": 3.0, "Fruits and Vegetables": 2.5, "Snacks and Branded Foods": 2.0, "Beverages": 1.8}
-    pool = sorted(products, key=lambda p: rnd.random() / boost.get(p.get("category", ""), 1.0))
+    pool = sorted(products, key=lambda p: rnd.random() / boost.get(p.get("category", ""), 1.0) + (0 if p.get("category", "") in boost else 1.0))   # everyday categories lead
     head = [(p, 1.0 / (i + 3)) for i, p in enumerate(pool[:300])]
     tail = [(p, 0.0012) for p in pool[300:int(len(pool) * 0.8)]]
     return head + tail
 
 
-def run(store_id: str) -> dict:
+def reset_stock(store_id: str, baseline: Path) -> int:
+    """Stock back to the catalog file's on_hand and the sample counts cleared, so a re-run starts from the same place."""
+    import csv
+    from app.connectors.csv_connector import slug
+    have = {d.id for d in db.inventory(store_id).select([]).stream()}
+    batch, n, done = db.client().batch(), 0, 0
+    for r in csv.DictReader(baseline.open(encoding="utf-8")):
+        pid = f"{store_id}-{slug(r['sku'])}"
+        if pid not in have:
+            continue
+        batch.update(db.inventory(store_id).document(pid), {"on_hand": int(float(r.get("on_hand") or 0))}); n += 1; done += 1
+        if n >= 400:
+            batch.commit(); batch, n = db.client().batch(), 0
+    for d in db.counts(store_id).select([]).stream():
+        batch.delete(d.reference); n += 1
+        if n >= 400:
+            batch.commit(); batch, n = db.client().batch(), 0
+    if n:
+        batch.commit()
+    return done
+
+
+def run(store_id: str, baseline: Path | None = None) -> dict:
     rnd = random.Random(f"sample-{store_id}")
+    if baseline:
+        reset_stock(store_id, baseline)
     products = [d.to_dict() for d in db.products(store_id).stream() if d.to_dict().get("status", "active") == "active"]
     if not products:
         raise SystemExit("seed the catalog first")
@@ -198,4 +223,6 @@ def run(store_id: str) -> dict:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--store", required=True)
-    print(run(ap.parse_args().store))
+    ap.add_argument("--baseline", default=str(Path(__file__).parent / "products.csv"), help="catalog file whose on_hand is restored first; '' to skip")
+    a = ap.parse_args()
+    print(run(a.store, Path(a.baseline) if a.baseline else None))

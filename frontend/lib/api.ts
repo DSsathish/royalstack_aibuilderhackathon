@@ -16,7 +16,13 @@ export type Store = { store_id: string; name: string; currency: string; language
 export type Location = { aisle: string; bay: number; shelf: number; side: string; x: number; y: number };
 export type Product = { product_id: string; name: string; brand: string; price: number; mrp: number;
   unit: string; available: number; aisle?: string; bay?: number; image_url?: string; location?: Location | null;
-  substitutes?: string[]; barcode?: string; category?: string };
+  substitutes?: string[]; barcode?: string; category?: string; subcategory?: string; description?: string; pack_size?: string; tags?: string[];
+  bought_30d?: number; status?: string };
+export type StoreLite = { store_id: string; name: string; city: string; tagline: string };
+export type HomeData = { categories: { name: string; count: number }[]; trending: Product[]; recommended: Product[]; deals: (Offer & { products: Product[] })[]; segment: string };
+export type CompareRow = { provider: string; label: string; demo: boolean; status: "ok" | "unavailable" | "no_match"; name?: string; price?: number; mrp?: number; available?: number | null; note?: string; fetched_at?: string };
+export type Facts = { ok: boolean; summary?: string; sources?: { title: string; url: string }[]; note?: string; error?: string; cached?: boolean;
+  label?: { ingredients?: string | null; allergens?: string[]; nutrition_per_100g?: Record<string, number> | null; nutriscore?: string | null } | null };
 export type CartItem = { product_id: string; name: string; qty: number; unit_price: number; mrp: number; via: string };
 export type DiscountLine = { offer_id: string; name: string; amount: number };
 export type CartView = { cart_id: string; items: CartItem[]; count: number; subtotal: number; savings: number; total: number; status: string;
@@ -84,6 +90,18 @@ export const api = {
   removeItem: (s: Session, product_id: string) =>
     fetch(`${API}/carts/${s.cart_id}/items/${product_id}`, { method: "DELETE", headers: h(s) }).then(json<CartView>),
   offers: (store_id: string, s?: Session) => fetch(`${API}/stores/${store_id}/offers`, { headers: h(s) }).then(json<Offer[]>),
+  /** Online shop (docs/lld/online-shop.md). */
+  stores: () => fetch(`${API}/stores`).then(json<StoreLite[]>),
+  home: (store_id: string, s?: Session) => fetch(`${API}/stores/${store_id}/home`, { headers: h(s) }).then(json<HomeData>),
+  products: (store_id: string, opts: { category?: string; q?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams(Object.entries(opts).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]));
+    return fetch(`${API}/stores/${store_id}/products?${qs}`).then(json<{ products: Product[]; total: number; more: boolean }>);
+  },
+  facts: (s: Session, product_id: string, language = "auto") =>
+    fetch(`${API}/stores/${s.store_id}/products/${product_id}/facts?language=${encodeURIComponent(language)}`, { headers: h(s) }).then(json<Facts>),
+  compare: (s: Session, product_id: string) => fetch(`${API}/stores/${s.store_id}/products/${product_id}/compare`, { headers: h(s) }).then(json<CompareRow[]>),
+  setQty: (s: Session, product_id: string, qty: number) =>
+    fetch(`${API}/carts/${s.cart_id}/items/${product_id}`, { method: "PATCH", headers: h(s), body: JSON.stringify({ qty }) }).then(json<CartView>),
   /** `points` needs a token from a phone verification done in the last ten minutes. */
   checkoutIntent: (s: Session, points = 0, token?: string) =>
     fetch(`${API}/checkout/intent`, { method: "POST", headers: { ...h(), ...(token ? { Authorization: `Bearer ${token}` } : {}) },

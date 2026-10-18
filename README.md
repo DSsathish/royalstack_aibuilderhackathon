@@ -17,7 +17,7 @@ Scan the entrance QR (see `docs/plan/00-overview.md` or the owner dashboard's Co
 
 **Exit.** A kiosk scans the receipt, takes a bag photo, and runs seven verification layers. Deterministic rules decide; Gemini vision only adjusts confidence and never blocks an exit. Photos are never stored.
 
-**Shopper, online.** The same app and the same agent in online mode, sharing the same stock.
+**Shopper, online.** "Shop online" from the landing page: a product-first home (categories, deals, trending from real orders, picks for signed-in shoppers), a product sheet with a quantity stepper and the label facts the assistant can look up, search by words or by photo, a floating voice button, the same cart and checkout. No barcode scanning online. Prices at other providers come through MCP: the shop connects any Model Context Protocol server (Swiggy Instamart's once approved) and a clearly labelled demo provider shows the flow; the shop's own catalog is also served as an MCP server at `/mcp/stores/{id}` for other agents.
 
 **Shopper identity, optional.** Phone OTP sign-in (Firebase) unlocks a profile the assistant uses (name, language, dietary limits, usual items learned from receipts, substitution preference), receipt history with "buy again", offers for their segment, reward points (one per ₹100, redeemed at checkout after a fresh code, twelve-month expiry, append-only ledger), and self-service export and delete. Guests lose nothing.
 

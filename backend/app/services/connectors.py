@@ -24,8 +24,8 @@ from app.domain.models import now
 from app.services import catalog, db, gemini, secrets
 
 log = logging.getLogger(__name__)
-KINDS = ("file", "sheet", "api", "db")
-KEEPABLE = ("sheet", "api", "db")          # sources that can be pulled again on a schedule
+KINDS = ("file", "sheet", "api", "db", "mcp")
+KEEPABLE = ("sheet", "api", "db", "mcp")   # sources that can be pulled again on a schedule
 MAX_BYTES = 10 * 1024 * 1024
 MAX_ROWS = 20_000
 EXTENSIONS = {"csv": "csv", "txt": "csv", "xlsx": "xlsx", "json": "json", "pdf": "pdf"}
@@ -52,6 +52,8 @@ class Connector(BaseModel):
     created_at: datetime
     last_run_at: datetime | None = None
     last_result: dict = {}
+    compare: bool = False                 # an MCP server also asked for prices when a shopper compares
+    compare_tool: str = "search_products"
 
 
 # --- guards -------------------------------------------------------------------------------------------------------
@@ -264,7 +266,28 @@ def read_db(dsn: str, table: str) -> tuple[list[str], list[dict]]:
     return columns, [{c: _cell(v) for c, v in zip(columns, r)} for r in rows]
 
 
+def read_mcp(url: str, auth: str = "", tool: str = "") -> tuple[list[str], list[dict]]:
+    """Call the server's catalog tool and read its records like a JSON document."""
+    from app.connectors.mcp_client import MCPClient
+    client = MCPClient(url, auth)
+    client.initialize()
+    records = client.call(tool or "list_products", {"limit": MAX_ROWS})
+    if not records:
+        raise SourceError("the tool returned no records")
+    return read_json(json.dumps(records).encode("utf-8"))
+
+
+def mcp_tools(url: str, auth: str = "") -> dict:
+    """What an MCP server offers, for the owner to pick a tool before importing."""
+    from app.connectors.mcp_client import MCPClient
+    client = MCPClient(url, auth)
+    info = client.initialize()
+    return {"server": info.get("serverInfo") or {}, "instructions": (info.get("instructions") or "")[:300], "tools": client.tools()}
+
+
 def read(kind: str, *, data: bytes = b"", filename: str = "", url: str = "", auth: str = "", dsn: str = "", table: str = ""):
+    if kind == "mcp":
+        return read_mcp(url, auth, table)
     if kind == "file":
         return read_file(data, filename)
     if kind == "sheet":
@@ -361,7 +384,7 @@ def _secret_names(store_id: str, cid: str) -> tuple[str, str]:
 
 
 def save(store_id: str, kind: str, *, label: str, mapping: dict, actor: str, url: str = "", table: str = "",
-         every_min: int = 15, auth: str = "", dsn: str = "") -> Connector:
+         every_min: int = 15, auth: str = "", dsn: str = "", compare: bool = False, compare_tool: str = "search_products") -> Connector:
     if kind not in KEEPABLE:
         raise SourceError("only a sheet, an API or a database can be kept in step")
     cid = uuid.uuid4().hex[:12]
@@ -371,7 +394,8 @@ def save(store_id: str, kind: str, *, label: str, mapping: dict, actor: str, url
     if dsn:
         secrets.put(dsn_name, dsn)
     c = Connector(connector_id=cid, kind=kind, label=(label or kind)[:80], url=url, table=table, mapping=mapping,
-                  every_min=max(5, min(1440, int(every_min))), created_by=actor, created_at=now())
+                  every_min=max(5, min(1440, int(every_min))), created_by=actor, created_at=now(),
+                  compare=bool(compare and kind == "mcp"), compare_tool=(compare_tool or "search_products")[:60])
     _col(store_id).document(cid).set(c.model_dump())
     _audit(store_id, actor, "connector_saved", {"connector_id": cid, "kind": kind, "label": c.label, "every_min": c.every_min})
     return c
@@ -405,7 +429,7 @@ def remove(store_id: str, cid: str, actor: str) -> bool:
 def run(store_id: str, c: Connector, actor: str = "scheduler") -> dict:
     auth_name, dsn_name = _secret_names(store_id, c.connector_id)
     source = {"url": c.url, "table": c.table}
-    if c.kind == "api":
+    if c.kind in ("api", "mcp"):
         source["auth"] = secrets.get(auth_name)
     if c.kind == "db":
         source["dsn"] = secrets.get(dsn_name)
