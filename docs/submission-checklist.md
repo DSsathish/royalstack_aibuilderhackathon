@@ -3,7 +3,7 @@
 Links to submit
 - Live app: https://royastacxk-aibuildercup.web.app (owner dashboard at /owner/, kiosk at /kiosk/)
 - API: https://retail-api-881917398995.asia-south1.run.app (OpenAPI at /docs)
-- GitHub: https://github.com/DSsathish/royalstack_aibuildercup (must be public: `gh repo edit DSsathish/royalstack_aibuildercup --visibility public --accept-visibility-change-consequences`, then open it in a logged-out window)
+- GitHub: https://github.com/DSsathish/royalstack_aibuilderhackathon (must be public: `gh repo edit DSsathish/royalstack_aibuilderhackathon --visibility public --accept-visibility-change-consequences`, then open it in a logged-out window)
 - Demo video: record with docs/demo-script.md, upload unlisted to YouTube, check in incognito that it plays
 - Deck: export the slides artifact to PDF and upload
 
