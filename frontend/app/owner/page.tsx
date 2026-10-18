@@ -711,7 +711,7 @@ const EDIT_GROUPS: { title: string; fields: { key: EditKey; label: string; kind?
   { title: "Place", fields: [{ key: "aisle", label: "Aisle", kind: "select", optional: true }, { key: "bay", label: "Bay", kind: "integer", optional: true }, { key: "shelf", label: "Shelf", kind: "integer", optional: true }, { key: "side", label: "Side", kind: "select", choices: ["left", "right"], optional: true }] },
   { title: "Details", fields: [{ key: "unit", label: "Unit" }, { key: "pack_size", label: "Pack size", optional: true }, { key: "shelf_life_days", label: "Shelf life, days", kind: "integer", optional: true }, { key: "origin", label: "Origin", optional: true }, { key: "tags", label: "Tags, comma separated", optional: true }, { key: "image_url", label: "Image URL", optional: true }, { key: "description", label: "Description", kind: "textarea", optional: true }] },
 ];
-function ProductDrawer({ store, pid, aisles, onClose, onSaved }: { store: string; pid: string; aisles: string[]; onClose: () => void; onSaved: () => void }) {
+function ProductDrawer({ store, pid, aisles, aisleLabels = {}, onClose, onSaved }: { store: string; pid: string; aisles: string[]; aisleLabels?: Record<string, string>; onClose: () => void; onSaved: () => void }) {
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [initial, setInitial] = useState<Record<string, string>>({});
   const [form, setForm] = useState<Record<string, string>>({});
@@ -771,7 +771,7 @@ function ProductDrawer({ store, pid, aisles, onClose, onSaved }: { store: string
                 {g.fields.map((f) => (
                   <label key={f.key} className={`text-xs ${f.kind === "textarea" ? "sm:col-span-2" : ""}`}>{f.label}{!f.optional && <Req />}
                     {f.kind === "select"
-                      ? <select value={form[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} className="field mt-1 py-1.5 text-sm">{f.optional && <option value="">none</option>}{(f.choices ?? aisles).map((c) => <option key={c} value={c}>{c}</option>)}</select>
+                      ? <select value={form[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} className="field mt-1 py-1.5 text-sm">{f.optional && <option value="">none</option>}{(f.choices ?? aisles).map((c) => <option key={c} value={c}>{f.key === "aisle" && aisleLabels[c] ? `${c} · ${aisleLabels[c]}` : c}</option>)}</select>
                       : f.kind === "textarea"
                         ? <textarea value={form[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} rows={2} className="field mt-1 py-1.5 text-sm" />
                         : <input value={form[f.key] ?? ""} onChange={(e) => set(f.key, e.target.value)} inputMode={f.kind === "number" || f.kind === "integer" ? "decimal" : undefined} aria-invalid={!!fe[f.key]} className="field mt-1 py-1.5 text-sm" />}
@@ -794,9 +794,10 @@ function InventoryTab({ store }: { store: string }) {
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
   const [aisleNames, setAisleNames] = useState<string[]>([]);
+  const [aisleLabels, setAisleLabels] = useState<Record<string, string>>({});
   const [moving, setMoving] = useState<{ pid: string; aisle: string; bay: string; side: "left" | "right" } | null>(null);
   const load = () => owner.inventory(store).then(setRows);
-  useEffect(() => { load(); owner.store(store).then((d) => setAisleNames(d.floor_map.map((a) => a.aisle))).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); owner.store(store).then((d) => { setAisleNames(d.floor_map.map((a) => a.aisle)); setAisleLabels(Object.fromEntries(d.floor_map.map((a) => [a.aisle, a.label ?? ""]))); }).catch(() => {}); }, [store]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [intake, setIntake] = useState<"upload" | "add" | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [moveErr, setMoveErr] = useState<Errors>({});
@@ -837,7 +838,7 @@ function InventoryTab({ store }: { store: string }) {
       </div>
       {intake === "upload" && <UploadInventory store={store} onImported={load} />}
       {intake === "add" && <AddInventoryModal store={store} onClose={() => setIntake(null)} onSaved={() => { setIntake(null); load(); }} />}
-      {detail && <ProductDrawer store={store} pid={detail} aisles={aisleNames} onClose={() => setDetail(null)} onSaved={() => { setDetail(null); load(); }} />}
+      {detail && <ProductDrawer store={store} pid={detail} aisles={aisleNames} aisleLabels={aisleLabels} onClose={() => setDetail(null)} onSaved={() => { setDetail(null); load(); }} />}
       {adding && <AddByScan store={store} onSaved={() => { load(); }} />}
       <div className="table-wrap">
         <table className="table">
@@ -859,7 +860,7 @@ function InventoryTab({ store }: { store: string }) {
               <tr><td colSpan={10} className="bg-surface-2">
                 <div className="flex flex-wrap items-center gap-2 text-sm py-1">
                   <span className="text-muted">Place <b className="text-ink">{r.name}</b> in</span>
-                  <select value={moving.aisle} onChange={(e) => setMoving({ ...moving, aisle: e.target.value })} className="field w-auto py-1.5">{aisleNames.map((a) => <option key={a} value={a}>{a}</option>)}</select>
+                  <select value={moving.aisle} onChange={(e) => setMoving({ ...moving, aisle: e.target.value })} className="field w-auto py-1.5">{aisleNames.map((a) => <option key={a} value={a}>{aisleLabels[a] ? `${a} · ${aisleLabels[a]}` : a}</option>)}</select>
                   <span className="text-muted">bay</span><input value={moving.bay} onChange={(e) => { setMoving({ ...moving, bay: e.target.value }); setMoveErr({}); }} inputMode="numeric" aria-invalid={!!moveErr.bay} className="field w-16 py-1.5 mono" />
                   <select value={moving.side} onChange={(e) => setMoving({ ...moving, side: e.target.value as "left" | "right" })} className="field w-auto py-1.5"><option value="left">left side</option><option value="right">right side</option></select>
                   <button onClick={move} className="btn btn-primary py-1.5">Save</button>

@@ -37,7 +37,9 @@ export default function StoreMap({ aisles, target, youAreHere, compact = false }
           <g key={a.aisle}>
             <rect x={a.x} y={a.y} width={a.w} height={a.h} rx="8" className={`${targetBlock?.aisle === a.aisle ? "fill-accent-soft" : KIND_FILL[a.kind ?? "aisle"]} stroke-line`} strokeWidth="2" />
             <text x={a.x + a.w / 2} y={a.y + a.h / 2} textAnchor="middle" className="fill-ink text-[28px] font-semibold">{a.aisle}</text>
-            {a.kind && a.kind !== "aisle" && <text x={a.x + a.w / 2} y={a.y + a.h / 2 + 26} textAnchor="middle" className="fill-muted text-[16px]">{KIND_WORD[a.kind]}</text>}
+            {a.label && a.label !== a.aisle
+              ? <text x={a.x + a.w / 2} y={a.y + a.h / 2 + 24} textAnchor="middle" className="fill-muted text-[13px]">{a.label.length > 14 ? a.label.slice(0, 13) + "…" : a.label}</text>
+              : a.kind && a.kind !== "aisle" && <text x={a.x + a.w / 2} y={a.y + a.h / 2 + 26} textAnchor="middle" className="fill-muted text-[16px]">{KIND_WORD[a.kind]}</text>}
           </g>
         ))}
         <rect x="430" y="560" width="140" height="30" rx="6" className="fill-line" />

@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 
 from pydantic import BaseModel
 
+from app.domain import taxonomy
 from app.domain.models import Inventory, Location, Product, slug
 from app.services import db
 
@@ -174,6 +175,7 @@ def upsert(store_id: str, rows: list[Row], *, high_value_threshold: float, skip_
     as skipped instead of overwriting it."""
     result = ImportResult()
     existing = {d.id for d in db.products(store_id).select([]).stream()}
+    floor_map = (db.store_ref(store_id).get().to_dict() or {}).get("floor_map", [])
     batch = db.client().batch()
     pending = 0
 
@@ -195,11 +197,10 @@ def upsert(store_id: str, rows: list[Row], *, high_value_threshold: float, skip_
             reorder_point=r.reorder_point, reorder_qty=r.reorder_qty,
             lead_time_days=r.lead_time_days, supplier_id=r.supplier_id,
         ).model_dump(exclude={"reserved"}), merge=True)
-        if r.aisle:
-            batch.set(db.locations(store_id).document(p.product_id), Location(
-                product_id=p.product_id, store_id=store_id, aisle=r.aisle,
-                bay=r.bay, shelf=r.shelf, side=r.side,
-            ).model_dump())
+        spot = {"aisle": r.aisle, "bay": r.bay, "shelf": r.shelf, "side": r.side} if r.aisle else taxonomy.place(
+            floor_map, category=p.category, subcategory=p.subcategory, storage=p.storage, name=p.name)
+        if spot:
+            batch.set(db.locations(store_id).document(p.product_id), Location(product_id=p.product_id, store_id=store_id, **spot).model_dump())
         pending += 3
         if p.product_id in existing:
             result.updated += 1

@@ -23,7 +23,7 @@ export default function OnlineHome({ onPhoto, onAsk }: { onPhoto: (f: File) => v
   async function show(title: string, opts: { q?: string; category?: string }) {
     if (!session) return;
     setPage({ title, products: [], total: 0, loading: true });
-    try { const r = await api.products(session.store_id, { ...opts, limit: 40 }); setPage({ title, products: r.products, total: r.total, loading: false }); }
+    try { const r = await api.products(session.store_id, { ...opts, limit: 40 }); setPage({ title: r.section ?? title, products: r.products, total: r.total, loading: false }); }
     catch (e) { toast.error((e as Error).message); setPage(null); }
   }
   async function add(p: Product, qty = 1) {

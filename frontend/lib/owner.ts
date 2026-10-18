@@ -40,7 +40,7 @@ export type SyncView = {
   outbox: { pending: number; dead: number } };
 
 export type StoreDoc = { store_id: string; name: string; city: string; currency: string; languages: string[]; self_checkout_item_limit: number;
-  brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string; x: number; y: number; w: number; h: number; floor?: number; kind?: "aisle" | "chiller" | "freezer" | "counter" }[] };
+  brand: { accent: string; tagline: string; greeting: string }; payments: { provider: "mock" | "razorpay"; key_id: string }; floor_map: { aisle: string; x: number; y: number; w: number; h: number; floor?: number; kind?: "aisle" | "chiller" | "freezer" | "counter"; label?: string }[] };
 
 export const owner = {
   me: () => call<{ uid: string; stores: string[]; roles: Record<string, "owner" | "staff"> }>("/owner/me"),

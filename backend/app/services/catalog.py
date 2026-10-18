@@ -90,6 +90,7 @@ def blocks(store_id: str) -> dict[str, dict]:
 
 
 SECTIONS_TTL_S = 600
+PAGE_FLOOR = 0.5                          # the online search page keeps hits scoring at least half the best hit
 FORM_WEIGHT = 0.3            # packaging and unit words (lexicon.FORM_WORDS) and pack sizes count this much of a telling word
 _PACK = re.compile(r"^\d+(\.\d+)?(kg|g|gm|ml|l|ltr|litre|liter|pcs?|pc|x|w)?$")   # 500ml, 5kg, 12, 9w: a size, not a product
 _sections_cache: dict[str, tuple[float, dict]] = {}
@@ -183,7 +184,9 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b)) + 1e-9)
 
 
-def search(store_id: str, query: str, k: int = 6) -> list[ProductView]:
+def search(store_id: str, query: str, k: int = 6, floor: float = 0.0) -> list[ProductView]:
+    """Top-k by keyword and meaning. `floor` (0..1) drops hits scoring under that share of the best hit: a long page
+    stays relevant; the assistant's short lists leave it at 0."""
     products, locations = _load(store_id)
     q = _tokens(query)
     qvec = (gemini.embed_texts([query], for_query=True) or [[]])[0]
@@ -201,6 +204,9 @@ def search(store_id: str, query: str, k: int = 6) -> list[ProductView]:
         if kw > 0 or sem > 0.6:
             scored.append((kw + 5 * sem, p))
     scored.sort(key=lambda t: t[0], reverse=True)
+    if scored and floor:                    # a relevance floor: the tail of a page is not noise
+        cut = scored[0][0] * floor
+        scored = [t for t in scored if t[0] >= cut]
     seen, picked = set(), []
     for _, p in scored:                     # the same name twice (two listings of one product) shows once
         name = " ".join(p.name.lower().split())
@@ -226,3 +232,17 @@ def _record_signal(store_id: str, query: str, hits: list[ProductView]) -> None:
     sig = DemandSignal(signal_id=uuid.uuid4().hex, store_id=store_id, query_text=query,
                        matched_product_id=matched, type=kind)
     db.demand_signals(store_id).document(sig.signal_id).set(sig.model_dump())
+
+
+def sections_for(store_id: str, query: str) -> list[tuple[str, str]]:
+    """The (category, subcategory) pairs a query names, when it reads like a section ("healthy food", "dals", "milk")."""
+    from app.domain import taxonomy
+    products, _ = _load(store_id)
+    pairs = sorted({(p.category, p.subcategory) for p in products if p.category or p.subcategory})   # a section may have no category
+    return taxonomy.section_matches(query, pairs)
+
+
+def in_sections(store_id: str, sections: list[tuple[str, str]]) -> list[ProductView]:
+    products, locations = _load(store_id)
+    picked = [p for p in products if p.status == "active" and any(p.category == c and (not s or p.subcategory == s) for c, s in sections)]
+    return [_view(store_id, p, locations) for p in sorted(picked, key=lambda p: p.name)]

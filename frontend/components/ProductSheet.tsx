@@ -33,6 +33,7 @@ export default function ProductSheet({ p, onClose, onAdd, onAsk }: { p: Product;
         </div>
         <div className="text-xs text-muted">{[p.brand, p.category, p.subcategory, p.pack_size, p.unit !== "pc" ? `per ${p.unit}` : ""].filter(Boolean).join(" · ")}</div>
         {p.description && <p>{p.description}</p>}
+        {(p.location?.aisle || p.aisle) && <div className="text-xs text-muted">In the shop: {p.location?.aisle ?? p.aisle}{p.aisle_label ? ` · ${p.aisle_label}` : ""}{p.location?.bay ? `, bay ${p.location.bay}` : ""}</div>}
         {p.bought_30d ? <div className="text-xs text-muted">Bought {p.bought_30d} times by shoppers this month.</div> : null}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 border border-line rounded-full px-1">

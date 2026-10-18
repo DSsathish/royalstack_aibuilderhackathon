@@ -12,15 +12,24 @@ from typing import Literal
 Storage = Literal["ambient", "chilled", "frozen"]
 Use = Literal["human", "pet", "household", "personal_care"]
 
-FROZEN = ("frozen", "ice cream", "icecream", "ice-cream", "kulfi", "popsicle", "frozen dessert", "ice lolly")
+FROZEN = ("frozen", "ice cream", "icecream", "ice-cream", "kulfi", "popsicle", "frozen dessert", "ice lolly", "french fries", "nuggets", "mccain")
+FROZEN_SUBCATEGORIES = ("frozen foods", "frozen", "ice creams and frozen desserts")
+CHILLED_SUBCATEGORIES = ("dairy products", "dairy", "eggs", "fresh meat and seafood", "meat and seafood", "fresh meat", "seafood")
+AMBIENT_SUBCATEGORIES = ("sweets and desserts", "snacks", "spices and seasonings", "cooking essentials", "flours and baking ingredients",
+                         "grains, rice and cereals", "pulses and legumes", "pickles, preserves and condiments", "tinned and canned foods",
+                         "bakery and breads", "organic and health foods", "ready-to-eat foods")     # shelf-stable sections, whatever the words
+FOOD_CATEGORIES = ("grocery", "food", "dairy", "beverage", "bakery", "fresh", "meat", "fruit", "vegetable", "snack", "frozen")
 CHILLED = ("milk", "curd", "dahi", "yogurt", "yoghurt", "paneer", "cheese", "butter", "fresh cream", "whipping cream", "lassi",
            "buttermilk", "chaas", "egg", "chicken", "mutton", "lamb", "meat", "pork", "beef", "fish", "prawn", "shrimp", "crab",
-           "sausage", "salami", "ham", "bacon", "tofu", "juice", "smoothie", "kombucha", "cold coffee", "probiotic", "khoa", "kheer")
+           "sausage", "salami", "ham", "bacon", "tofu", "juice", "smoothie", "kombucha", "cold coffee", "probiotic", "khoa", "kheer",
+           "batter", "dough", "sprouts", "tender coconut", "cold pressed", "raw pressery", "fresh cream")
 NOT_CHILLED = ("milk powder", "powder", "coconut milk", "condensed milk", "milk chocolate", "milkshake", "peanut butter", "cocoa butter",
                "shea butter", "butter cookie", "butter biscuit", "butter cracker", "cheese ball", "cheese puff", "cheese cracker",
                "cheese popcorn", "cheese flavour", "cheese flavor", "egg noodle", "eggless", "egg tray", "egg boiler", "masala",
                "flavour", "flavor", "spread", "seasoning", "soya milk", "soy milk", "almond milk", "oat milk", "soya chunks", "juicer",
-               "chicken nuggets", "fish food", "cat ", "dog ", "pet ", "shampoo", "soap", "lotion", "cream biscuit", "cream wafer")
+               "chicken nuggets", "fish food", "cat ", "dog ", "pet ", "shampoo", "soap", "lotion", "cream biscuit", "cream wafer",
+               "juice powder", "tetra", "amla juice", "aloe vera juice", "fruit juice 1 l", "real fruit", "tropicana", "paper boat", "frooti", "maaza",
+               "chicken masala", "mutton masala", "fish curry masala", "fish fry masala", "egg curry masala", "crab stick", "dairy milk", "milky bar", "milkybar")
 PET = lexicon.words(lexicon.PET)      # every language in one place: app/domain/lexicon.py
 HOUSEHOLD = ("detergent", "floor cleaner", "dishwash", "dish wash", "toilet cleaner", "mop", "broom", "phenyl", "repellent", "insect",
              "mosquito", "disinfectant", "bleach", "scrubber", "garbage bag", "air freshener", "glass cleaner", "laundry", "fabric conditioner")
@@ -51,12 +60,24 @@ def _apparel(category: str, subcategory: str = "") -> bool:
     return _has(" " + f"{category} {subcategory}".lower() + " ", APPAREL)
 
 
+def _food(category: str) -> bool:
+    return not category or _has(" " + category.lower() + " ", FOOD_CATEGORIES, loose=True)
+
+
 def storage_of(name: str, category: str = "", subcategory: str = "", tags: list[str] | None = None) -> Storage:
-    if _apparel(category, subcategory):
+    """The subcategory decides first, non-food is always ambient, then the name words."""
+    if _apparel(category, subcategory) or not _food(category):
         return "ambient"
+    sub = (subcategory or "").lower().strip()
+    if sub in FROZEN_SUBCATEGORIES:
+        return "frozen"
+    if sub in CHILLED_SUBCATEGORIES:
+        return "chilled"
     t = _text(name, category, subcategory, tags)
     if _has(t, FROZEN):
         return "frozen"
+    if sub in AMBIENT_SUBCATEGORIES:
+        return "ambient"
     if _has(t, ("dairy", "meat", "fish", "poultry", "eggs")) and not _has(" " + name.lower() + " ", NOT_CHILLED, loose=True):
         return "chilled"
     n = " " + name.lower().replace("-", " ") + " "
@@ -66,6 +87,8 @@ def storage_of(name: str, category: str = "", subcategory: str = "", tags: list[
 
 
 def use_of(name: str, category: str = "", subcategory: str = "", tags: list[str] | None = None) -> Use:
+    if _has(" " + (category or "").lower() + " ", ("pet products", "pet care", "pet supplies", "pets")):
+        return "pet"                      # the category says so, whatever the product is called
     if _apparel(category, subcategory):
         return "human"
     t = _text(name, category, subcategory, tags)

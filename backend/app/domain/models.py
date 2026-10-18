@@ -27,6 +27,7 @@ class Aisle(BaseModel):
     h: float
     floor: int = 1
     kind: BlockKind = "aisle"
+    label: str = ""                       # the department shown on the map and in directions, e.g. "Household, Pooja & Pets"
 
 
 class Brand(BaseModel):

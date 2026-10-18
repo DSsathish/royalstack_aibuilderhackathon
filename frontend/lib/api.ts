@@ -10,14 +10,14 @@ export type Session = {
   cart_id: string; aisle_hint: string | null; language: string; customer_id?: string | null;
 };
 export type BlockKind = "aisle" | "chiller" | "freezer" | "counter";
-export type Aisle = { aisle: string; x: number; y: number; w: number; h: number; floor?: number; kind?: BlockKind };
+export type Aisle = { aisle: string; x: number; y: number; w: number; h: number; floor?: number; kind?: BlockKind; label?: string };
 export type Store = { store_id: string; name: string; currency: string; languages: string[];
   self_checkout_item_limit: number; floor_map: Aisle[]; brand?: { accent: string; tagline: string; greeting: string }; city?: string };
 export type Location = { aisle: string; bay: number; shelf: number; side: string; x: number; y: number };
 export type Product = { product_id: string; name: string; brand: string; price: number; mrp: number;
   unit: string; available: number; aisle?: string; bay?: number; image_url?: string; location?: Location | null;
   substitutes?: string[]; barcode?: string; category?: string; subcategory?: string; description?: string; pack_size?: string; tags?: string[];
-  bought_30d?: number; status?: string };
+  bought_30d?: number; status?: string; aisle_label?: string };
 export type StoreLite = { store_id: string; name: string; city: string; tagline: string };
 export type HomeData = { categories: { name: string; count: number }[]; trending: Product[]; recommended: Product[]; deals: (Offer & { products: Product[] })[]; segment: string };
 export type CompareRow = { provider: string; label: string; demo: boolean; status: "ok" | "unavailable" | "no_match"; name?: string; price?: number; mrp?: number; available?: number | null; note?: string; fetched_at?: string };
@@ -95,7 +95,7 @@ export const api = {
   home: (store_id: string, s?: Session) => fetch(`${API}/stores/${store_id}/home`, { headers: h(s) }).then(json<HomeData>),
   products: (store_id: string, opts: { category?: string; q?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams(Object.entries(opts).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]));
-    return fetch(`${API}/stores/${store_id}/products?${qs}`).then(json<{ products: Product[]; total: number; more: boolean }>);
+    return fetch(`${API}/stores/${store_id}/products?${qs}`).then(json<{ products: Product[]; total: number; more: boolean; section?: string | null }>);
   },
   facts: (s: Session, product_id: string, language = "auto") =>
     fetch(`${API}/stores/${s.store_id}/products/${product_id}/facts?language=${encodeURIComponent(language)}`, { headers: h(s) }).then(json<Facts>),

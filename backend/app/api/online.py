@@ -44,7 +44,20 @@ def _card(store_id: str, p: Product, bought: dict[str, int]) -> dict:
     view = catalog.get_product(store_id, p.product_id)
     d = (view or p).model_dump(exclude=PUBLIC_EXCLUDE)
     d["bought_30d"] = bought.get(p.product_id, 0)
+    loc = d.get("location")
+    d["aisle_label"] = (_blocks(store_id).get(loc["aisle"], {}).get("label") or "") if loc else ""
     return d
+
+
+_block_cache: dict[str, tuple[float, dict]] = {}
+
+
+def _blocks(store_id: str) -> dict:
+    hit = _block_cache.get(store_id)
+    if hit and time.monotonic() - hit[0] < 60:
+        return hit[1]
+    _block_cache[store_id] = (time.monotonic(), catalog.blocks(store_id))
+    return _block_cache[store_id][1]
 
 
 def _shopper(store_id: str, x_session_id: str | None):
@@ -104,8 +117,15 @@ def list_products(store_id: str = STORE_ID, category: str = Query(default="", ma
     """A category page (best sellers first) or a search page (the assistant's own search)."""
     bought = popularity(store_id)
     if q.strip():
-        hits = catalog.search(store_id, q.strip(), k=limit)
-        return {"products": [_card(store_id, p, bought) for p in hits], "total": len(hits), "more": False}
+        sections = catalog.sections_for(store_id, q.strip())
+        if sections:
+            pool = catalog.in_sections(store_id, sections)
+            pool.sort(key=lambda p: (-bought.get(p.product_id, 0), p.name))
+            page = pool[offset:offset + limit]
+            title = " and ".join(s or c for c, s in sections[:2]) + (" and more" if len(sections) > 2 else "")
+            return {"products": [_card(store_id, p, bought) for p in page], "total": len(pool), "more": offset + limit < len(pool), "section": title}
+        hits = catalog.search(store_id, q.strip(), k=limit, floor=catalog.PAGE_FLOOR)
+        return {"products": [_card(store_id, p, bought) for p in hits], "total": len(hits), "more": False, "section": None}
     products, _ = catalog.product_map(store_id)
     key = category.strip().lower()
     pool = [p for p in products.values() if p.status == "active" and (not key or key in (p.category.lower(), p.subcategory.lower()))]

@@ -75,8 +75,11 @@ def directions_for(store_id: str, loc) -> dict:
     kind, floor = block.get("kind", "aisle"), int(block.get("floor", 1))
     label = KIND_LABEL.get(kind, "Aisle")
     where = f"{label} {loc.aisle}" if not loc.aisle.lower().startswith(label.lower()) else loc.aisle
+    dept = block.get("label") or ""
+    if dept and dept.lower() != loc.aisle.lower():
+        where += f" ({dept})"
     text = f"{where}, bay {loc.bay}, shelf {loc.shelf}, {loc.side} side" + (f", {FLOOR_NAMES.get(floor, f'floor {floor}')}" if floor > 1 else "")
-    return {"kind": kind, "floor": floor, "directions": text}
+    return {"kind": kind, "floor": floor, "department": dept, "directions": text}
 
 
 def _brief(v: ProductView) -> dict:
@@ -131,17 +134,10 @@ def list_category(category: str, tool_context: ToolContext, status: str = "in_st
     out of stock."""
     store_id = tool_context.state["store_id"]
     products, _ = catalog.product_map(store_id)
-    want = _section_tokens(category)
-    scored = []
-    for p in products.values():
-        hay = " ".join(_section_tokens(f"{p.category} {p.subcategory}"))
-        score = sum(1 for t in want if t and t in hay)
-        if score:
-            scored.append((score, p))
     matched_by = "section"
-    if scored:
-        best = max(s for s, _ in scored)
-        picked = [p for s, p in scored if s == best]
+    sections = catalog.sections_for(store_id, category)
+    if sections:                                # the shopper named sections the taxonomy knows ("milk" lists Milk and Plant milk)
+        picked = [p for p in products.values() if any(p.category == c and (not s or p.subcategory == s) for c, s in sections)]
     else:                                       # another language or another word for it: let the search say which section
         hits = catalog.search(store_id, category, k=8)
         counts = Counter((h.subcategory or h.category) for h in hits)

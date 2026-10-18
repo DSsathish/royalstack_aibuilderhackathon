@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from app.connectors import csv_connector as csvc
 from app.domain.models import Location, now
-from app.domain import classify
 from app.services import barcode, catalog, db
 from app.services.auth import STORE_ID, current_uid, require_owner, require_staff
 
@@ -165,9 +164,7 @@ def create_product(body: ProductIn, store_id: str = STORE_ID, uid: str = Depends
     sku = (body.sku or body.barcode or "").strip()
     if not sku:
         raise HTTPException(422, "a SKU or a barcode is required")
-    aisle = (body.aisle or "").strip()
-    if not aisle:                       # cold products default to the chiller or freezer block when the map has one
-        aisle = classify.block_for(store.to_dict().get("floor_map", []), classify.storage_of(body.name, body.category)) or ""
+    aisle = (body.aisle or "").strip()   # no aisle given: the importer places the product by storage and department
     row = csvc.Row(line=0, sku=sku, name=body.name.strip(), price=body.price, on_hand=body.on_hand,
                    barcode=body.barcode, brand=body.brand.strip(), category=body.category.strip(), subcategory=body.subcategory.strip(),
                    mrp=body.mrp or body.price, unit=body.unit.strip() or "pc", pack_size=body.pack_size.strip(),

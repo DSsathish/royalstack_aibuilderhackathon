@@ -23,7 +23,7 @@ function nextName(aisles: Aisle[]): string {
 export default function FloorMapEditor({ aisles: initial, counts = {}, saving, onSave, startFloor = 1, onFloorChange, error }:
   { aisles: Aisle[]; counts?: Record<string, number>; saving?: boolean; onSave: (aisles: Aisle[]) => void;
     startFloor?: number; onFloorChange?: (floor: number) => void; error?: string }) {
-  const [aisles, setAisles] = useState<Aisle[]>(initial.map((a) => ({ floor: 1, kind: "aisle", ...a })));
+  const [aisles, setAisles] = useState<Aisle[]>(initial.map((a) => ({ floor: 1, kind: "aisle", label: "", ...a })));
   const [floor, setFloorState] = useState(startFloor);      // kept by the parent, so a save does not jump back to the ground floor
   const setFloor = (f: number) => { setFloorState(f); onFloorChange?.(f); };
   const [sel, setSel] = useState<string | null>(initial[0]?.aisle ?? null);
@@ -32,7 +32,7 @@ export default function FloorMapEditor({ aisles: initial, counts = {}, saving, o
   const [nameErr, setNameErr] = useState("");
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<{ kind: "move" | "resize"; name: string; dx: number; dy: number } | null>(null);
-  const dirty = JSON.stringify(aisles) !== JSON.stringify(initial.map((a) => ({ floor: 1, kind: "aisle", ...a })));
+  const dirty = JSON.stringify(aisles) !== JSON.stringify(initial.map((a) => ({ floor: 1, kind: "aisle", label: "", ...a })));
   const current = aisles.find((a) => a.aisle === sel) ?? null;
 
   function point(e: React.PointerEvent): { x: number; y: number } {
@@ -132,10 +132,13 @@ export default function FloorMapEditor({ aisles: initial, counts = {}, saving, o
                 <input key={current.aisle} defaultValue={current.aisle} onBlur={(e) => rename(current, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} maxLength={16} aria-invalid={!!nameErr} className="field mt-1" />
                 <FieldError msg={nameErr} />
               </label>
+              <label className="block font-medium">What it holds
+                <input value={current.label ?? ""} onChange={(e) => update(current.aisle, { label: e.target.value })} maxLength={40} placeholder="Household, Pooja & Pets" className="field mt-1" />
+              </label>
               <label className="block font-medium">Type
                 <select value={current.kind ?? "aisle"} onChange={(e) => update(current.aisle, { kind: e.target.value as BlockKind })} className="field mt-1">{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               </label>
-              <p className="label">Name it after what it holds: “Dairy”, “Rice and atta”, “Kids”. The assistant says this name when it gives directions. Milk, curd, juice and meat are placed in a chiller automatically; frozen food in a freezer.</p>
+              <p className="label">A short id like A1 plus what it holds. The map shows both and the assistant says both when it gives directions. Milk, curd, meat and batter go to a chiller block on their own; frozen food to a freezer; everything else to the block whose department matches its category.</p>
               <div className="grid grid-cols-2 gap-2 text-xs text-muted"><span>Position {Math.round(current.x)}, {Math.round(current.y)}</span><span>Size {Math.round(current.w)} × {Math.round(current.h)}</span></div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => rotate(current)} className="btn btn-ghost py-1.5 text-xs">Rotate</button>
