@@ -15,7 +15,7 @@ import VoiceNote from "./VoiceNote";
 import { peaksOf } from "@/lib/voiceClip";
 
 const STATUS: Record<string, string> = {
-  search_products: "Checking the shelves", navigate_to: "Finding the aisle", add_to_cart: "Adding to your cart",
+  search_products: "Checking the shelves", list_category: "Listing the section", product_facts: "Looking up facts", navigate_to: "Finding the aisle", add_to_cart: "Adding to your cart",
   suggest_substitutes: "Looking for alternatives", view_cart: "Opening your cart", start_checkout: "Preparing checkout",
   get_low_stock: "Checking stock levels", forecast_demand: "Reading the forecast", draft_purchase_order: "Drafting orders",
   get_anomalies: "Checking exits and counts", record_demand_signal: "Noting your request", get_offers: "Checking offers",

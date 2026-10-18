@@ -228,3 +228,15 @@ def test_product_facts_tool_resolves_the_product_and_passes_language(shop, monke
     assert seen["product"].name == "Toned Milk" and seen["language"] == "ta"
     tools.product_facts("What is A2 milk?", "", tool_context=c)
     assert seen["product"] is None
+
+
+def test_list_category_lists_a_whole_section(shop):
+    out = tools.list_category("plant milks", tool_context=ctx(shop))
+    assert out["matched_by"] == "section" and out["category"] == "Plant milk"
+    assert (out["total"], out["in_stock"], out["more"]) == (3, 1, 0) and [r["Product"] for r in out["rows"]] == ["Almond Milk"]
+    assert out["columns"] == ["Product", "Price", "Stock"] and out["rows"][0]["Price"] == "₹230"
+    full = tools.list_category("plant milk", in_stock_only=False, tool_context=ctx(shop))
+    assert [r["Product"] for r in full["rows"]] == ["Almond Milk", "Oat Milk", "Soya Milk"] and full["rows"][1]["Stock"] == "out of stock"
+    assert tools.list_category("milk", tool_context=ctx(shop))["total"] == 4          # Milk and Plant milk sections
+    assert tools.list_category("milk", limit=1, tool_context=ctx(shop))["more"] == 1
+    assert tools.list_category("shoes", tool_context=ctx(shop))["signal"] == "not_carried"

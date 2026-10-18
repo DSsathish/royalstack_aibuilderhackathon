@@ -99,6 +99,45 @@ def _segment(state) -> str:
     return state.get("segment") or customers.segment_of(state["store_id"], state.get("customer_id"))
 
 
+def _section_tokens(text: str) -> list[str]:
+    toks = re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower()).split()
+    return [t[:-1] if len(t) > 3 and t.endswith("s") else t for t in toks if t not in ("and", "the", "of", "all", "list", "full")]
+
+
+def list_category(category: str, tool_context: ToolContext, in_stock_only: bool = True, limit: int = 40) -> dict:
+    """Every product in one section of the store, for requests like "list all the vegetables you have", "what dals are
+    there", "full list of shampoos". category is the section as the shopper says it ("vegetables", "fresh vegetables",
+    "dal"); it is matched loosely against the catalog's categories and subcategories, with a name search as fallback.
+    Returns total, in_stock, the rows shown (Product, Price, Stock) and more (how many were not shown). Say the total,
+    read the first ten names, and offer to continue; the screen shows the whole list."""
+    store_id = tool_context.state["store_id"]
+    products, _ = catalog.product_map(store_id)
+    want = _section_tokens(category)
+    scored = []
+    for p in products.values():
+        hay = " ".join(_section_tokens(f"{p.category} {p.subcategory}"))
+        score = sum(1 for t in want if t and t in hay)
+        if score:
+            scored.append((score, p))
+    matched_by = "section"
+    if scored:
+        best = max(s for s, _ in scored)
+        picked = [p for s, p in scored if s == best]
+    else:
+        matched_by = "search"
+        picked = [h for h in catalog.search(store_id, category, k=max(1, min(limit, 40)))]
+    stock = {d.id: max(0, (d.to_dict() or {}).get("on_hand", 0) - (d.to_dict() or {}).get("reserved", 0)) for d in db.inventory(store_id).stream()}
+    items = sorted(((p, stock.get(p.product_id, 0)) for p in picked), key=lambda x: x[0].name.lower())
+    in_stock = [(p, n) for p, n in items if n > 0]
+    shown = (in_stock if in_stock_only else items)[:max(1, min(limit, 100))]
+    sections = sorted({p.subcategory or p.category for p in picked})[:4]
+    return {"category": ", ".join(sections) if matched_by == "section" else category, "matched_by": matched_by,
+            "total": len(items), "in_stock": len(in_stock), "shown": len(shown), "more": max(0, (len(in_stock) if in_stock_only else len(items)) - len(shown)),
+            "columns": ["Product", "Price", "Stock"],
+            "rows": [{"Product": p.name, "Price": f"₹{float(p.price):g}", "Stock": n if n > 0 else "out of stock"} for p, n in shown],
+            "signal": "found" if items else "not_carried"}
+
+
 def search_products(query: str, tool_context: ToolContext, max_results: int = 6) -> dict:
     """Search the store catalog by product name, brand, category or a need (e.g. "headache", "breakfast").
     Works in English, Tamil and Hindi. Each product carries price, in_stock, stock_note ("out of stock", "only 2 left",
@@ -284,9 +323,9 @@ def product_facts(question: str, product_id: str = "", tool_context: ToolContext
 
 
 TOOLS_BY_MODE = {
-    "instore": [search_products, get_product, suggest_substitutes, navigate_to, record_demand_signal,
+    "instore": [search_products, list_category, get_product, suggest_substitutes, navigate_to, record_demand_signal,
                 remove_from_cart, view_cart, start_checkout, get_offers, product_facts],      # items enter the cart only by scanning
-    "online": [search_products, get_product, suggest_substitutes, record_demand_signal,
+    "online": [search_products, list_category, get_product, suggest_substitutes, record_demand_signal,
                add_to_cart, remove_from_cart, view_cart, start_checkout, get_offers, product_facts],
     "owner": [],      # filled below from owner_tools: a separate agent with full access to the store
 }

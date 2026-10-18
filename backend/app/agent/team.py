@@ -22,7 +22,7 @@ LABELS = {
 SCOUTS = ("stock_scout", "sales_scout")     # their text is working notes, not an answer
 
 SHOPPER_TOOLS = {
-    "catalog_agent": [t.search_products, t.get_product, t.suggest_substitutes, t.record_demand_signal, t.get_offers, t.product_facts],
+    "catalog_agent": [t.search_products, t.list_category, t.get_product, t.suggest_substitutes, t.record_demand_signal, t.get_offers, t.product_facts],
     "navigation_agent": [t.search_products, t.navigate_to],
     "cart_agent": [t.search_products, t.add_to_cart, t.remove_from_cart, t.view_cart, t.start_checkout],
 }

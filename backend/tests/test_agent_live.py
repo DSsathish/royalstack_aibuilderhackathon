@@ -177,3 +177,10 @@ def test_multi_intent_turn_crosses_two_specialists(shop):
     routes = [e.get("agent") for e in events if e["type"] == "status" and e["tool"] == "transfer_to_agent"]
     assert routes and routes[0] in ("catalog_agent", "cart_agent"), routes
     assert "cart_updated" in [e["name"] for e in events if e["type"] == "action"]
+
+
+def test_full_list_of_a_section_uses_list_category(shop):
+    s = sessions.create(shop, "online")
+    tools_, reply, events = run(s, "Give me the full list of plant milks you have in stock")
+    assert "list_category" in tools_ and "Almond" in reply, (tools_, reply)
+    assert any(e["type"] == "action" and e["name"] == "show_rows" for e in events)
