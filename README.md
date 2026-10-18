@@ -9,7 +9,7 @@ AI Builder Cup 2026 (Google Cloud JAPAC), theme: Retail & Commerce. A store assi
 | Exit kiosk | https://royastacxk-aibuildercup.web.app/kiosk/ (store `dailygoods`, PIN `1234`) |
 | API | https://retail-api-881917398995.asia-south1.run.app (OpenAPI at `/docs`) |
 
-Scan the entrance QR (see `docs/plan/00-overview.md` or the owner dashboard's Connectors tab) to start an in-store session on a phone.
+Scan the entrance QR (`docs/entrance-qr.png`, also printable from the owner dashboard's Store settings) to start an in-store session on a phone.
 
 ## What it does
 
@@ -146,9 +146,32 @@ Known gaps kept on purpose are listed at the end of `docs/security.md` (cart add
 
 ## For judges
 
-- Owner dashboard: sign in with a Google account listed on the demo store (ask the team), or register your own store with any Google account or an email-and-password account (verify the email first): the dashboard opens a registration form, and the Connectors tab imports a CSV or lets you add products by scanning a barcode.
+**Judge sign-in (owner of the demo store DailyGoods)**
+
+| | |
+|---|---|
+| Owner dashboard | https://royastacxk-aibuildercup.web.app/owner/ |
+| Email | `thecaptainjackssparrow@gmail.com` |
+| Password | `V@aS#29!` |
+
+Sign in with the email and password form (not the Google button). You land on DailyGoods: 1,541 products, sixty days of orders, forecasts, reorder drafts, demand signals, customer segments, offers, loss and exit checks, integrations. Everything you change there is visible in the shopper app at once. Or register your own shop with any Google or email account.
+
+**Store visit: scan the entrance code**
+
+Open your phone camera and scan this code. It opens the in-store experience for DailyGoods on the phone, no install: voice assistant, aisle map and directions, scan to add, running receipt, checkout and the exit code.
+
+<img src="docs/entrance-qr.png" alt="DailyGoods entrance QR code" width="280">
+
+The same link as text: `https://royastacxk-aibuildercup.web.app/enter/?store=dailygoods&t=<signed token in the QR>`. Owners print fresh codes from Store settings.
+
+**Online shop**: open https://royastacxk-aibuildercup.web.app, tap "Shop online" and pick DailyGoods.
+
+**Exit kiosk**: https://royastacxk-aibuildercup.web.app/kiosk/ with store `dailygoods` and PIN `1234`. Payments are sandbox only.
+
+**MCP**: any MCP client can call `https://retail-api-881917398995.asia-south1.run.app/mcp/stores/dailygoods` (tools `store_info`, `search_products`, `get_product`, `list_category`); the demo provider is at `/mcp/demo/kirana-hub`.
+
 - Shopper sign-in is optional. Test numbers `+91 99999 00001`, `00002`, `00003` with code `123456` work without an SMS (Firebase test numbers); real Indian numbers receive a real code.
-- Kiosk PIN for `demo-grocery` is `1234`. Payments are sandbox only.
-- Sync from a billing system: generate a secret in Connectors → Live sync, then run `python infra/scripts/sync_example.py --store demo-grocery --secret <secret> --sku <sku> --on-hand 2`; the assistant reflects the change within two seconds.
+- Sync from a billing system: generate a secret in Integrations → Live sync, then run `python infra/scripts/sync_example.py --store dailygoods --secret <secret> --sku <sku> --on-hand 2`; the assistant and the owner's inventory show the new stock within seconds.
 - The model never invents stock, prices or locations: every product fact in a reply comes from a tool call, and the UI renders cards, map highlights and cart state only from tool results.
-- Demo walkthrough: `docs/demo-script.md`. Submission links: `docs/submission-checklist.md`.
+- Demo video script: `docs/demo-video-script.md`. Walkthrough: `docs/demo-script.md`. Submission links: `docs/submission-checklist.md`.
+
